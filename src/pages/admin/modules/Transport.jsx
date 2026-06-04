@@ -1,0 +1,709 @@
+import { PageContainer, PageHeader } from "../../../components/page-shell";
+import { KpiCard } from "../../../components/kpi-card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "../../../components/ui/card";
+import { Button } from "../../../components/ui/button";
+import { Badge } from "../../../components/ui/badge";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "../../../components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../components/ui/table";
+import { Progress } from "../../../components/ui/progress";
+import {
+  Bus,
+  Plus,
+  MapPin,
+  Fuel,
+  Wrench,
+  Users,
+  Navigation,
+} from "lucide-react";
+import { useState } from "react";
+import { CrudDialog } from "../../../components/crud-dialog";
+const seedRoutes = [
+  {
+    id: "RT-01",
+    name: "Vasant Kunj — Mehrauli",
+    driver: "Sunil Yadav",
+    bus: "DL-1C-AB-4521",
+    stops: 12,
+    students: 38,
+    eta: "On time",
+    status: "Running",
+  },
+  {
+    id: "RT-02",
+    name: "Dwarka Sec 12 — Janakpuri",
+    driver: "Ramesh Kumar",
+    bus: "DL-1C-AB-4522",
+    stops: 14,
+    students: 42,
+    eta: "+12 min",
+    status: "Delayed",
+  },
+  {
+    id: "RT-03",
+    name: "Greater Kailash — Hauz Khas",
+    driver: "Vikas Singh",
+    bus: "DL-1C-AB-4523",
+    stops: 10,
+    students: 35,
+    eta: "On time",
+    status: "Running",
+  },
+  {
+    id: "RT-04",
+    name: "Rohini Sec 9 — Pitampura",
+    driver: "Anil Sharma",
+    bus: "DL-1C-AB-4524",
+    stops: 16,
+    students: 44,
+    eta: "On time",
+    status: "Running",
+  },
+  {
+    id: "RT-05",
+    name: "Saket — Malviya Nagar",
+    driver: "Ravi Verma",
+    bus: "DL-1C-AB-4525",
+    stops: 11,
+    students: 32,
+    eta: "Yard",
+    status: "Idle",
+  },
+];
+const seedVehicles = [
+  {
+    reg: "DL-1C-AB-4521",
+    model: "Tata Starbus",
+    year: 2022,
+    fuel: 78,
+    odometer: 48210,
+    insurance: "Valid · Mar 26",
+    service: "Due in 800 km",
+  },
+  {
+    reg: "DL-1C-AB-4522",
+    model: "Eicher Skyline",
+    year: 2021,
+    fuel: 32,
+    odometer: 62100,
+    insurance: "Valid · Aug 26",
+    service: "OK",
+  },
+  {
+    reg: "DL-1C-AB-4523",
+    model: "Ashok Leyland Lynx",
+    year: 2023,
+    fuel: 88,
+    odometer: 21400,
+    insurance: "Valid · Jan 27",
+    service: "OK",
+  },
+  {
+    reg: "DL-1C-AB-4524",
+    model: "Tata LP 1212",
+    year: 2020,
+    fuel: 12,
+    odometer: 84500,
+    insurance: "Expires 12 Dec",
+    service: "OVERDUE",
+  },
+];
+const seedDrivers = [
+  {
+    name: "Sunil Yadav",
+    license: "DL-2018-0021541",
+    exp: "2027",
+    rating: 4.8,
+    trips: 1204,
+  },
+  {
+    name: "Ramesh Kumar",
+    license: "DL-2016-0019021",
+    exp: "2026",
+    rating: 4.6,
+    trips: 1521,
+  },
+  {
+    name: "Vikas Singh",
+    license: "DL-2019-0024418",
+    exp: "2028",
+    rating: 4.9,
+    trips: 980,
+  },
+  {
+    name: "Anil Sharma",
+    license: "DL-2015-0018110",
+    exp: "2025",
+    rating: 4.4,
+    trips: 1812,
+  },
+  {
+    name: "Ravi Verma",
+    license: "DL-2017-0022040",
+    exp: "2026",
+    rating: 4.7,
+    trips: 1340,
+  },
+];
+const seedFuel = [
+  { bus: "DL-1C-AB-4521", date: "28 Nov", litres: 62, cost: "6,448" },
+  { bus: "DL-1C-AB-4522", date: "27 Nov", litres: 58, cost: "6,032" },
+  { bus: "DL-1C-AB-4524", date: "26 Nov", litres: 70, cost: "7,280" },
+  { bus: "DL-1C-AB-4523", date: "25 Nov", litres: 55, cost: "5,720" },
+];
+const seedMaint = [
+  { bus: "DL-1C-AB-4524", task: "Brake Pads + Oil", due: "Overdue" },
+  { bus: "DL-1C-AB-4521", task: "Tyre Rotation", due: "800 km" },
+  { bus: "DL-1C-AB-4522", task: "AC Service", due: "12 Dec" },
+  { bus: "DL-1C-AB-4523", task: "Battery Check", due: "18 Dec" },
+];
+export default function Transport() {
+  const [routes, setRoutes] = useState(seedRoutes);
+  const [vehicles, setVehicles] = useState(seedVehicles);
+  const [drivers, setDrivers] = useState(seedDrivers);
+  const [fuelLogs, setFuelLogs] = useState(seedFuel);
+  const [maintLogs, setMaintLogs] = useState(seedMaint);
+  const [dlg, setDlg] = useState(null);
+  return (
+    <PageContainer>
+      <PageHeader
+        eyebrow="Operations"
+        title="Transport & Fleet Management"
+        description="Vehicles, drivers, routes, GPS tracking, fuel and maintenance — end-to-end fleet operations."
+        actions={
+          <Button
+            size="sm"
+            className="gradient-primary border-0"
+            onClick={() => setDlg("route")}
+          >
+            <Plus className="h-4 w-4" />
+            Add Route
+          </Button>
+        }
+      />
+
+      <CrudDialog
+        open={dlg === "route"}
+        onOpenChange={(v) => !v && setDlg(null)}
+        title="Add Route"
+        fields={[
+          { name: "name", label: "Route Name" },
+          {
+            name: "driver",
+            label: "Driver",
+            type: "select",
+            options: drivers.map((d) => d.name),
+          },
+          {
+            name: "bus",
+            label: "Bus",
+            type: "select",
+            options: vehicles.map((v) => v.reg),
+          },
+          { name: "stops", label: "Stops", type: "number" },
+          { name: "students", label: "Students", type: "number" },
+          {
+            name: "status",
+            label: "Status",
+            type: "select",
+            options: ["Running", "Delayed", "Idle"],
+          },
+        ]}
+        submitLabel="Add Route"
+        onSubmit={(d) =>
+          setRoutes((p) => [
+            ...p,
+            {
+              id: "RT-" + String(p.length + 1).padStart(2, "0"),
+              name: String(d.name),
+              driver: String(d.driver),
+              bus: String(d.bus),
+              stops: Number(d.stops) || 0,
+              students: Number(d.students) || 0,
+              eta: "On time",
+              status: String(d.status),
+            },
+          ])
+        }
+      />
+
+      <CrudDialog
+        open={dlg === "vehicle"}
+        onOpenChange={(v) => !v && setDlg(null)}
+        title="Add Vehicle"
+        fields={[
+          { name: "reg", label: "Registration No." },
+          { name: "model", label: "Model" },
+          { name: "year", label: "Year", type: "number" },
+          { name: "odometer", label: "Odometer (km)", type: "number" },
+          { name: "insurance", label: "Insurance Status" },
+          {
+            name: "service",
+            label: "Service Status",
+            type: "select",
+            options: ["OK", "Due in 800 km", "OVERDUE"],
+          },
+        ]}
+        submitLabel="Add Vehicle"
+        onSubmit={(d) =>
+          setVehicles((p) => [
+            ...p,
+            {
+              reg: String(d.reg),
+              model: String(d.model),
+              year: Number(d.year) || 2024,
+              fuel: 100,
+              odometer: Number(d.odometer) || 0,
+              insurance: String(d.insurance) || "Valid",
+              service: String(d.service),
+            },
+          ])
+        }
+      />
+
+      <CrudDialog
+        open={dlg === "driver"}
+        onOpenChange={(v) => !v && setDlg(null)}
+        title="Add Driver"
+        fields={[
+          { name: "name", label: "Full Name" },
+          { name: "license", label: "License No." },
+          { name: "exp", label: "License Expires" },
+          { name: "rating", label: "Rating", type: "number" },
+          { name: "trips", label: "Trips Completed", type: "number" },
+        ]}
+        submitLabel="Add Driver"
+        onSubmit={(d) =>
+          setDrivers((p) => [
+            ...p,
+            {
+              name: String(d.name),
+              license: String(d.license),
+              exp: String(d.exp),
+              rating: Number(d.rating) || 5,
+              trips: Number(d.trips) || 0,
+            },
+          ])
+        }
+      />
+
+      <CrudDialog
+        open={dlg === "fuel"}
+        onOpenChange={(v) => !v && setDlg(null)}
+        title="Log Fuel"
+        fields={[
+          {
+            name: "bus",
+            label: "Bus",
+            type: "select",
+            options: vehicles.map((v) => v.reg),
+          },
+          { name: "date", label: "Date", type: "date" },
+          { name: "litres", label: "Litres", type: "number" },
+          { name: "cost", label: "Cost (₹)" },
+        ]}
+        submitLabel="Log Fuel"
+        onSubmit={(d) =>
+          setFuelLogs((p) => [
+            {
+              bus: String(d.bus),
+              date: String(d.date),
+              litres: Number(d.litres) || 0,
+              cost: String(d.cost),
+            },
+            ...p,
+          ])
+        }
+      />
+
+      <CrudDialog
+        open={dlg === "maint"}
+        onOpenChange={(v) => !v && setDlg(null)}
+        title="Schedule Maintenance"
+        fields={[
+          {
+            name: "bus",
+            label: "Bus",
+            type: "select",
+            options: vehicles.map((v) => v.reg),
+          },
+          { name: "task", label: "Task" },
+          { name: "due", label: "Due" },
+        ]}
+        submitLabel="Schedule"
+        onSubmit={(d) =>
+          setMaintLogs((p) => [
+            ...p,
+            { bus: String(d.bus), task: String(d.task), due: String(d.due) },
+          ])
+        }
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <KpiCard
+          label="Active Routes"
+          value="18"
+          icon={<Navigation className="h-5 w-5" />}
+          tone="primary"
+        />
+        <KpiCard
+          label="Buses on Road"
+          value="22"
+          icon={<Bus className="h-5 w-5" />}
+          tone="info"
+        />
+        <KpiCard
+          label="Students"
+          value="1,140"
+          icon={<Users className="h-5 w-5" />}
+          tone="success"
+        />
+        <KpiCard
+          label="On-Time %"
+          value="96%"
+          delta={1.4}
+          icon={<MapPin className="h-5 w-5" />}
+          tone="success"
+        />
+      </div>
+
+      <Tabs defaultValue="live">
+        <TabsList>
+          <TabsTrigger value="live">Live Routes</TabsTrigger>
+          <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
+          <TabsTrigger value="drivers">Drivers</TabsTrigger>
+          <TabsTrigger value="fuel">Fuel & Maintenance</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="live" className="mt-4 grid lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2 border-border/60">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Route</TableHead>
+                    <TableHead>Driver</TableHead>
+                    <TableHead>Bus</TableHead>
+                    <TableHead>Stops</TableHead>
+                    <TableHead>Students</TableHead>
+                    <TableHead>ETA</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {routes.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">
+                        <div>{r.name}</div>
+                        <div className="text-[10px] font-mono text-muted-foreground">
+                          {r.id}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{r.driver}</TableCell>
+                      <TableCell className="text-xs font-mono">
+                        {r.bus}
+                      </TableCell>
+                      <TableCell>{r.stops}</TableCell>
+                      <TableCell>{r.students}</TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            r.eta.includes("+") ? "text-destructive" : ""
+                          }
+                        >
+                          {r.eta}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            r.status === "Running"
+                              ? "default"
+                              : r.status === "Delayed"
+                                ? "destructive"
+                                : "secondary"
+                          }
+                        >
+                          {r.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60">
+            <CardHeader>
+              <CardTitle className="text-base">Live Map</CardTitle>
+              <CardDescription>Real-time bus positions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="aspect-square rounded-lg bg-gradient-to-br from-muted to-muted/30 relative overflow-hidden border">
+                <div
+                  className="absolute inset-0 opacity-30"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                    backgroundSize: "24px 24px",
+                  }}
+                />
+                {[
+                  { x: "20%", y: "30%", c: "bg-success" },
+                  { x: "65%", y: "55%", c: "bg-warning" },
+                  { x: "45%", y: "70%", c: "bg-success" },
+                  { x: "80%", y: "20%", c: "bg-success" },
+                  { x: "30%", y: "75%", c: "bg-muted-foreground" },
+                ].map((p, i) => (
+                  <div
+                    key={i}
+                    className="absolute -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: p.x, top: p.y }}
+                  >
+                    <div
+                      className={`h-3 w-3 rounded-full ${p.c} ring-4 ring-background animate-pulse`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2 w-2 rounded-full bg-success" />
+                  On time
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-2 w-2 rounded-full bg-warning" />
+                  Delayed
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="vehicles" className="mt-4 space-y-3">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDlg("vehicle")}
+            >
+              <Plus className="h-4 w-4" />
+              Add Vehicle
+            </Button>
+          </div>
+          <Card className="border-border/60">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Reg #</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Fuel</TableHead>
+                    <TableHead>Odometer</TableHead>
+                    <TableHead>Insurance</TableHead>
+                    <TableHead>Service</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {vehicles.map((v) => (
+                    <TableRow key={v.reg}>
+                      <TableCell className="font-mono text-xs">
+                        {v.reg}
+                      </TableCell>
+                      <TableCell className="font-medium">{v.model}</TableCell>
+                      <TableCell>{v.year}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={v.fuel} className="h-1.5 w-20" />
+                          <span className="text-xs tabular-nums">
+                            {v.fuel}%
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {v.odometer.toLocaleString()} km
+                      </TableCell>
+                      <TableCell className="text-xs">{v.insurance}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            v.service === "OVERDUE"
+                              ? "destructive"
+                              : v.service === "OK"
+                                ? "secondary"
+                                : "default"
+                          }
+                        >
+                          {v.service}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="drivers" className="mt-4 space-y-3">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDlg("driver")}
+            >
+              <Plus className="h-4 w-4" />
+              Add Driver
+            </Button>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {drivers.map((d) => (
+              <Card key={d.name} className="border-border/60">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-sm font-semibold">
+                      {d.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold">{d.name}</div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {d.license}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        Rating
+                      </div>
+                      <div className="font-semibold">{d.rating}★</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Trips</div>
+                      <div className="font-semibold">{d.trips}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">
+                        License
+                      </div>
+                      <div className="font-semibold">{d.exp}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="fuel" className="mt-4 grid md:grid-cols-2 gap-4">
+          <Card className="border-border/60">
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Fuel className="h-4 w-4" />
+                Fuel Logs
+              </CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setDlg("fuel")}
+              >
+                <Plus className="h-4 w-4" />
+                Log Fuel
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Bus</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Litres</TableHead>
+                    <TableHead>₹</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fuelLogs.map((r, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-mono text-xs">
+                        {r.bus}
+                      </TableCell>
+                      <TableCell>{r.date}</TableCell>
+                      <TableCell>{r.litres}L</TableCell>
+                      <TableCell>₹{r.cost}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          <Card className="border-border/60">
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wrench className="h-4 w-4" />
+                Maintenance Schedule
+              </CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setDlg("maint")}
+              >
+                <Plus className="h-4 w-4" />
+                Schedule
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Bus</TableHead>
+                    <TableHead>Task</TableHead>
+                    <TableHead>Due</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {maintLogs.map((r, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-mono text-xs">
+                        {r.bus}
+                      </TableCell>
+                      <TableCell>{r.task}</TableCell>
+                      <TableCell>
+                        {r.due === "Overdue" ? (
+                          <Badge variant="destructive">{r.due}</Badge>
+                        ) : (
+                          r.due
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </PageContainer>
+  );
+}
