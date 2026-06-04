@@ -5,14 +5,14 @@ import Institutes from "./pages/superadmin/institutes/Institutes";
 import CreateInstitute from "./pages/superadmin/institutes/CreateInstitute";
 import ViewInstitute from "./pages/superadmin/institutes/ViewInstitute";
 import { AppLayout, NotFoundPage } from "./components/app-layout";
-import Users from "./pages/superadmin/users/users";
-import Subscription from "./pages/superadmin/subscription/subscription";
+// import Users from "./pages/superadmin/users/users";
+// import Subscription from "./pages/superadmin/subscription/subscription";
 import Signup from "./features/Auth/Signup";
 import ForgotPassword from "./features/Auth/ForgotPassword";
 import Analytics from "./pages/superadmin/Analytics";
 import Audit from "./pages/superadmin/Audit"
 import Profile from "./pages/account/Profile";
-import Settings from "./pages/account/settings";
+// import Settings from "./pages/account/settings";
 import Dashboard from "./pages/students/Dashboard";
 import Assignments from "./pages/students/Assignments";
 import Attendance from "./pages/students/Attendance";
@@ -54,7 +54,7 @@ import Transport from "./pages/admin/modules/Transport";
 import Hostel from "./pages/admin/modules/Hostel";
 import LibraryPage from "./pages/admin/modules/Library";
 import Communication from "./pages/admin/modules/Communication";
-import EmployeesPage from "./pages/admin/staff/employee";
+// import EmployeesPage from "./pages/admin/staff/employee";
 import PayrollPage from "./pages/admin/staff/Payroll";
 import RolesPage from "./pages/roles/roles";
 
@@ -77,13 +77,13 @@ const router = createBrowserRouter([
       { path: "/super/institutes",element: <Institutes /> },
       { path: "/super/institutes/create", element: <CreateInstitute />},
       { path: "/super/institutes/:id",element: <ViewInstitute />},
-      { path: "/super/users", element: <Users />},
-      { path: "/super/subscription", element: <Subscription />},
+      // { path: "/super/users", element: <Users />},
+      // { path: "/super/subscription", element: <Subscription />},
       { path: "/analytics",element: <Analytics />},
       { path: "/admin/audit", element: <Audit />},
       //account routes
       { path: "/profile", element: <Profile />},
-      { path: "/settings", element: <Settings />},
+      // { path: "/settings", element: <Settings />},
       //student routes
       { path: "/student/dashboard", element: <Dashboard /> },
       { path: "/student/timetable", element: <Timetable /> },
@@ -131,7 +131,7 @@ const router = createBrowserRouter([
       { path: "/library", element: <LibraryPage /> },
       { path: "/communication", element: <Communication /> },
        //admin staff routes
-      { path: "/employees", element: <EmployeesPage /> },
+      // { path: "/employees", element: <EmployeesPage /> },
       { path: "/payroll", element: <PayrollPage /> },
       { path: "/roles", element: <RolesPage /> },
 
