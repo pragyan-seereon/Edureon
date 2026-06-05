@@ -89,7 +89,8 @@ const superGroups = [
   {
     label: "Platform",
     items: [
-      { title: "Institutes", url: "/super/institutes", icon: School },
+      { title: "Dashboard", url: "/super/institutes", icon: School },
+      { title: "Institutes", url: "/super/institutes/create", icon: School },
       { title: "Users & Roles", url: "/super/users", icon: UserCog },
       { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },

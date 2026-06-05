@@ -13,6 +13,7 @@ import Analytics from "./pages/superadmin/Analytics";
 import Audit from "./pages/superadmin/Audit"
 import Profile from "./pages/account/Profile";
 import Settings from "./pages/account/Settings";
+import Account from "./pages/account/Account";
 import Dashboard from "./pages/students/Dashboard";
 import Assignments from "./pages/students/Assignments";
 import Attendance from "./pages/students/Attendance";
@@ -37,6 +38,7 @@ import Assets from "./pages/admin/modules/Assets";
 import Infrastructure from "./pages/admin/modules/Infrastructure";
 import Expenses from "./pages/admin/modules/Expenses";
 import AdminAudit from "./pages/admin/AdminAudit";
+import SecurityLog from "./pages/admin/SecurityLog";
 import Dms from "./pages/admin/modules/Dms";
 import Students from "./pages/admin/academic/Students";
 import StudentDetails from "./pages/admin/academic/StudentDetails";
@@ -86,6 +88,7 @@ const router = createBrowserRouter([
       { path: "/admin/audit", element: <Audit />},
       //account routes
       { path: "/profile", element: <Profile />},
+      { path: "/account", element: <Account />},
       { path: "/settings", element: <Settings />},
       //student routes
       { path: "/student/dashboard", element: <Dashboard /> },
@@ -110,6 +113,7 @@ const router = createBrowserRouter([
       //instution admin routes
       
       { path: "/admin/audit", element: <AdminAudit /> },
+      { path: "/security-log", element: <SecurityLog /> },
       { path: "/notifications", element: <Notifications /> },
       //admin academic routes
       { path: "/admin/admissions", element: <Admissions /> },
