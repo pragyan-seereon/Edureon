@@ -12,6 +12,8 @@ import { useAuth } from "../lib/auth";
 const publicPaths = [
   "/login",
   "/admin/login",
+  "/teacher/login",
+  "/instute/login",
   "/signup",
   "/forgot-password",
 ];

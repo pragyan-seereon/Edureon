@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
-import { Card } from "../../components/ui/card";
+// import { Card } from "../../components/ui/card";
 import {
   GraduationCap,
   Loader2,
@@ -31,6 +31,14 @@ const FacebookIcon = () => (
     <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.884v2.25h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
   </svg>
 );
+
+// ── Role detection from pathname ─────────────────────────────────────────────
+const ROLE_CONFIG = {
+  "/admin/login":     { role: "superadmin", defaultEmail: "superadmin@scholaris.io" },
+  "/teacher/login":   { role: "teacher",    defaultEmail: "teacher@dps.edu.in"      },
+  "/instute/login": { role: "principal",  defaultEmail: "principal@dps.edu.in"    },
+  "/login":           { role: "student",    defaultEmail: "student@edu.in"                         },
+};
 
 // ── Claude API helpers ────────────────────────────────────────────────────────
 
@@ -84,23 +92,33 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isAdmin = location.pathname === "/admin/login";
+  // Derive role config from the current path
+  const roleConfig = ROLE_CONFIG[location.pathname] ?? ROLE_CONFIG["/login"];
+  const { role: pageRole, defaultEmail } = roleConfig;
 
-  const [email, setEmail] = useState(isAdmin ? "rahul@dpsnorth.edu.in" : "");
-  const [password, setPassword] = useState(isAdmin ? "demo1234" : "");
-  const [loading, setLoading] = useState(false);
+  const isAdmin     = pageRole === "superadmin";
+  const isTeacher   = pageRole === "teacher";
+  const isPrincipal = pageRole === "principal";
+  const isStudent   = pageRole === "student";
+
+  // Show demo persona panel on all staff portals
+  // const showDemoPersonas = isAdmin || isTeacher || isPrincipal;
+
+  const [email, setEmail]           = useState(defaultEmail);
+  const [password, setPassword]     = useState(defaultEmail ? "demo1234" : "");
+  const [loading, setLoading]       = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
   // ── OTP state ────────────────────────────────────────────────────────────────
-  const [otpStep, setOtpStep] = useState(false);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [pendingUser, setPendingUser] = useState(null);
+  const [otpStep, setOtpStep]           = useState(false);
+  const [otp, setOtp]                   = useState(["", "", "", "", "", ""]);
+  const [pendingUser, setPendingUser]   = useState(null);
   const [socialProvider, setSocialProvider] = useState(null);
 
   // Store the generated OTP in a ref (not state) so it doesn't re-render
   const generatedOtpRef = useRef(null);
-  const otpInputsRef = useRef([]);
+  const otpInputsRef    = useRef([]);
 
   // ── Regular email/password login ─────────────────────────────────────────────
   const submit = async (e) => {
@@ -140,10 +158,10 @@ export default function Login() {
         // OAuth popup blocked or not implemented — continue to OTP with stub
       }
 
-      // Fallback stub: use whatever email is typed in the field, default role "student"
+      // Fallback stub: use whatever email is typed in the field, default role from page
       if (!u) {
         const fallbackEmail = email.trim() || `demo+${provider}@edureon.in`;
-        u = { email: fallbackEmail, role: "student", provider };
+        u = { email: fallbackEmail, role: pageRole, provider };
       }
 
       const userEmail = u.email ?? email;
@@ -255,18 +273,37 @@ export default function Login() {
     }
   };
 
-  // ── Quick-login personas (admin only) ────────────────────────────────────────
-  const quickAs = async (preset) => {
-    setEmail(preset);
-    setPassword("demo1234");
-    setLoading(true);
-    try {
-      const u = await auth.login(preset, "demo1234");
-      navigate(portalHomeForRole(u.role));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ── Quick-login personas ──────────────────────────────────────────────────────
+  // const quickAs = async (preset) => {
+  //   setEmail(preset);
+  //   setPassword("demo1234");
+  //   setLoading(true);
+  //   try {
+  //     const u = await auth.login(preset, "demo1234");
+  //     navigate(portalHomeForRole(u.role));
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  // ── Demo persona definitions per portal ──────────────────────────────────────
+  // const DEMO_PERSONAS = {
+  //   superadmin: [
+  //     { label: "Super Admin",  email: "superadmin@scholaris.io" },
+  //     { label: "Teacher",      email: "teacher@dps.edu.in"      },
+  //     { label: "Principal",    email: "principal@dps.edu.in"    },
+  //   ],
+  //   teacher: [
+  //     { label: "Teacher (DPS)",     email: "teacher@dps.edu.in"       },
+  //     { label: "Teacher (Kendriya)", email: "teacher@kendriya.edu.in"  },
+  //   ],
+  //   principal: [
+  //     { label: "Principal (DPS)",     email: "principal@dps.edu.in"     },
+  //     { label: "Principal (Kendriya)", email: "principal@kendriya.edu.in"},
+  //   ],
+  // };
+
+  // const demoPersonas = DEMO_PERSONAS[pageRole] ?? [];
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -423,7 +460,10 @@ export default function Login() {
             /* ── Regular login form ─────────────────────────────────────────── */
             <>
               <h2 className="font-display text-2xl font-semibold tracking-tight">
-                Login
+                {isStudent   && " Login"}
+                {isTeacher   && " Login"}
+                {isPrincipal && " Login"}
+                {isAdmin     && " Login"}
               </h2>
 
               <form onSubmit={submit} className="mt-7 space-y-4">
@@ -563,8 +603,8 @@ export default function Login() {
                 </button>
               </div>
 
-              {/* Demo personas — admin only */}
-              {isAdmin && (
+              {/* Demo personas — staff portals only */}
+              {/* {showDemoPersonas && demoPersonas.length > 0 && (
                 <>
                   <div className="relative my-6 flex items-center">
                     <div className="flex-1 border-t" />
@@ -575,11 +615,7 @@ export default function Login() {
                   </div>
 
                   <Card className="p-2 flex flex-col md:flex-row gap-2 border-border/60">
-                    {[
-                      { label: "Super Admin", email: "superadmin@scholaris.io" },
-                      { label: "Teacher", email: "teacher@dps.edu.in" },
-                      { label: "Principal", email: "principal@dps.edu.in" },
-                    ].map((p) => (
+                    {demoPersonas.map((p) => (
                       <Button
                         key={p.email}
                         variant="ghost"
@@ -594,7 +630,7 @@ export default function Login() {
                     ))}
                   </Card>
                 </>
-              )}
+              )} */}
             </>
           )}
         </div>
