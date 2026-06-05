@@ -1,5 +1,5 @@
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "../../lib/auth";
 import { portalHomeForRole } from "../../lib/portal-nav";
 import { Button } from "../../components/ui/button";
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// ── NEW: Inline SVG icons for Google & Facebook (no extra deps) ────────────
+// ── Inline SVG icons for Google & Facebook ────────────────────────────────────
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -32,36 +32,84 @@ const FacebookIcon = () => (
   </svg>
 );
 
+// ── Claude API helpers ────────────────────────────────────────────────────────
+
+/**
+ * Calls Claude to generate a 6-digit OTP and return it as plain JSON.
+ * In production you would: generate the OTP server-side, store it with a TTL,
+ * and email it via your email provider. This demo generates + returns it via
+ * the Claude API so everything is self-contained in the frontend.
+ */
+async function generateOtpViaClaude(email, provider) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      messages: [
+        {
+          role: "user",
+          content: `Generate a secure 6-digit numeric OTP for a user signing in via ${provider} with email ${email}.
+Respond ONLY with a JSON object — no markdown, no explanation — in this exact shape:
+{"otp":"XXXXXX","message":"Your EDUREON verification code is XXXXXX. It expires in 10 minutes. Do not share this code with anyone."}
+Where XXXXXX is the 6-digit OTP you generated.`,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) throw new Error("Claude API error");
+
+  const data = await response.json();
+  const text = data.content.map((b) => b.text || "").join("");
+  // Strip any accidental markdown fences before parsing
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean); // { otp, message }
+}
+
+/**
+ * Simulates sending the OTP to the user's email.
+ * In production, replace with your email provider (SendGrid, SES, Resend, etc.).
+ * Here we just log it to console so you can test the flow.
+ */
+function sendOtpEmail(email, message) {
+  // TODO: replace with real email send
+  console.info(`[OTP EMAIL → ${email}]:`, message);
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function Login() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Detect if we're on the admin login route
   const isAdmin = location.pathname === "/admin/login";
 
   const [email, setEmail] = useState(isAdmin ? "rahul@dpsnorth.edu.in" : "");
   const [password, setPassword] = useState(isAdmin ? "demo1234" : "");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  // ── NEW: Remember Me ────────────────────────────────────────────────────────
   const [rememberMe, setRememberMe] = useState(false);
 
-  // ── NEW: 2FA / OTP state ────────────────────────────────────────────────────
+  // ── OTP state ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [pendingUser, setPendingUser] = useState(null);
+  const [socialProvider, setSocialProvider] = useState(null);
 
+  // Store the generated OTP in a ref (not state) so it doesn't re-render
+  const generatedOtpRef = useRef(null);
+  const otpInputsRef = useRef([]);
+
+  // ── Regular email/password login ─────────────────────────────────────────────
   const submit = async (e) => {
     e?.preventDefault();
-    if (!email || !password)
-      return toast.error("Email and password are required");
+    if (!email || !password) return toast.error("Email and password are required");
     setLoading(true);
     try {
       const u = await auth.login(email, password);
 
-      // ── NEW: If backend signals 2FA required, show OTP screen ─────────────
       if (u?.requires2FA) {
         setPendingUser(u);
         setOtpStep(true);
@@ -78,41 +126,136 @@ export default function Login() {
     }
   };
 
-  // ── NEW: OTP digit input handler with auto-advance ─────────────────────────
-  const handleOtpChange = (index, value) => {
-    if (!/^\d*$/.test(value)) return;
-    const next = [...otp];
-    next[index] = value.slice(-1);
-    setOtp(next);
-    if (value && index < 5) {
-      document.getElementById(`otp-${index + 1}`)?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index, e) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      document.getElementById(`otp-${index - 1}`)?.focus();
-    }
-  };
-
-  // ── NEW: OTP submit ─────────────────────────────────────────────────────────
-  const submitOtp = async (e) => {
-    e?.preventDefault();
-    const code = otp.join("");
-    if (code.length < 6) return toast.error("Please enter the 6-digit OTP");
+  // ── Social login — generates OTP via Claude API, then shows OTP screen ───────
+  const socialLogin = async (provider) => {
     setLoading(true);
+    setSocialProvider(provider);
     try {
-      const u = await auth.verifyOtp?.(pendingUser, code) ?? pendingUser;
-      toast.success("Welcome back");
-      navigate(portalHomeForRole(u.role));
-    } catch {
-      toast.error("Invalid or expired OTP");
+      // 1. Attempt OAuth — auth.socialLogin may not be wired up yet (returns null/undefined).
+      //    We fall back to a stub user so the OTP flow always works in dev/demo.
+      let u = null;
+      try {
+        u = await auth.socialLogin?.(provider);
+      } catch {
+        // OAuth popup blocked or not implemented — continue to OTP with stub
+      }
+
+      // Fallback stub: use whatever email is typed in the field, default role "student"
+      if (!u) {
+        const fallbackEmail = email.trim() || `demo+${provider}@edureon.in`;
+        u = { email: fallbackEmail, role: "student", provider };
+      }
+
+      const userEmail = u.email ?? email;
+
+      // 2. Generate OTP via Claude API
+      toast.loading("Sending OTP…", { id: "otp-gen" });
+      const { otp: generatedOtp, message } = await generateOtpViaClaude(userEmail, provider);
+      generatedOtpRef.current = generatedOtp;
+
+      // 3. "Send" OTP — logs to console in dev; replace body with real email provider
+      sendOtpEmail(userEmail, message);
+      toast.dismiss("otp-gen");
+
+      // 4. Show OTP screen
+      setPendingUser(u);
+      setOtpStep(true);
+      setOtp(["", "", "", "", "", ""]);
+
+      toast.success(`OTP sent to ${userEmail}`, { duration: 4000 });
+    } catch (err) {
+      console.error(err);
+      toast.dismiss("otp-gen");
+      toast.error(`${provider} sign-in failed. Please try again.`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Only available on admin login
+  // ── OTP digit change with auto-advance and auto-submit on 6th digit ──────────
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const next = [...otp];
+    next[index] = value.slice(-1);
+    setOtp(next);
+
+    if (value && index < 5) {
+      otpInputsRef.current[index + 1]?.focus();
+    }
+
+    // Auto-submit when all 6 digits are filled
+    if (index === 5 && value) {
+      const fullCode = [...next.slice(0, 5), value.slice(-1)].join("");
+      if (fullCode.length === 6) {
+        // Small timeout so the last digit renders before submitting
+        setTimeout(() => verifyOtp(fullCode), 80);
+      }
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      otpInputsRef.current[index - 1]?.focus();
+    }
+  };
+
+  // ── OTP verification ─────────────────────────────────────────────────────────
+  const verifyOtp = async (codeOverride) => {
+    const code = codeOverride ?? otp.join("");
+    if (code.length < 6) return toast.error("Please enter the 6-digit OTP");
+
+    setLoading(true);
+    try {
+      // Compare against the Claude-generated OTP stored in the ref
+      if (generatedOtpRef.current && code !== generatedOtpRef.current) {
+        throw new Error("OTP mismatch");
+      }
+
+      // If your auth layer also has an OTP verify step, call it here:
+      const u = (await auth.verifyOtp?.(pendingUser, code)) ?? pendingUser;
+
+      toast.success("Welcome back! 🎉");
+      navigate(portalHomeForRole(u.role));
+    } catch {
+      toast.error("Invalid or expired OTP. Please try again.");
+      setOtp(["", "", "", "", "", ""]);
+      otpInputsRef.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitOtp = (e) => {
+    e?.preventDefault();
+    verifyOtp();
+  };
+
+  // ── Resend OTP ───────────────────────────────────────────────────────────────
+  const resendOtp = async () => {
+    if (!pendingUser || !socialProvider) {
+      toast.info("OTP resent");
+      return;
+    }
+    setLoading(true);
+    try {
+      const userEmail = pendingUser.email ?? email;
+      toast.loading("Resending OTP…", { id: "otp-resend" });
+      const { otp: newOtp, message } = await generateOtpViaClaude(userEmail, socialProvider);
+      generatedOtpRef.current = newOtp;
+      sendOtpEmail(userEmail, message);
+      toast.dismiss("otp-resend");
+      toast.success("New OTP sent!");
+      setOtp(["", "", "", "", "", ""]);
+      otpInputsRef.current[0]?.focus();
+    } catch {
+      toast.dismiss("otp-resend");
+      toast.error("Failed to resend OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Quick-login personas (admin only) ────────────────────────────────────────
   const quickAs = async (preset) => {
     setEmail(preset);
     setPassword("demo1234");
@@ -125,25 +268,10 @@ export default function Login() {
     }
   };
 
-  // ── NEW: Social login handler ───────────────────────────────────────────────
-  const socialLogin = async (provider) => {
-    setLoading(true);
-    try {
-      const u = await auth.socialLogin?.(provider);
-      if (u) {
-        toast.success("Welcome back");
-        navigate(portalHomeForRole(u.role));
-      }
-    } catch {
-      toast.error(`${provider} sign-in failed`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
-      {/* Brand panel — UNCHANGED */}
+      {/* Brand panel */}
       <div className="hidden lg:flex relative bg-sidebar text-sidebar-foreground p-10 flex-col justify-between overflow-hidden">
         <div className="absolute inset-0 gradient-primary opacity-25" />
         <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-accent/30 blur-3xl" />
@@ -154,9 +282,7 @@ export default function Login() {
               <GraduationCap className="h-6 w-6 text-primary-foreground" />
             </div>
             <div>
-              <div className="font-display text-lg font-semibold">
-                EDUREON
-              </div>
+              <div className="font-display text-lg font-semibold">EDUREON</div>
               <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60">
                 Enterprise · CBSE Edition
               </div>
@@ -207,6 +333,7 @@ export default function Login() {
       {/* Form panel */}
       <div className="flex items-center justify-center p-6 md:p-10">
         <div className="w-full max-w-sm">
+          {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <div className="h-9 w-9 rounded-md gradient-primary flex items-center justify-center">
               <GraduationCap className="h-5 w-5 text-primary-foreground" />
@@ -214,23 +341,32 @@ export default function Login() {
             <span className="font-display font-semibold">Scholaris ERP</span>
           </div>
 
-          {/* ── NEW: OTP / 2FA Screen — shown after successful credential check ── */}
+          {/* ── OTP / 2FA Screen ───────────────────────────────────────────── */}
           {otpStep ? (
             <>
-              <h2 className="font-display text-2xl font-semibold tracking-tight">
-                Two-step verification
-              </h2>
+              <div className="mb-1 flex items-center gap-2">
+                {socialProvider === "google" && <GoogleIcon />}
+                {socialProvider === "facebook" && <FacebookIcon />}
+                <h2 className="font-display text-2xl font-semibold tracking-tight">
+                  Two-step verification
+                </h2>
+              </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Enter the 6-digit code sent to your registered email or phone.
+                {socialProvider
+                  ? `We sent a 6-digit code to the email linked to your ${
+                      socialProvider.charAt(0).toUpperCase() + socialProvider.slice(1)
+                    } account.`
+                  : "Enter the 6-digit code sent to your registered email or phone."}
               </p>
 
               <form onSubmit={submitOtp} className="mt-7 space-y-5">
-                {/* 6-box OTP input */}
+                {/* 6-box OTP input — auto-submits on 6th digit */}
                 <div className="flex gap-2 justify-between">
                   {otp.map((digit, i) => (
                     <Input
                       key={i}
                       id={`otp-${i}`}
+                      ref={(el) => (otpInputsRef.current[i] = el)}
                       type="text"
                       inputMode="numeric"
                       maxLength={1}
@@ -239,13 +375,14 @@ export default function Login() {
                       onKeyDown={(e) => handleOtpKeyDown(i, e)}
                       className="h-12 w-12 text-center text-lg font-semibold p-0"
                       autoFocus={i === 0}
+                      disabled={loading}
                     />
                   ))}
                 </div>
 
                 <Button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || otp.join("").length < 6}
                   className="w-full gradient-primary border-0"
                 >
                   {loading ? (
@@ -261,7 +398,8 @@ export default function Login() {
                 <button
                   type="button"
                   className="text-primary hover:underline font-medium"
-                  onClick={() => toast.info("OTP resent")}
+                  onClick={resendOtp}
+                  disabled={loading}
                 >
                   Resend OTP
                 </button>
@@ -270,21 +408,23 @@ export default function Login() {
                 <button
                   type="button"
                   className="text-primary hover:underline font-medium"
-                  onClick={() => { setOtpStep(false); setOtp(["","","","","",""]); }}
+                  onClick={() => {
+                    setOtpStep(false);
+                    setOtp(["", "", "", "", "", ""]);
+                    setSocialProvider(null);
+                    generatedOtpRef.current = null;
+                  }}
                 >
                   ← Back to login
                 </button>
               </p>
             </>
           ) : (
-            /* ── Original login form — only additions are marked NEW ─────────── */
+            /* ── Regular login form ─────────────────────────────────────────── */
             <>
               <h2 className="font-display text-2xl font-semibold tracking-tight">
                 Login
               </h2>
-              {/* <p className="mt-1 text-sm text-muted-foreground">
-                Sign in to your institute workspace.
-              </p> */}
 
               <form onSubmit={submit} className="mt-7 space-y-4">
                 <div className="space-y-1.5">
@@ -339,7 +479,6 @@ export default function Login() {
                   </div>
                 </div>
 
-                {/* ── NEW: Remember Me checkbox — matches CareerMap layout ──────── */}
                 <div className="flex items-center gap-2">
                   <input
                     id="remember-me"
@@ -379,8 +518,7 @@ export default function Login() {
                 </Link>
               </p>
 
-              {/* ── NEW: Social login — styled exactly like CareerMap ─────────────
-                   Divider → two icon buttons (Google / Facebook) with labels     */}
+              {/* Social login */}
               <div className="relative my-5 flex items-center">
                 <div className="flex-1 border-t" />
                 <span className="px-3 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -398,7 +536,11 @@ export default function Login() {
                   aria-label="Sign in with Google"
                 >
                   <span className="h-14 w-14 rounded-full border border-border bg-background flex items-center justify-center shadow-sm group-hover:border-primary/40 transition-colors">
-                    <GoogleIcon />
+                    {loading && socialProvider === "google" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <GoogleIcon />
+                    )}
                   </span>
                   <span className="text-[11px] text-muted-foreground">Google</span>
                 </button>
@@ -411,13 +553,17 @@ export default function Login() {
                   aria-label="Sign in with Facebook"
                 >
                   <span className="h-14 w-14 rounded-full border border-border bg-background flex items-center justify-center shadow-sm group-hover:border-primary/40 transition-colors">
-                    <FacebookIcon />
+                    {loading && socialProvider === "facebook" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <FacebookIcon />
+                    )}
                   </span>
                   <span className="text-[11px] text-muted-foreground">Facebook</span>
                 </button>
               </div>
 
-              {/* Demo personas — only shown on /admin/login — UNCHANGED */}
+              {/* Demo personas — admin only */}
               {isAdmin && (
                 <>
                   <div className="relative my-6 flex items-center">
@@ -428,25 +574,26 @@ export default function Login() {
                     <div className="flex-1 border-t" />
                   </div>
 
-<Card className="p-2 flex flex-col md:flex-row gap-2 border-border/60">
-  {[
-    { label: "Super Admin", email: "superadmin@scholaris.io" },
-    { label: "Teacher", email: "teacher@dps.edu.in" },
-    { label: "Principal", email: "principal@dps.edu.in" },
-  ].map((p) => (
-    <Button
-      key={p.email}
-      variant="ghost"
-      size="sm"
-      className="flex-1 justify-center text-xs font-normal"
-      onClick={() => quickAs(p.email)}
-      disabled={loading}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-success mr-2" />
-      {p.label}
-    </Button>
-  ))}
-</Card>                </>
+                  <Card className="p-2 flex flex-col md:flex-row gap-2 border-border/60">
+                    {[
+                      { label: "Super Admin", email: "superadmin@scholaris.io" },
+                      { label: "Teacher", email: "teacher@dps.edu.in" },
+                      { label: "Principal", email: "principal@dps.edu.in" },
+                    ].map((p) => (
+                      <Button
+                        key={p.email}
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 justify-center text-xs font-normal"
+                        onClick={() => quickAs(p.email)}
+                        disabled={loading}
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-success mr-2" />
+                        {p.label}
+                      </Button>
+                    ))}
+                  </Card>
+                </>
               )}
             </>
           )}
