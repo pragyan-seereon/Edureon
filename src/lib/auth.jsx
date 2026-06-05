@@ -29,8 +29,9 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     ready,
-    login: async (email) => {
+    login: async (email, _password, options = {}) => {
       await sleep(450);
+      const shouldPersist = options.persistUser !== false;
       // Lookup provisioned user by email
       const { appUsersApi, institutesApi } = await import("./store");
       const matched = appUsersApi
@@ -48,7 +49,7 @@ export function AuthProvider({ children }) {
           institute: inst?.name ?? "—",
           joinedAt: "2024-04-01",
         };
-        persist(u);
+        if (shouldPersist) persist(u);
         return u;
       }
       // Fallback: demo personas inferred from email
@@ -78,6 +79,11 @@ export function AuthProvider({ children }) {
         bio: "Building a future-ready learning campus with technology.",
         joinedAt: "2024-04-01",
       };
+      if (shouldPersist) persist(u);
+      return u;
+    },
+    completeLogin: async (u) => {
+      await sleep(250);
       persist(u);
       return u;
     },
@@ -142,8 +148,8 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 }
-export const initials = (name) =>
-  name
+export const initials = (name = "") =>
+  String(name || "?")
     .split(" ")
     .filter(Boolean)
     .map((n) => n[0])

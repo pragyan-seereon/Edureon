@@ -34,46 +34,33 @@ const FacebookIcon = () => (
 
 // ── Role detection from pathname ─────────────────────────────────────────────
 const ROLE_CONFIG = {
-  "/admin/login":     { role: "superadmin", defaultEmail: "superadmin@scholaris.io" },
+  "/admin/login":     { role: "super_admin", defaultEmail: "superadmin@scholaris.io" },
   "/teacher/login":   { role: "teacher",    defaultEmail: "teacher@dps.edu.in"      },
   "/instute/login": { role: "principal",  defaultEmail: "principal@dps.edu.in"    },
   "/login":           { role: "student",    defaultEmail: "student@edu.in"                         },
 };
 
-// ── Claude API helpers ────────────────────────────────────────────────────────
+// ── OTP helpers ───────────────────────────────────────────────────────────────
 
 /**
- * Calls Claude to generate a 6-digit OTP and return it as plain JSON.
+ * Generates a 6-digit demo OTP.
  * In production you would: generate the OTP server-side, store it with a TTL,
- * and email it via your email provider. This demo generates + returns it via
- * the Claude API so everything is self-contained in the frontend.
+ * and email it via your email provider. This demo logs the email message and
+ * shows the code in a toast so everything is self-contained in the frontend.
  */
-async function generateOtpViaClaude(email, provider) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [
-        {
-          role: "user",
-          content: `Generate a secure 6-digit numeric OTP for a user signing in via ${provider} with email ${email}.
-Respond ONLY with a JSON object — no markdown, no explanation — in this exact shape:
-{"otp":"XXXXXX","message":"Your EDUREON verification code is XXXXXX. It expires in 10 minutes. Do not share this code with anyone."}
-Where XXXXXX is the 6-digit OTP you generated.`,
-        },
-      ],
-    }),
-  });
+const OTP_LENGTH = 6;
 
-  if (!response.ok) throw new Error("Claude API error");
+const emptyOtp = () => Array.from({ length: OTP_LENGTH }, () => "");
 
-  const data = await response.json();
-  const text = data.content.map((b) => b.text || "").join("");
-  // Strip any accidental markdown fences before parsing
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean); // { otp, message }
+const createOtp = () =>
+  String(Math.floor(100000 + Math.random() * 900000)).slice(0, OTP_LENGTH);
+
+function generateLoginOtp() {
+  const otp = createOtp();
+  return {
+    otp,
+    message: `Your EDUREON verification code is ${otp}. It expires in 10 minutes. Do not share this code with anyone.`,
+  };
 }
 
 /**
@@ -83,10 +70,9 @@ Where XXXXXX is the 6-digit OTP you generated.`,
  */
 function sendOtpEmail(email, message) {
   // TODO: replace with real email send
-  console.info(`[OTP EMAIL → ${email}]:`, message);
+  console.info(`[OTP EMAIL -> ${email}]:`, message);
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
 export default function Login() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -96,7 +82,7 @@ export default function Login() {
   const roleConfig = ROLE_CONFIG[location.pathname] ?? ROLE_CONFIG["/login"];
   const { role: pageRole, defaultEmail } = roleConfig;
 
-  const isAdmin     = pageRole === "superadmin";
+  const isAdmin     = pageRole === "super_admin";
   const isTeacher   = pageRole === "teacher";
   const isPrincipal = pageRole === "principal";
   const isStudent   = pageRole === "student";
@@ -112,7 +98,7 @@ export default function Login() {
 
   // ── OTP state ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep]           = useState(false);
-  const [otp, setOtp]                   = useState(["", "", "", "", "", ""]);
+  const [otp, setOtp]                   = useState(emptyOtp);
   const [pendingUser, setPendingUser]   = useState(null);
   const [socialProvider, setSocialProvider] = useState(null);
 
@@ -126,17 +112,20 @@ export default function Login() {
     if (!email || !password) return toast.error("Email and password are required");
     setLoading(true);
     try {
-      const u = await auth.login(email, password);
+      const u = await auth.login(email.trim(), password, { persistUser: false });
+      const { otp: generatedOtp, message } = generateLoginOtp();
+      const userEmail = u.email ?? email.trim();
 
-      if (u?.requires2FA) {
-        setPendingUser(u);
-        setOtpStep(true);
-        toast.success("OTP sent to your registered email / phone");
-        return;
-      }
+      generatedOtpRef.current = generatedOtp;
+      sendOtpEmail(userEmail, message);
+      setPendingUser(u);
+      setSocialProvider(null);
+      setOtpStep(true);
+      setOtp(emptyOtp());
 
-      toast.success("Welcome back");
-      navigate(portalHomeForRole(u.role));
+      toast.success(`OTP sent to ${userEmail}`);
+      toast.info(`Demo OTP: ${generatedOtp}`, { duration: 6000 });
+      window.setTimeout(() => otpInputsRef.current[0]?.focus(), 80);
     } catch {
       toast.error("Invalid credentials");
     } finally {
@@ -144,48 +133,53 @@ export default function Login() {
     }
   };
 
-  // ── Social login — generates OTP via Claude API, then shows OTP screen ───────
+  // ── Social login — completes login directly through the selected provider ───
   const socialLogin = async (provider) => {
     setLoading(true);
     setSocialProvider(provider);
     try {
       // 1. Attempt OAuth — auth.socialLogin may not be wired up yet (returns null/undefined).
-      //    We fall back to a stub user so the OTP flow always works in dev/demo.
+      //    We fall back to a stub user so the direct login flow works in dev/demo.
       let u = null;
       try {
         u = await auth.socialLogin?.(provider);
       } catch {
-        // OAuth popup blocked or not implemented — continue to OTP with stub
+        // OAuth popup blocked or not implemented — continue with stub
       }
 
       // Fallback stub: use whatever email is typed in the field, default role from page
       if (!u) {
         const fallbackEmail = email.trim() || `demo+${provider}@edureon.in`;
-        u = { email: fallbackEmail, role: pageRole, provider };
+        const fallbackName = fallbackEmail
+          .split("@")[0]
+          .replace(/[._-]+/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+        u = {
+          id: "u_" + Date.now().toString(36),
+          name: fallbackName || `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
+          email: fallbackEmail,
+          role: pageRole,
+          designation: pageRole === "super_admin"
+            ? "Super Admin"
+            : pageRole === "principal"
+              ? "Principal"
+              : pageRole === "teacher"
+                ? "Teacher"
+                : "Student",
+          institute: "Delhi Public School - North",
+          provider,
+          joinedAt: new Date().toISOString().slice(0, 10),
+        };
       }
 
-      const userEmail = u.email ?? email;
-
-      // 2. Generate OTP via Claude API
-      toast.loading("Sending OTP…", { id: "otp-gen" });
-      const { otp: generatedOtp, message } = await generateOtpViaClaude(userEmail, provider);
-      generatedOtpRef.current = generatedOtp;
-
-      // 3. "Send" OTP — logs to console in dev; replace body with real email provider
-      sendOtpEmail(userEmail, message);
-      toast.dismiss("otp-gen");
-
-      // 4. Show OTP screen
-      setPendingUser(u);
-      setOtpStep(true);
-      setOtp(["", "", "", "", "", ""]);
-
-      toast.success(`OTP sent to ${userEmail}`, { duration: 4000 });
+      const loggedInUser = await auth.completeLogin(u);
+      toast.success(`Signed in with ${provider.charAt(0).toUpperCase() + provider.slice(1)}`);
+      navigate(portalHomeForRole(loggedInUser.role));
     } catch (err) {
       console.error(err);
-      toast.dismiss("otp-gen");
       toast.error(`${provider} sign-in failed. Please try again.`);
     } finally {
+      setSocialProvider(null);
       setLoading(false);
     }
   };
@@ -197,14 +191,14 @@ export default function Login() {
     next[index] = value.slice(-1);
     setOtp(next);
 
-    if (value && index < 5) {
+    if (value && index < OTP_LENGTH - 1) {
       otpInputsRef.current[index + 1]?.focus();
     }
 
     // Auto-submit when all 6 digits are filled
-    if (index === 5 && value) {
-      const fullCode = [...next.slice(0, 5), value.slice(-1)].join("");
-      if (fullCode.length === 6) {
+    if (index === OTP_LENGTH - 1 && value) {
+      const fullCode = [...next.slice(0, OTP_LENGTH - 1), value.slice(-1)].join("");
+      if (fullCode.length === OTP_LENGTH) {
         // Small timeout so the last digit renders before submitting
         setTimeout(() => verifyOtp(fullCode), 80);
       }
@@ -220,23 +214,23 @@ export default function Login() {
   // ── OTP verification ─────────────────────────────────────────────────────────
   const verifyOtp = async (codeOverride) => {
     const code = codeOverride ?? otp.join("");
-    if (code.length < 6) return toast.error("Please enter the 6-digit OTP");
+    if (code.length < OTP_LENGTH) return toast.error("Please enter the 6-digit OTP");
 
     setLoading(true);
     try {
-      // Compare against the Claude-generated OTP stored in the ref
+      // Compare against the generated OTP stored in the ref
       if (generatedOtpRef.current && code !== generatedOtpRef.current) {
         throw new Error("OTP mismatch");
       }
 
-      // If your auth layer also has an OTP verify step, call it here:
-      const u = (await auth.verifyOtp?.(pendingUser, code)) ?? pendingUser;
+      const verifiedUser = (await auth.verifyOtp?.(pendingUser, code)) ?? pendingUser;
+      const u = await auth.completeLogin(verifiedUser);
 
-      toast.success("Welcome back! 🎉");
+      toast.success("Welcome back");
       navigate(portalHomeForRole(u.role));
     } catch {
       toast.error("Invalid or expired OTP. Please try again.");
-      setOtp(["", "", "", "", "", ""]);
+      setOtp(emptyOtp());
       otpInputsRef.current[0]?.focus();
     } finally {
       setLoading(false);
@@ -250,20 +244,21 @@ export default function Login() {
 
   // ── Resend OTP ───────────────────────────────────────────────────────────────
   const resendOtp = async () => {
-    if (!pendingUser || !socialProvider) {
-      toast.info("OTP resent");
+    if (!pendingUser) {
+      toast.error("Please sign in again");
       return;
     }
     setLoading(true);
     try {
       const userEmail = pendingUser.email ?? email;
       toast.loading("Resending OTP…", { id: "otp-resend" });
-      const { otp: newOtp, message } = await generateOtpViaClaude(userEmail, socialProvider);
+      const { otp: newOtp, message } = generateLoginOtp();
       generatedOtpRef.current = newOtp;
       sendOtpEmail(userEmail, message);
       toast.dismiss("otp-resend");
       toast.success("New OTP sent!");
-      setOtp(["", "", "", "", "", ""]);
+      toast.info(`Demo OTP: ${newOtp}`, { duration: 6000 });
+      setOtp(emptyOtp());
       otpInputsRef.current[0]?.focus();
     } catch {
       toast.dismiss("otp-resend");
@@ -419,7 +414,7 @@ export default function Login() {
 
                 <Button
                   type="submit"
-                  disabled={loading || otp.join("").length < 6}
+                  disabled={loading || otp.join("").length < OTP_LENGTH}
                   className="w-full gradient-primary border-0"
                 >
                   {loading ? (
@@ -447,7 +442,7 @@ export default function Login() {
                   className="text-primary hover:underline font-medium"
                   onClick={() => {
                     setOtpStep(false);
-                    setOtp(["", "", "", "", "", ""]);
+                    setOtp(emptyOtp());
                     setSocialProvider(null);
                     generatedOtpRef.current = null;
                   }}
@@ -548,15 +543,17 @@ export default function Login() {
                 </Button>
               </form>
 
-              <p className="mt-6 text-xs text-muted-foreground text-center">
-                Not registered yet?{" "}
-                <Link
-                  to="/signup"
-                  className="text-primary hover:underline font-medium"
-                >
-                  Create an Account
-                </Link>
-              </p>
+              {!isAdmin && !isPrincipal && (
+                <p className="mt-6 text-xs text-muted-foreground text-center">
+                  Not registered yet?{" "}
+                  <Link
+                    to="/signup"
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Create an Account
+                  </Link>
+                </p>
+              )}
 
               {/* Social login */}
               <div className="relative my-5 flex items-center">
