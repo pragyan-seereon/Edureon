@@ -70,6 +70,9 @@ const router = createBrowserRouter([
       // auth routes
       { path: "/login", element: <Login />},
       { path: "/admin/login", element: <Login />},
+      { path: "/teacher/login", element: <Login />},
+      { path: "/instute/login", element: <Login />},
+
       { path: "/signup", element: <Signup />},
       { path: "/forgot-password", element: <ForgotPassword /> },
 
