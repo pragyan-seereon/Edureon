@@ -779,18 +779,32 @@ function WizardStepper({ activeStep, setActiveStep }) {
             <button
               type="button"
               onClick={() => setActiveStep(step.id)}
-              className={[
-                "flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold transition-colors",
-                isActive
-                  ? "gradient-primary text-primary-foreground shadow"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80",
-              ].join(" ")}
+              className="flex flex-col items-center gap-1"
               aria-label={step.title}
             >
-              {step.number}
+              <div
+                className={[
+                  "flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold transition-colors",
+                  isActive
+                    ? "gradient-primary text-primary-foreground shadow"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80",
+                ].join(" ")}
+              >
+                {step.number}
+              </div>
+              <span
+                className={[
+                  "text-[10px] leading-tight text-center max-w-[56px] hidden sm:block",
+                  isActive
+                    ? "text-foreground font-medium"
+                    : "text-muted-foreground",
+                ].join(" ")}
+              >
+                {step.title.trim()}
+              </span>
             </button>
             {index < steps.length - 1 && (
-              <div className="mx-2 h-px w-5 bg-border sm:w-8" />
+              <div className="mx-2 mb-4 h-px w-5 bg-border sm:w-8" />
             )}
           </div>
         );

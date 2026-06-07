@@ -18,7 +18,7 @@ import { Badge } from "./ui/badge";
 import { useNavigate, Link } from "react-router-dom";
 import {
   LogOut,
-  ShieldAlert,
+  // ShieldAlert,
   User as UserIcon,
   Settings,
 } from "lucide-react";
@@ -143,12 +143,12 @@ const onLogout = () => {
             Account Settings
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
+        {/* <DropdownMenuItem asChild>
           <Link to="/security-log">
             <ShieldAlert className="h-4 w-4" />
             Security Log
           </Link>
-        </DropdownMenuItem>
+        </DropdownMenuItem> */}
         {/* <DropdownMenuItem asChild>
           <Link to="/roles">
             <Shield className="h-4 w-4" />

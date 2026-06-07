@@ -1,21 +1,30 @@
 import { Link, useNavigate } from "react-router-dom";
-import { PageContainer, PageHeader } from "../../../components/page-shell";
-import { KpiCard } from "../../../components/kpi-card";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "../../../components/ui/card";
+  ArrowDown,
+  ArrowUp,
+  Download,
+  Eye,
+  FilePenLine,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { PageContainer, PageHeader } from "../../../components/page-shell";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
+import { Card, CardContent } from "../../../components/ui/card";
+import { Checkbox } from "../../../components/ui/checkbox";
+import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "../../../components/ui/tabs";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import {
   Table,
   TableBody,
@@ -24,52 +33,215 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { Input } from "../../../components/ui/input";
-import {
-  Building2,
-  Plus,
-  Users,
-  IndianRupee,
-  TrendingUp,
-  Sparkles,
-} from "lucide-react";
-import { useInstitutes } from "../../../lib/store";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
-const inr = (n) =>
-  "₹" +
-  (n >= 1e7
-    ? (n / 1e7).toFixed(2) + " Cr"
-    : n >= 1e5
-      ? (n / 1e5).toFixed(2) + " L"
-      : n.toLocaleString("en-IN"));
-const mrrTrend = [
-  { m: "Apr", v: 320000 },
-  { m: "May", v: 358000 },
-  { m: "Jun", v: 384000 },
-  { m: "Jul", v: 412000 },
-  { m: "Aug", v: 442000 },
-  { m: "Sep", v: 470000 },
-  { m: "Oct", v: 498000 },
-  { m: "Nov", v: 519000 },
-];
+import { institutesApi, useInstitutes } from "../../../lib/store";
+
+const STATUS_OPTIONS = ["All", "Active", "Inactive", "Trial", "Suspended"];
+const TYPE_OPTIONS = ["All", "School", "College", "Coaching", "University"];
+const PLAN_OPTIONS = ["All", "Trial", "Basic", "Professional", "Enterprise"];
+const PAGE_SIZES = [10, 25, 50, 100];
+
+const normalizeType = (type) => {
+  if (type === "Coaching Centre") return "Coaching";
+  return type || "School";
+};
+
+const normalizePlan = (plan, status) => {
+  if (status === "Trial") return "Trial";
+  if (plan === "Growth") return "Basic";
+  if (plan === "Business") return "Professional";
+  return plan || "Basic";
+};
+
+const createdDate = (item, index) => {
+  if (item.createdAt) return item.createdAt.slice(0, 10);
+  const date = new Date("2026-06-01T00:00:00.000Z");
+  date.setDate(date.getDate() - index * 14);
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDate = (value) =>
+  value
+    ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "-";
+
+const statusVariant = (status) => {
+  if (status === "Active") return "default";
+  if (status === "Trial") return "secondary";
+  return "destructive";
+};
+
+const planVariant = (plan) => {
+  if (plan === "Enterprise") return "default";
+  if (plan === "Professional") return "secondary";
+  return "outline";
+};
+
+const exportRows = (rows) => {
+  const columns = [
+    "Institute ID",
+    "Institute Name",
+    "Type",
+    "Board",
+    "City",
+    "Plan",
+    "Status",
+    "Students Count",
+    "Admin Name",
+    "Created Date",
+  ];
+  const escapeCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const csv = [
+    columns.join(","),
+    ...rows.map((item) =>
+      [
+        item.id,
+        item.name,
+        item.type,
+        item.board,
+        item.city,
+        item.plan,
+        item.status,
+        item.students,
+        item.adminName,
+        item.createdAt,
+      ]
+        .map(escapeCell)
+        .join(","),
+    ),
+  ].join("\n");
+
+  const blob = new Blob([csv], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `institutes-export-${new Date().toISOString().slice(0, 10)}.xls`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export default function Institutes() {
-  const institutes = useInstitutes();
+  const rawInstitutes = useInstitutes();
   const navigate = useNavigate();
-  const mrr = institutes.reduce((s, i) => s + i.mrr, 0);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [status, setStatus] = useState("All");
+  const [type, setType] = useState("All");
+  const [plan, setPlan] = useState("All");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [rowsPerPage, setRowsPerPage] = useState("10");
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState([]);
+  const [sort, setSort] = useState({ key: "createdAt", dir: "desc" });
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+    setSelected([]);
+  }, [debouncedSearch, status, type, plan, from, to, rowsPerPage]);
+
+  const institutes = useMemo(
+    () =>
+      rawInstitutes.map((item, index) => ({
+        ...item,
+        type: normalizeType(item.type),
+        board: item.board || "CBSE",
+        plan: normalizePlan(item.plan, item.status),
+        createdAt: createdDate(item, index),
+        adminName: item.adminName || ["Rahul Kapoor", "Arjun Reddy", "Meera Iyer"][index % 3],
+        logo:
+          item.logoPreview ||
+          `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(item.name)}`,
+      })),
+    [rawInstitutes],
+  );
+
+  const dateError = from && to && from > to;
+  const filtered = useMemo(() => {
+    if (dateError) return [];
+    const q = debouncedSearch.toLowerCase();
+    return institutes.filter((item) => {
+      const matchesSearch =
+        q.length < 2 ||
+        [item.name, item.city, item.adminName].some((value) =>
+          String(value || "").toLowerCase().includes(q),
+        );
+      return (
+        matchesSearch &&
+        (status === "All" || item.status === status) &&
+        (type === "All" || item.type === type) &&
+        (plan === "All" || item.plan === plan) &&
+        (!from || item.createdAt >= from) &&
+        (!to || item.createdAt <= to)
+      );
+    });
+  }, [dateError, debouncedSearch, from, institutes, plan, status, to, type]);
+
+  const sorted = useMemo(() => {
+    const next = [...filtered];
+    next.sort((a, b) => {
+      const av = a[sort.key] ?? "";
+      const bv = b[sort.key] ?? "";
+      const result =
+        typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av).localeCompare(String(bv));
+      return sort.dir === "asc" ? result : -result;
+    });
+    return next;
+  }, [filtered, sort]);
+
+  const pageSize = Number(rowsPerPage);
+  const maxPage = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, maxPage);
+  const pageRows = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageIds = pageRows.map((item) => item.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
+  const somePageSelected = pageIds.some((id) => selected.includes(id));
+
+  const setSortKey = (key) => {
+    setSort((current) =>
+      current.key === key
+        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" },
+    );
+  };
+
+  const togglePage = (checked) => {
+    setSelected((current) => {
+      const withoutPage = current.filter((id) => !pageIds.includes(id));
+      return checked ? [...withoutPage, ...pageIds] : withoutPage;
+    });
+  };
+
+  const toggleOne = (id, checked) => {
+    setSelected((current) =>
+      checked ? [...new Set([...current, id])] : current.filter((x) => x !== id),
+    );
+  };
+
+  const remove = (item) => {
+    if (!window.confirm(`Delete ${item.name}? This cannot be undone.`)) return;
+    institutesApi.remove(item.id);
+    setSelected((current) => current.filter((id) => id !== item.id));
+    toast.success("Institute deleted");
+  };
+
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Super Admin"
-        title="Tenant Institutes"
-        description="Multi-tenant SaaS overview — onboard, manage and monitor every institute."
+        title="Institutes"
         actions={
           <Button size="sm" className="gradient-primary border-0" asChild>
             <Link to="/super/institutes/create">
@@ -80,278 +252,261 @@ export default function Institutes() {
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard
-          label="Total Institutes"
-          value={String(institutes.length)}
-          icon={<Building2 className="h-5 w-5" />}
-          tone="primary"
-        />
-        <KpiCard
-          label="Active Students"
-          value={institutes
-            .reduce((s, i) => s + i.students, 0)
-            .toLocaleString("en-IN")}
-          icon={<Users className="h-5 w-5" />}
-          tone="info"
-        />
-        <KpiCard
-          label="MRR"
-          value={inr(mrr)}
-          delta={6.4}
-          icon={<IndianRupee className="h-5 w-5" />}
-          tone="success"
-        />
-        <KpiCard
-          label="Trials"
-          value={String(institutes.filter((i) => i.status === "Trial").length)}
-          icon={<Sparkles className="h-5 w-5" />}
-          tone="warning"
-        />
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-4 mb-6">
-        <Card className="lg:col-span-2 border-border/60">
-          <CardHeader>
-            <CardTitle className="text-base">MRR Growth</CardTitle>
-            <CardDescription>Last 8 months</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={mrrTrend}>
-                <defs>
-                  <linearGradient id="mg" x1="0" y1="0" x2="0" y2="1">
-                    <stop
-                      offset="5%"
-                      stopColor="var(--chart-2)"
-                      stopOpacity={0.4}
-                    />
-                    <stop
-                      offset="95%"
-                      stopColor="var(--chart-2)"
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="m" fontSize={11} />
-                <YAxis fontSize={11} tickFormatter={(v) => `${v / 100000}L`} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  formatter={(v) => inr(v)}
-                />
-                <Area
-                  dataKey="v"
-                  stroke="var(--chart-2)"
-                  strokeWidth={2}
-                  fill="url(#mg)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card className="border-border/60">
-          <CardHeader>
-            <CardTitle className="text-base">Plan Mix</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {["Enterprise", "Business", "Growth"].map((p) => {
-              const c = institutes.filter((i) => i.plan === p).length;
-              const pct = Math.round((c / institutes.length) * 100);
-              return (
-                <div key={p}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>{p}</span>
-                    <span className="font-semibold">
-                      {c} · {pct}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-primary"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            <div className="pt-3 border-t flex items-center gap-2 text-xs text-muted-foreground">
-              <TrendingUp className="h-3.5 w-3.5 text-success" />2 enterprise
-              upgrades this month
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">All Institutes</TabsTrigger>
-          <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
-          <TabsTrigger value="usage">Usage Metering</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="mt-4">
-          <Card className="border-border/60">
-            <CardContent className="p-0">
-              <div className="p-3 border-b">
+      <Card className="max-w-full overflow-hidden border-border/60">
+        <CardContent className="p-4 space-y-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.4fr)_repeat(4,minmax(130px,1fr))]">
+            <Field label="Search">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search institutes…"
-                  className="h-8 max-w-sm"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Name, city, admin"
+                  className="pl-8"
                 />
               </div>
-              <Table>
-                <TableHeader>
+            </Field>
+            <Field label="Status">
+              <FilterSelect value={status} onValueChange={setStatus} values={STATUS_OPTIONS} />
+            </Field>
+            <Field label="Type">
+              <FilterSelect value={type} onValueChange={setType} values={TYPE_OPTIONS} />
+            </Field>
+            <Field label="Plan">
+              <FilterSelect value={plan} onValueChange={setPlan} values={PLAN_OPTIONS} />
+            </Field>
+            <Field label=" pagination">
+              <FilterSelect
+                value={rowsPerPage}
+                onValueChange={setRowsPerPage}
+                values={PAGE_SIZES.map(String)}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
+            <DateField label="Date Created From" value={from} onChange={setFrom} />
+            <DateField label="Date Created To" value={to} onChange={setTo} />
+            <div className="flex items-end">
+              <Button variant="outline" className="w-full" onClick={() => exportRows(sorted)}>
+                <Download className="h-4 w-4" />
+                Export Excel
+              </Button>
+            </div>
+          </div>
+
+          {dateError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              Date Created From must be before or equal to Date Created To.
+            </div>
+          )}
+
+          {selected.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
+              <div className="text-sm font-medium">{selected.length} selected</div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => exportRows(sorted.filter((item) => selected.includes(item.id)))}
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            </div>
+          )}
+
+          <div className="w-full max-w-full overflow-x-auto rounded-md border">
+            <Table className="min-w-[1120px] table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allPageSelected || (somePageSelected && "indeterminate")}
+                      onCheckedChange={(checked) => togglePage(Boolean(checked))}
+                      aria-label="Select current page"
+                    />
+                  </TableHead>
+                  <TableHead className="w-14">Logo</TableHead>
+                  <SortableHead className="w-56" label="Institute Name" sortKey="name" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-28" label="Type" sortKey="type" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-24" label="Board" sortKey="board" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-28" label="City" sortKey="city" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-28" label="Plan" sortKey="plan" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-28" label="Status" sortKey="status" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-28" label="Students" sortKey="students" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-36" label="Admin Name" sortKey="adminName" sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-32" label="Created Date" sortKey="createdAt" sort={sort} onSort={setSortKey} />
+                  <TableHead className="w-32 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pageRows.length === 0 ? (
                   <TableRow>
-                    <TableHead>Institute</TableHead>
-                    <TableHead>City</TableHead>
-                    <TableHead>Students</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>MRR</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableCell colSpan={12} className="h-28 text-center text-sm text-muted-foreground">
+                      No institutes match the current filters.
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {institutes.map((i) => (
-                    <TableRow
-                      key={i.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/super/institutes/${i.id}`)}
-                    >
+                ) : (
+                  pageRows.map((item) => (
+                    <TableRow key={item.id}>
                       <TableCell>
-                        <div className="font-medium">{i.name}</div>
-                        <div className="text-[10px] font-mono text-muted-foreground">
-                          {i.id}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">{i.city}</TableCell>
-                      <TableCell className="tabular-nums">
-                        {i.students.toLocaleString("en-IN")}
+                        <Checkbox
+                          checked={selected.includes(item.id)}
+                          onCheckedChange={(checked) => toggleOne(item.id, Boolean(checked))}
+                          aria-label={`Select ${item.name}`}
+                        />
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            i.plan === "Enterprise"
-                              ? "default"
-                              : i.plan === "Business"
-                                ? "secondary"
-                                : "outline"
-                          }
+                        <img
+                          src={item.logo}
+                          alt=""
+                          className="h-9 w-9 rounded-md border bg-muted object-cover"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <button
+                          className="max-w-full truncate text-left font-medium hover:text-primary"
+                          onClick={() => navigate(`/super/institutes/${item.id}`)}
                         >
-                          {i.plan}
-                        </Badge>
+                          {item.name}
+                        </button>
+                        <div className="text-[10px] font-mono text-muted-foreground">{item.id}</div>
                       </TableCell>
-                      <TableCell className="tabular-nums">
-                        {i.mrr ? inr(i.mrr) : "—"}
+                      <TableCell className="truncate">{item.type}</TableCell>
+                      <TableCell className="truncate">{item.board}</TableCell>
+                      <TableCell className="truncate">{item.city}</TableCell>
+                      <TableCell>
+                        <Badge variant={planVariant(item.plan)}>{item.plan}</Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge
-                            variant={
-                              i.status === "Active"
-                                ? "default"
-                                : i.status === "Trial"
-                                  ? "secondary"
-                                  : "destructive"
-                            }
-                          >
-                            {i.status}
-                          </Badge>
-                          <Link
-                            to={`/super/institutes/${i.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            View →
-                          </Link>
+                        <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
+                      </TableCell>
+                      <TableCell className="tabular-nums">{item.students.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="truncate">{item.adminName}</TableCell>
+                      <TableCell>{formatDate(item.createdAt)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <IconButton label="View" onClick={() => navigate(`/super/institutes/${item.id}`)}>
+                            <Eye className="h-4 w-4" />
+                          </IconButton>
+                          <IconButton label="Edit" onClick={() => navigate(`/super/institutes/${item.id}/edit`)}>
+                            <FilePenLine className="h-4 w-4" />
+                          </IconButton>
+                          <IconButton label="Delete" danger onClick={() => remove(item)}>
+                            <Trash2 className="h-4 w-4" />
+                          </IconButton>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
-        <TabsContent value="onboarding" className="mt-4">
-          <Card className="border-border/60">
-            <CardHeader>
-              <CardTitle className="text-base">
-                Onboarding Wizard · 5 steps
-              </CardTitle>
-              <CardDescription>
-                Standard checklist applied to every new tenant
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {[
-                "Tenant created · subdomain provisioned",
-                "Admin user invited + 2FA enrolled",
-                "Branding configured (logo, colors, domain)",
-                "Academic year + classes seeded",
-                "Payment gateway + SMS provider connected",
-              ].map((s, i) => (
-                <div
-                  key={s}
-                  className="flex items-center gap-3 p-2.5 rounded-md border border-border/60"
-                >
-                  <div
-                    className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${i < 3 ? "bg-success text-white" : "bg-muted text-muted-foreground"}`}
-                  >
-                    {i + 1}
-                  </div>
-                  <div className="flex-1 text-sm">{s}</div>
-                  <Badge variant={i < 3 ? "secondary" : "outline"}>
-                    {i < 3 ? "Done" : "Pending"}
-                  </Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="usage" className="mt-4">
-          <Card className="border-border/60">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Institute</TableHead>
-                    <TableHead>Storage</TableHead>
-                    <TableHead>API Calls (24h)</TableHead>
-                    <TableHead>SMS (MTD)</TableHead>
-                    <TableHead>Active Users</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {institutes.map((i, idx) => (
-                    <TableRow key={i.id}>
-                      <TableCell className="font-medium">{i.name}</TableCell>
-                      <TableCell className="tabular-nums">
-                        {(2 + idx * 1.4).toFixed(1)} GB / 50 GB
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {(12000 + idx * 4200).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {(1200 + idx * 380).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {Math.round(i.students * 0.6).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+            <span>
+              Showing {pageRows.length ? (currentPage - 1) * pageSize + 1 : 0}-
+              {(currentPage - 1) * pageSize + pageRows.length} of {sorted.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-xs">
+                Page {currentPage} of {maxPage}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === maxPage}
+                onClick={() => setPage((value) => Math.min(maxPage, value + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </PageContainer>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function DateField({ label, value, onChange }) {
+  return (
+    <Field label={label}>
+      <div className="flex gap-2">
+        <Input type="date" value={value} onChange={(event) => onChange(event.target.value)} />
+        {value && (
+          <Button variant="outline" size="sm" onClick={() => onChange("")}>
+            Clear
+          </Button>
+        )}
+      </div>
+    </Field>
+  );
+}
+
+function FilterSelect({ value, onValueChange, values }) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {values.map((item) => (
+          <SelectItem key={item} value={item}>
+            {item}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function SortableHead({ label, sortKey, sort, onSort, className = "" }) {
+  const active = sort.key === sortKey;
+  return (
+    <TableHead className={`whitespace-nowrap ${className}`}>
+      <button className="inline-flex items-center gap-1 hover:text-primary" onClick={() => onSort(sortKey)}>
+        {label}
+        {active ? (
+          sort.dir === "asc" ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : null}
+      </button>
+    </TableHead>
+  );
+}
+
+function IconButton({ label, children, onClick, danger = false }) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={`h-8 w-8 p-0 ${danger ? "text-destructive hover:text-destructive" : ""}`}
+    >
+      {children}
+    </Button>
   );
 }
