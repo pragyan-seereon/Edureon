@@ -166,9 +166,7 @@ export default function SecurityLog() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Admin - Security"
         title="Security Log"
-        description="Read-only login attempts with geo lookup, device details, status filters, and an admin unlock workflow."
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">

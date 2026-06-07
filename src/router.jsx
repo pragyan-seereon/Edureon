@@ -4,6 +4,7 @@ import Login from "./features/Auth/Login";
 import Institutes from "./pages/superadmin/institutes/Institutes";
 import CreateInstitute from "./pages/superadmin/institutes/CreateInstitute";
 import ViewInstitute from "./pages/superadmin/institutes/ViewInstitute";
+import EditInstitute from "./pages/superadmin/institutes/EditInstitute";
 import { AppLayout, NotFoundPage } from "./components/app-layout";
 import Users from "./pages/superadmin/users/Users";
 import Subscription from "./pages/superadmin/subscription/Subscription";
@@ -59,7 +60,7 @@ import Communication from "./pages/admin/modules/Communication";
 import EmployeesPage from "./pages/admin/staff/Employee";
 import PayrollPage from "./pages/admin/staff/Payroll";
 import RolesPage from "./pages/roles/roles";
-
+import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 // const defaultPrivatePath = "/super/institutes";
 
 const router = createBrowserRouter([
@@ -79,8 +80,10 @@ const router = createBrowserRouter([
       { path: "/forgot-password", element: <ForgotPassword /> },
 
       //superadmin routes
+      { path: "/super/dashboard",element: <SuperAdminDashboard /> },
       { path: "/super/institutes",element: <Institutes /> },
       { path: "/super/institutes/create", element: <CreateInstitute />},
+      { path: "/super/institutes/:id/edit",element: <EditInstitute />},
       { path: "/super/institutes/:id",element: <ViewInstitute />},
       { path: "/super/users", element: <Users />},
       { path: "/super/subscription", element: <Subscription />},
