@@ -543,7 +543,7 @@ export default function Login() {
                 </Button>
               </form>
 
-              {!isAdmin && !isPrincipal && (
+              {/* {!isAdmin && !isPrincipal && (
                 <p className="mt-6 text-xs text-muted-foreground text-center">
                   Not registered yet?{" "}
                   <Link
@@ -553,7 +553,7 @@ export default function Login() {
                     Create an Account
                   </Link>
                 </p>
-              )}
+              )} */}
 
               {/* Social login */}
               <div className="relative my-5 flex items-center">
