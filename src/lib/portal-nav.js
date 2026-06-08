@@ -95,15 +95,17 @@ const superGroups = [
       { title: "Roles & Permissions", url: "/super/roles", icon: Shield },
       { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
-      { title: "Security Log", url: "/security-log", icon: History },
-      { title: "Audit Log", url: "/admin/audit", icon: History },
+      { title: " Audit Log", url: "/super/audit", icon: History },
+      { title: "Security & Sessions", url: "/super/security", icon: Shield },
     ],
   },
   {
     label: "Account",
     items: [
       { title: "My Profile", url: "/profile", icon: UserIcon },
-      { title: "Settings", url: "/settings", icon: Settings },
+      // { title: "Settings", url: "/settings", icon: Settings },
+      { title: "Platform Settings", url: "/super/settings", icon: Settings },
+
     ],
   },
 ];

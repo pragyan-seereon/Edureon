@@ -48,7 +48,9 @@ import {
   ArrowUp,
   Copy,
   Download,
+  // eslint-disable-next-line no-unused-vars
   Eye,
+  // eslint-disable-next-line no-unused-vars
   FilePenLine,
   History,
   Info,
@@ -411,7 +413,7 @@ export default function RolesPage() {
                 <Select value={String(rolePageSize)} onValueChange={(v) => setRolePageSize(Number(v))}>
                   <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {[10, 25, 50].map((s) => <SelectItem key={s} value={String(s)}>{s} rows</SelectItem>)}
+                    {[10, 25, 50].map((s) => <SelectItem key={s} value={String(s)}>{s} </SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -515,16 +517,16 @@ export default function RolesPage() {
                           <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{role.lastModified}</TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
-                              <IconButton label="View" onClick={() => openMatrix(role.name)}>
-                                <Eye className="h-4 w-4" />
+                              <IconButton label="Edit" onClick={() => openMatrix(role.name)}>
+                                <FilePenLine className="h-4 w-4" />
                               </IconButton>
-                              <IconButton
+                              {/* <IconButton
                                 label="Edit"
                                 disabled={isSystem}
                                 onClick={() => !isSystem && setRoleDialog({ mode: "edit", role })}
                               >
                                 <FilePenLine className="h-4 w-4" />
-                              </IconButton>
+                              </IconButton> */}
                               <IconButton label="Clone" onClick={() => setCloneSource(role)}>
                                 <Copy className="h-4 w-4" />
                               </IconButton>
@@ -729,11 +731,11 @@ export default function RolesPage() {
                 <div className="flex items-end gap-2">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">From</p>
-                    <Input type="date" value={auditFilters.from} onChange={(e) => setAuditFilters((f) => ({ ...f, from: e.target.value }))} className="h-8 text-xs w-[130px]" />
+                    <Input type="date" value={auditFilters.from} onChange={(e) => setAuditFilters((f) => ({ ...f, from: e.target.value }))} className="h-8 text-xs w-[135px]" />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">To</p>
-                    <Input type="date" value={auditFilters.to} onChange={(e) => setAuditFilters((f) => ({ ...f, to: e.target.value }))} className="h-8 text-xs w-[130px]" />
+                    <Input type="date" value={auditFilters.to} onChange={(e) => setAuditFilters((f) => ({ ...f, to: e.target.value }))} className="h-8 text-xs w-[135px]" />
                   </div>
                 </div>
                 <SmallSelect label="Show" value={auditFilters.size} values={["10","25","50","100"]} onChange={(v) => setAuditFilters((f) => ({ ...f, size: v }))} />
@@ -966,9 +968,9 @@ function RoleDialog({ open, mode, role, roles, onClose, onCreate, onEdit }) {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Role" : "Create New Role"}</DialogTitle>
-          <DialogDescription>
+          {/* <DialogDescription>
             {isEdit ? "Updating the name or description won't change permissions." : "After creating the role, you'll set its permissions."}
-          </DialogDescription>
+          </DialogDescription> */}
         </DialogHeader>
         <div className="space-y-4">
           <Field label="Role Name">

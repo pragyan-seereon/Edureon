@@ -12,6 +12,8 @@ import Signup from "./features/Auth/Signup";
 import ForgotPassword from "./features/Auth/ForgotPassword";
 import Analytics from "./pages/superadmin/Analytics";
 import Audit from "./pages/superadmin/Audit"
+import PlatformSecurity from "./pages/superadmin/PlatformSecurity";
+import PlatformSettings from "./pages/superadmin/PlatformSettings";
 import Profile from "./pages/account/Profile";
 import Settings from "./pages/account/Settings";
 import Account from "./pages/account/Account";
@@ -87,8 +89,10 @@ const router = createBrowserRouter([
       { path: "/super/institutes/:id",element: <ViewInstitute />},
       { path: "/super/users", element: <Users />},
       { path: "/super/subscription", element: <Subscription />},
+      { path: "/super/audit", element: <Audit />},
+      { path: "/super/security", element: <PlatformSecurity />},
+      { path: "/super/settings", element: <PlatformSettings />},
       { path: "/analytics",element: <Analytics />},
-      { path: "/admin/audit", element: <Audit />},
       //account routes
       { path: "/profile", element: <Profile />},
       { path: "/account", element: <Account />},

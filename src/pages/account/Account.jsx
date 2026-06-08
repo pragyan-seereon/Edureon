@@ -8,7 +8,9 @@ import {
   CardDescription,
 } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
+// eslint-disable-next-line no-unused-vars
 import { Input } from "../../components/ui/input";
+// eslint-disable-next-line no-unused-vars
 import { Label } from "../../components/ui/label";
 import { Switch } from "../../components/ui/switch";
 import { Badge } from "../../components/ui/badge";
@@ -124,7 +126,9 @@ function SessionMeta({ label, value }) {
 }
 
 export default function Account() {
+  // eslint-disable-next-line no-unused-vars
   const { user, changePassword, logout } = useAuth();
+  // eslint-disable-next-line no-unused-vars
   const [pwd, setPwd] = useState({ current: "", next: "", confirm: "" });
   const [warningOpen, setWarningOpen] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(WARNING_SECONDS);
@@ -185,16 +189,16 @@ export default function Account() {
     toast.success("All other sessions revoked");
   };
 
-  const savePassword = async () => {
-    if (!pwd.current || !pwd.next)
-      return toast.error("Fill both password fields");
-    if (pwd.next.length < 8)
-      return toast.error("Password must be at least 8 characters");
-    if (pwd.next !== pwd.confirm) return toast.error("Passwords do not match");
-    await changePassword(pwd.current, pwd.next);
-    setPwd({ current: "", next: "", confirm: "" });
-    toast.success("Password updated");
-  };
+  // const savePassword = async () => {
+  //   if (!pwd.current || !pwd.next)
+  //     return toast.error("Fill both password fields");
+  //   if (pwd.next.length < 8)
+  //     return toast.error("Password must be at least 8 characters");
+  //   if (pwd.next !== pwd.confirm) return toast.error("Passwords do not match");
+  //   await changePassword(pwd.current, pwd.next);
+  //   setPwd({ current: "", next: "", confirm: "" });
+  //   toast.success("Password updated");
+  // };
   return (
     <PageContainer>
       <Dialog
@@ -244,17 +248,15 @@ export default function Account() {
       </Dialog>
 
       <PageHeader
-        eyebrow="Account"
         title="Account Settings"
-        description="Security, notifications, sessions and API access for your account."
       />
 
-      <Tabs defaultValue="security" className="space-y-5">
+      <Tabs defaultValue="notifications" className="space-y-5">
         <TabsList className="bg-muted/60">
-          <TabsTrigger value="security">Security</TabsTrigger>
+          {/* <TabsTrigger value="security">Security</TabsTrigger> */}
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          <TabsTrigger value="api">API Keys</TabsTrigger>
+          {/* <TabsTrigger value="api">API Keys</TabsTrigger> */}
           <TabsTrigger
             value="danger"
             className="text-destructive data-[state=active]:text-destructive"
@@ -264,7 +266,7 @@ export default function Account() {
         </TabsList>
 
         {/* Security */}
-        <TabsContent value="security" className="space-y-5">
+        {/* <TabsContent value="security" className="space-y-5">
           <Card className="border-border/60">
             <CardHeader>
               <CardTitle className="text-base font-display">
@@ -333,7 +335,7 @@ export default function Account() {
               />
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> */}
 
         {/* Notifications */}
         <TabsContent value="notifications">

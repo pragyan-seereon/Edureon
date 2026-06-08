@@ -1,14 +1,33 @@
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { PageContainer, PageHeader } from "../../components/page-shell";
+import { KpiCard } from "../../components/kpi-card";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "../../components/ui/card";
-import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import {
   Table,
   TableBody,
@@ -17,263 +36,254 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
-import { Download, History, Search } from "lucide-react";
-import { useState } from "react";
-import { KpiCard } from "../../components/kpi-card";
+import { Download, Eye, FileClock, History, Search, ShieldCheck } from "lucide-react";
+
+const USERS = ["Aarav Malhotra", "Nisha Rao", "Rahul Kapoor", "System"];
+const MODULES = [
+  "Institutes",
+  "Users",
+  "Roles",
+  "Subscriptions",
+  "Security",
+  "Settings",
+  "API Keys",
+  "Auth",
+];
 const ACTIONS = [
   "Created",
   "Updated",
   "Deleted",
-  "Approved",
-  "Rejected",
-  "Logged in",
+  "Viewed",
   "Exported",
+  "Login",
+  "Logout",
+  "Permission Change",
+  "Impersonation",
 ];
-const MODULES = [
-  "Students",
-  "Employees",
-  "Fees",
-  "Exams",
-  "Payroll",
-  "Library",
-  "Permissions",
-  "Auth",
-];
-const seed = [
+
+const rows = [
   {
-    ts: "Today 14:32:08",
-    user: "Rahul Kapoor",
-    role: "Principal",
-    action: "Approved",
-    module: "Fees",
-    record: "Concession #C-2092 — Aarav Sharma",
-    new: "Approved 20%",
-    ip: "182.74.12.4",
-  },
-  {
-    ts: "Today 14:18:51",
-    user: "Priya Singh",
-    role: "Accountant",
-    action: "Created",
-    module: "Fees",
-    record: "TX10422 — ₹48,000 (Ananya Iyer)",
-    ip: "182.74.12.4",
-  },
-  {
-    ts: "Today 13:55:11",
-    user: "Rahul Kapoor",
-    role: "Principal",
-    action: "Updated",
-    module: "Permissions",
-    record: "Role: Teacher — Exam.Approve",
+    ts: "2026-06-08 10:32:14",
+    user: "Aarav Malhotra",
+    action: "Permission Change",
+    module: "Roles",
+    record: "Teacher / Attendance.Edit",
     old: "OFF",
-    new: "ON",
+    next: "ON",
     ip: "182.74.12.4",
+    device: "Chrome 125 / Windows 11",
   },
   {
-    ts: "Today 11:02:00",
-    user: "Vikas Yadav",
-    role: "HR Manager",
-    action: "Created",
-    module: "Employees",
-    record: "EMP2031 — Sunita Roy (Maths)",
-    ip: "182.74.12.4",
-  },
-  {
-    ts: "Today 10:21:33",
-    user: "system",
-    role: "System",
-    action: "Logged in",
-    module: "Auth",
-    record: "rahul.kapoor@dpsnorth.in",
-    ip: "182.74.12.4",
-  },
-  {
-    ts: "Yesterday 18:11:09",
-    user: "Mrs. Sharma",
-    role: "Teacher",
+    ts: "2026-06-08 09:18:41",
+    user: "Nisha Rao",
     action: "Updated",
-    module: "Exams",
-    record: "Mid-Term II · X-B · Question Q4",
-    old: "Marks 4",
-    new: "Marks 5",
-    ip: "10.0.0.118",
+    module: "Settings",
+    record: "Security Policy",
+    old: "MFA grace period: 7 days; failed attempts: 7",
+    next: "MFA grace period: 48 hrs; failed attempts: 5",
+    ip: "203.0.113.42",
+    device: "Edge 125 / Windows 11",
   },
   {
-    ts: "Yesterday 17:00:51",
+    ts: "2026-06-07 18:02:09",
     user: "Rahul Kapoor",
-    role: "Principal",
-    action: "Exported",
-    module: "Students",
-    record: "Students.xlsx (2,840 rows)",
-    ip: "182.74.12.4",
+    action: "Impersonation",
+    module: "Institutes",
+    record: "INS001 / Delhi Public School",
+    old: "Session owner Rahul Kapoor",
+    next: "Impersonated principal@dps.edu.in for support review",
+    ip: "198.51.100.18",
+    device: "Chrome 125 / macOS",
   },
   {
-    ts: "Yesterday 12:45:22",
-    user: "Priya Singh",
-    role: "Accountant",
+    ts: "2026-06-07 16:45:37",
+    user: "System",
+    action: "Exported",
+    module: "Subscriptions",
+    record: "Invoices export / 8,420 rows",
+    old: "",
+    next: "Excel export queued and completed",
+    ip: "10.0.0.8",
+    device: "Server job",
+  },
+  {
+    ts: "2026-06-06 12:11:55",
+    user: "Aarav Malhotra",
     action: "Deleted",
-    module: "Fees",
-    record: "Draft invoice INV-DRAFT-208",
+    module: "API Keys",
+    record: "Finance Sync Key / ****9AF2",
+    old: "Active key with Read Finance scope",
+    next: "Revoked",
     ip: "182.74.12.4",
+    device: "Chrome 125 / Windows 11",
   },
 ];
-const actionColor = {
-  Created: "bg-info/10 text-info border-info/20",
-  Updated: "bg-warning/15 text-warning border-warning/20",
-  Deleted: "bg-destructive/10 text-destructive border-destructive/20",
-  Approved: "bg-success/10 text-success border-success/20",
-  Rejected: "bg-destructive/10 text-destructive border-destructive/20",
-  "Logged in": "bg-muted text-muted-foreground border-border",
-  Exported: "bg-accent/15 text-accent border-accent/20",
+
+const actionTone = {
+  Created: "border-success/20 bg-success/10 text-success",
+  Updated: "border-warning/20 bg-warning/15 text-warning",
+  Deleted: "border-destructive/20 bg-destructive/10 text-destructive",
+  Viewed: "border-info/20 bg-info/10 text-info",
+  Exported: "border-accent/20 bg-accent/15 text-accent",
+  Login: "border-success/20 bg-success/10 text-success",
+  Logout: "border-border bg-muted text-muted-foreground",
+  "Permission Change": "border-primary/20 bg-primary/10 text-primary",
+  Impersonation: "border-destructive/20 bg-destructive/10 text-destructive",
 };
+
+const initials = (name) =>
+  name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+const truncate = (value = "") =>
+  value.length > 50 ? `${value.slice(0, 50)}...` : value || "-";
+
 export default function Audit() {
-  const [q, setQ] = useState("");
-  const [act, setAct] = useState("All");
-  const [mod, setMod] = useState("All");
-  const filtered = seed.filter(
-    (e) =>
-      (act === "All" || e.action === act) &&
-      (mod === "All" || e.module === mod) &&
-      (!q || (e.user + e.record).toLowerCase().includes(q.toLowerCase())),
+  const [detail, setDetail] = useState(null);
+  const [filters, setFilters] = useState({
+    q: "",
+    user: "All",
+    module: "All",
+    action: "All",
+    from: "2026-05-09",
+    to: "2026-06-08",
+    size: "25",
+  });
+
+  const filtered = useMemo(
+    () =>
+      rows
+        .filter((row) => {
+          const search =
+            filters.q.length < 3 ||
+            `${row.user} ${row.record} ${row.ip}`.toLowerCase().includes(filters.q.toLowerCase());
+          const user = filters.user === "All" || row.user === filters.user;
+          const module = filters.module === "All" || row.module === filters.module;
+          const action = filters.action === "All" || row.action === filters.action;
+          const date = row.ts.slice(0, 10);
+          return (
+            search &&
+            user &&
+            module &&
+            action &&
+            (!filters.from || filters.from <= date) &&
+            (!filters.to || filters.to >= date)
+          );
+        })
+        .slice(0, Number(filters.size)),
+    [filters],
   );
+
+  const set = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
+
+  const exportLog = () => {
+    toast.success(
+      filtered.length > 100000
+        ? "Large export queued. Email link will be sent when ready."
+        : "Audit export started.",
+    );
+  };
+
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Admin · Security"
-        title="Audit Log"
-        description="Tamper-evident trail of every create / update / delete / approval across the institute. Filter by user, module or action; export for compliance."
+        title=" Audit Log"
         actions={
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={exportLog}>
             <Download className="h-4 w-4" />
-            Export
+            Export Excel
           </Button>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <KpiCard
-          label="Events Today"
-          value={seed.filter((e) => e.ts.startsWith("Today")).length}
-          icon={<History className="h-5 w-5" />}
-          tone="primary"
-        />
-        <KpiCard
-          label="Critical (Delete/Reject)"
-          value={
-            seed.filter(
-              (e) => e.action === "Deleted" || e.action === "Rejected",
-            ).length
-          }
-          icon={<History className="h-5 w-5" />}
-          tone="warning"
-        />
-        <KpiCard
-          label="Active Users"
-          value={new Set(seed.map((e) => e.user)).size}
-          icon={<History className="h-5 w-5" />}
-          tone="info"
-        />
-        <KpiCard
-          label="Modules Touched"
-          value={new Set(seed.map((e) => e.module)).size}
-          icon={<History className="h-5 w-5" />}
-          tone="success"
-        />
+        <KpiCard label="Events Today" value="1,248" icon={<History className="h-5 w-5" />} tone="primary" />
+        <KpiCard label="Critical Events" value="18" icon={<ShieldCheck className="h-5 w-5" />} tone="warning" />
+        <KpiCard label="Export Cap" value="100k" icon={<Download className="h-5 w-5" />} tone="info" />
+        <KpiCard label="Retention" value="2 yrs" icon={<FileClock className="h-5 w-5" />} tone="success" />
       </div>
 
-      <Card className="border-border/60">
-        <CardHeader className="pb-3 flex-row items-center justify-between space-y-0 gap-2 flex-wrap">
-          <div>
-            <CardTitle className="font-display text-base">
-              Activity Stream
-            </CardTitle>
-            <CardDescription>{filtered.length} entries</CardDescription>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative">
-              <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search user or record…"
-                className="pl-8 h-9 w-52"
-              />
+      {/* Filter bar — uniform row with all fields bottom-aligned */}
+      <Card className="border-border/60 mb-4">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 items-end">
+            <div className="col-span-2 md:col-span-4 xl:col-span-1">
+              <Field label="Search">
+                <div className="relative">
+                  <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={filters.q}
+                    onChange={(e) => set("q", e.target.value)}
+                    placeholder="Min 3 chars"
+                    className="pl-8"
+                  />
+                </div>
+              </Field>
             </div>
-            <Select value={act} onValueChange={setAct}>
-              <SelectTrigger className="h-9 w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All actions</SelectItem>
-                {ACTIONS.map((a) => (
-                  <SelectItem key={a} value={a}>
-                    {a}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={mod} onValueChange={setMod}>
-              <SelectTrigger className="h-9 w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All modules</SelectItem>
-                {MODULES.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterSelect label="User"        value={filters.user}   values={["All", ...USERS]}    onChange={(v) => set("user", v)} />
+            <FilterSelect label="Module"      value={filters.module} values={["All", ...MODULES]}  onChange={(v) => set("module", v)} />
+            <FilterSelect label="Action Type" value={filters.action} values={["All", ...ACTIONS]}  onChange={(v) => set("action", v)} />
+            <FilterSelect label="Rows"        value={filters.size}   values={["25", "50", "100"]}  onChange={(v) => set("size", v)} />
+            <Field label="From">
+              <Input type="date" value={filters.from} onChange={(e) => set("from", e.target.value)} />
+            </Field>
+            <Field label="To">
+              <Input type="date" value={filters.to} onChange={(e) => set("to", e.target.value)} />
+            </Field>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/60">
+        <CardHeader className="pb-3">
+          <CardTitle className="font-display text-base">Audit Events</CardTitle>
+          <CardDescription>{filtered.length} read-only records</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Module</TableHead>
-                <TableHead>Record</TableHead>
-                <TableHead>Old → New</TableHead>
-                <TableHead>IP</TableHead>
+                {["Timestamp", "User", "Action", "Module", "Record Name / ID", "Old Value", "New Value", "IP Address", "Device / Browser", "Export"].map((head) => (
+                  <TableHead key={head} className="whitespace-nowrap">{head}</TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((e, i) => (
-                <TableRow key={i}>
-                  <TableCell className="text-xs font-mono whitespace-nowrap">
-                    {e.ts}
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm font-medium">{e.user}</div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {e.role}
+              {filtered.map((row) => (
+                <TableRow key={`${row.ts}-${row.record}`} className="cursor-pointer" onClick={() => setDetail(row)}>
+                  <TableCell className="font-mono text-xs whitespace-nowrap align-middle">{row.ts}</TableCell>
+                  <TableCell className="align-middle">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 shrink-0 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold">
+                        {initials(row.user)}
+                      </div>
+                      <span className="text-sm font-medium whitespace-nowrap">{row.user}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={actionColor[e.action]}>
-                      {e.action}
+                  <TableCell className="align-middle">
+                    <Badge variant="outline" className={actionTone[row.action]}>
+                      {row.action}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs">{e.module}</TableCell>
-                  <TableCell className="text-sm max-w-[280px] truncate">
-                    {e.record}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {e.old || e.new ? `${e.old ?? "—"} → ${e.new ?? "—"}` : "—"}
-                  </TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground">
-                    {e.ip}
+                  <TableCell className="align-middle whitespace-nowrap">{row.module}</TableCell>
+                  <TableCell className="align-middle max-w-[220px] truncate">{row.record}</TableCell>
+                  <TableCell className="align-middle max-w-[180px] truncate text-xs text-muted-foreground">{truncate(row.old)}</TableCell>
+                  <TableCell className="align-middle max-w-[180px] truncate text-xs text-muted-foreground">{truncate(row.next)}</TableCell>
+                  <TableCell className="align-middle font-mono text-xs whitespace-nowrap">{row.ip}</TableCell>
+                  <TableCell className="align-middle text-xs text-muted-foreground whitespace-nowrap">{row.device}</TableCell>
+                  <TableCell className="align-middle">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); exportLog(); }}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -281,6 +291,55 @@ export default function Audit() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Audit Event Details</DialogTitle>
+            <DialogDescription>Full immutable audit record.</DialogDescription>
+          </DialogHeader>
+          {detail ? (
+            <div className="grid gap-3 text-sm">
+              {["ts", "user", "action", "module", "record", "old", "next", "ip", "device"].map((key) => (
+                <div key={key} className="grid grid-cols-[120px_1fr] gap-x-3 items-start rounded-md border p-3">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground pt-0.5">
+                    {key === "ts" ? "Timestamp" : key === "next" ? "New Value" : key}
+                  </span>
+                  <span className="break-words">{detail[key] || "-"}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button onClick={() => setDetail(null)}>
+              <Eye className="h-4 w-4" />
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="space-y-1.5 min-w-0">
+      <Label className="text-xs font-medium">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, values, onChange }) {
+  return (
+    <Field label={label}>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {values.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
