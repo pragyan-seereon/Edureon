@@ -60,7 +60,7 @@ const adminGroups = [
     items: [
       { title: "Employees", url: "/employees", icon: UserCog },
       { title: "Payroll", url: "/payroll", icon: Briefcase },
-      { title: "Roles & Permissions", url: "/roles", icon: Shield },
+      { title: "Roles & Permissions", url: "/admin/roles", icon: Shield },
     ],
   },
   {
@@ -89,9 +89,10 @@ const superGroups = [
   {
     label: "Platform",
     items: [
-      { title: "Dashboard", url: "/super/dashboard", icon: School },
+      { title: "Dashboard", url: "/super/dashboard", icon: LayoutDashboard }  ,
       { title: "Institutes", url: "/super/institutes", icon: School },
-      { title: "Users & Roles", url: "/super/users", icon: UserCog },
+      { title: "Users ", url: "/super/users", icon: UserCog },
+      { title: "Roles & Permissions", url: "/super/roles", icon: Shield },
       { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
       { title: "Security Log", url: "/security-log", icon: History },

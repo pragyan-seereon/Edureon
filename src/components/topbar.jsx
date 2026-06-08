@@ -2,6 +2,7 @@ import { SidebarTrigger } from "./ui/sidebar";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+// eslint-disable-next-line no-unused-vars
 import { Bell, Search, Moon, Sun, HelpCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { UserMenu } from "./user-menu";
@@ -43,14 +44,14 @@ export function Topbar() {
         >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
-        <Button
+        {/* <Button
           variant="ghost"
           size="icon"
           className="h-9 w-9"
           aria-label="Help"
         >
           <HelpCircle className="h-4 w-4" />
-        </Button>
+        </Button> */}
         <Button
           variant="ghost"
           size="icon"

@@ -143,6 +143,8 @@ const router = createBrowserRouter([
        //admin staff routes
       { path: "/employees", element: <EmployeesPage /> },
       { path: "/payroll", element: <PayrollPage /> },
+      { path: "/admin/roles", element: <RolesPage /> },
+      { path: "/super/roles", element: <RolesPage /> },
       { path: "/roles", element: <RolesPage /> },
 
       { path: "*",element: <NotFoundPage />  },
