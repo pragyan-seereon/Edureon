@@ -172,9 +172,7 @@ export default function Subscription() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Super Admin"
-        title="Subscriptions, Billing & Feature Flags"
-        description="Plans, recurring revenue, invoices and tenant-wide feature toggles."
+        title="Subscriptions"
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

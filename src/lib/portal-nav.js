@@ -60,7 +60,7 @@ const adminGroups = [
     items: [
       { title: "Employees", url: "/employees", icon: UserCog },
       { title: "Payroll", url: "/payroll", icon: Briefcase },
-      { title: "Roles & Permissions", url: "/roles", icon: Shield },
+      { title: "Roles & Permissions", url: "/admin/roles", icon: Shield },
     ],
   },
   {
@@ -89,20 +89,23 @@ const superGroups = [
   {
     label: "Platform",
     items: [
-      { title: "Dashboard", url: "/super/dashboard", icon: School },
+      { title: "Dashboard", url: "/super/dashboard", icon: LayoutDashboard }  ,
       { title: "Institutes", url: "/super/institutes", icon: School },
-      { title: "Users & Roles", url: "/super/users", icon: UserCog },
+      { title: "Users ", url: "/super/users", icon: UserCog },
+      { title: "Roles & Permissions", url: "/super/roles", icon: Shield },
       { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
-      { title: "Security Log", url: "/security-log", icon: History },
-      { title: "Audit Log", url: "/admin/audit", icon: History },
+      { title: " Audit Log", url: "/super/audit", icon: History },
+      { title: "Security & Sessions", url: "/super/security", icon: Shield },
     ],
   },
   {
     label: "Account",
     items: [
       { title: "My Profile", url: "/profile", icon: UserIcon },
-      { title: "Settings", url: "/settings", icon: Settings },
+      // { title: "Settings", url: "/settings", icon: Settings },
+      { title: "Platform Settings", url: "/super/settings", icon: Settings },
+
     ],
   },
 ];

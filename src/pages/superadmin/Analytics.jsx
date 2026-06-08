@@ -165,9 +165,7 @@ export default function Analytics() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Insights"
         title="Analytics & BI"
-        description="Cross-module business intelligence — academic, financial and operational signals in one view."
         actions={
           <>
             <Button
