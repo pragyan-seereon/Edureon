@@ -63,6 +63,8 @@ import EmployeesPage from "./pages/admin/staff/Employee";
 import PayrollPage from "./pages/admin/staff/Payroll";
 import RolesPage from "./pages/roles/roles";
 import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
+import NotificationsPage from "./pages/superadmin/NotificationsPage";
+import SendNotificationPage from "./pages/superadmin/send-notification";
 // const defaultPrivatePath = "/super/institutes";
 
 const router = createBrowserRouter([
@@ -93,6 +95,9 @@ const router = createBrowserRouter([
       { path: "/super/security", element: <PlatformSecurity />},
       { path: "/super/settings", element: <PlatformSettings />},
       { path: "/analytics",element: <Analytics />},
+      { path: "/notifications",element: <NotificationsPage />},
+      { path: "/notifications/send" , element: <SendNotificationPage /> },
+
       //account routes
       { path: "/profile", element: <Profile />},
       { path: "/account", element: <Account />},

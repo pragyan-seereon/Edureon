@@ -66,6 +66,8 @@ const COLORS = [
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const firstName = user?.name?.split(" ")[0] || "Admin";
+  const instituteName = user?.institute || "your institute";
   useEffect(() => {
     if (!user) return;
     const target = portalHomeForRole(user.role);
@@ -75,8 +77,8 @@ export default function DashboardPage() {
     <PageContainer>
       <PageHeader
         eyebrow="Institute Admin"
-        title="Welcome back, Rahul"
-        description="Here's a real-time snapshot of Delhi Public School — North."
+        title={`Welcome back, ${firstName}`}
+        description={`Here's a real-time snapshot of ${instituteName}.`}
         actions={
           <>
             <Button variant="outline" size="sm">

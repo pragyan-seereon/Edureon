@@ -6,6 +6,7 @@ import {
   Download,
   Eye,
   FilePenLine,
+  LogIn,
   Plus,
   Search,
   Trash2,
@@ -33,7 +34,8 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { institutesApi, useInstitutes } from "../../../lib/store";
+import { useAuth } from "../../../lib/auth";
+import { appUsersApi, institutesApi, useInstitutes } from "../../../lib/store";
 
 const STATUS_OPTIONS = ["All", "Active", "Inactive", "Trial", "Suspended"];
 const TYPE_OPTIONS = ["All", "School", "College", "Coaching", "University"];
@@ -128,6 +130,7 @@ const exportRows = (rows) => {
 export default function Institutes() {
   const rawInstitutes = useInstitutes();
   const navigate = useNavigate();
+  const auth = useAuth();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("All");
@@ -238,6 +241,32 @@ export default function Institutes() {
     toast.success("Institute deleted");
   };
 
+  const openInstitute = async (item) => {
+    const assignedAdmin = appUsersApi
+      .list()
+      .find(
+        (user) =>
+          user.instituteId === item.id &&
+          ["admin", "Institute Admin"].includes(user.role) &&
+          (user.status ?? "Active") === "Active",
+      );
+
+    await auth.completeLogin({
+      id: assignedAdmin?.id ?? `inst-admin-${item.id}`,
+      name: assignedAdmin?.name ?? item.adminName ?? `${item.name} Admin`,
+      email: assignedAdmin?.email ?? item.adminEmail ?? item.email ?? "admin@example.edu",
+      phone: assignedAdmin?.phone ?? item.adminPhone ?? item.phone ?? "",
+      role: "admin",
+      designation: "Institute Admin",
+      institute: item.name,
+      instituteId: item.id,
+      joinedAt: assignedAdmin?.createdAt ?? item.createdAt,
+      switchedFrom: "super_admin",
+    });
+    toast.success(`Opened ${item.name} as institute admin`);
+    navigate("/");
+  };
+
   return (
     <PageContainer>
       <PageHeader
@@ -316,7 +345,7 @@ export default function Institutes() {
           )}
 
           <div className="w-full max-w-full overflow-x-auto rounded-md border">
-            <Table className="min-w-[1120px] table-fixed">
+            <Table className="min-w-[1160px] table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10">
@@ -336,7 +365,7 @@ export default function Institutes() {
                   <SortableHead className="w-28" label="Students" sortKey="students" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-36" label="Admin Name" sortKey="adminName" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-32" label="Created Date" sortKey="createdAt" sort={sort} onSort={setSortKey} />
-                  <TableHead className="w-32 text-right">Actions</TableHead>
+                  <TableHead className="w-40 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -388,6 +417,9 @@ export default function Institutes() {
                         <div className="flex items-center justify-end gap-1">
                           <IconButton label="View" onClick={() => navigate(`/super/institutes/${item.id}`)}>
                             <Eye className="h-4 w-4" />
+                          </IconButton>
+                          <IconButton label="Open Institute" onClick={() => openInstitute(item)}>
+                            <LogIn className="h-4 w-4" />
                           </IconButton>
                           <IconButton label="Edit" onClick={() => navigate(`/super/institutes/${item.id}/edit`)}>
                             <FilePenLine className="h-4 w-4" />

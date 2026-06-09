@@ -1460,7 +1460,7 @@ export default function AnalyticsHub() {
   return (
     <PageContainer>
       <PageHeader
-        title="Analytics Hub"
+        title="Analytics"
         actions={
           <Button
             size="sm"

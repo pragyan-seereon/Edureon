@@ -901,7 +901,7 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
 
   const tabs = [
     { id: "profile",     label: "Profile"      },
-    { id: "users",       label: "Users"        },
+    // { id: "users",       label: "Users"        },
     { id: "permissions", label: "Permissions"  },
     { id: "activity",    label: "Activity Log" },
     { id: "sessions",    label: "Sessions"     },
