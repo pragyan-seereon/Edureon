@@ -9,6 +9,7 @@ import {
 } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+// eslint-disable-next-line no-unused-vars
 import { Switch } from "../../../components/ui/switch";
 import { Label } from "../../../components/ui/label";
 import {
@@ -138,6 +139,7 @@ export default function CreateInstitute() {
     manualPassword: "",
   });
 
+  // eslint-disable-next-line no-unused-vars
   const passwordStrength = (() => {
     const password = form.manualPassword || "";
     let score = 0;
@@ -669,7 +671,7 @@ export default function CreateInstitute() {
                     </Field>
                   </div>
                 </div>
-                <div>
+                {/* <div>
                   <h3 className="text-lg font-semibold mb-4">Settings</h3>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border rounded-lg p-4">
@@ -690,7 +692,7 @@ export default function CreateInstitute() {
                       </Field>
                     )}
                   </div>
-                </div>
+                </div> */}
               </div>
             )}
 

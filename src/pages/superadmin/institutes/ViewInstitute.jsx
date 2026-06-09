@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Eye,
+  // eslint-disable-next-line no-unused-vars
   FileCheck2,
   FileUp,
   // LogIn,
   Power,
   ShieldCheck,
   Trash2,
+  // eslint-disable-next-line no-unused-vars
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -465,14 +467,14 @@ export default function ViewInstitute() {
                               Replace
                             </span>
                           </label>
-                          <Button variant="outline" size="sm" onClick={() => setVerifyDoc(doc)}>
+                          {/* <Button variant="outline" size="sm" onClick={() => setVerifyDoc(doc)}>
                             <FileCheck2 className="h-3.5 w-3.5" />
                             Verify
                           </Button>
                           <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setRejecting(doc)}>
                             <X className="h-3.5 w-3.5" />
                             Reject
-                          </Button>
+                          </Button> */}
                         </div>
                       </TableCell>
                     </TableRow>

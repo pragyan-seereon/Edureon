@@ -95,6 +95,7 @@ const superGroups = [
       { title: "Roles & Permissions", url: "/super/roles", icon: Shield },
       { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
+      { title: "Notifications", url: "/notifications", icon: Bell },
       { title: " Audit Log", url: "/super/audit", icon: History },
       { title: "Security & Sessions", url: "/super/security", icon: Shield },
     ],
@@ -199,7 +200,7 @@ export function navForRole(role) {
   return adminGroups;
 }
 export function portalHomeForRole(role) {
-  if (role === "super_admin") return "/super/institutes";
+  if (role === "super_admin") return "/super/dashboard";
   if (role === "teacher") return "/teacher/dashboard";
   if (role === "student") return "/student/dashboard";
   if (role === "parent") return "/parent/dashboard";
