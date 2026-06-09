@@ -199,7 +199,7 @@ export function navForRole(role) {
   return adminGroups;
 }
 export function portalHomeForRole(role) {
-  if (role === "super_admin") return "/super/institutes";
+  if (role === "super_admin") return "/super/dashboard";
   if (role === "teacher") return "/teacher/dashboard";
   if (role === "student") return "/student/dashboard";
   if (role === "parent") return "/parent/dashboard";

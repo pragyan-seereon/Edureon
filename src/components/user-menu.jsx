@@ -47,17 +47,14 @@ import { toast } from "sonner";
 // ];
 export function UserMenu() {
   const { user, logout,  } = useAuth();
+  // eslint-disable-next-line no-unused-vars
   const navigate = useNavigate();
   if (!user) return null;
 const onLogout = () => {
-  const role = user.role; // capture before logout clears user
+  const redirectTo = user.role === "student" ? "/login" : "/admin/login";
   logout();
   toast.success("Signed out");
-  if (role === "student") {
-    navigate("/login");
-  } else {
-    navigate("/admin/login"); // super_admin, principal, teacher
-  }
+  window.location.href = redirectTo;
 };
   // const onSwitch = (role, label) => {
   //   switchRole(role);
