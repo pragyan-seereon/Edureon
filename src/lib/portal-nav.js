@@ -31,6 +31,7 @@ import {
   Trophy,
   Megaphone,
   FileBox,
+  Wallet,
 } from "lucide-react";
 const adminGroups = [
   {
@@ -96,6 +97,7 @@ const superGroups = [
       { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
       { title: "Notifications", url: "/notifications", icon: Bell },
+      { title: "Transactions", url: "/transactions", icon: Wallet },
       { title: " Audit Log", url: "/super/audit", icon: History },
       { title: "Security & Sessions", url: "/super/security", icon: Shield },
     ],

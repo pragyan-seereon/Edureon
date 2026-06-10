@@ -65,6 +65,8 @@ import RolesPage from "./pages/roles/roles";
 import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 import NotificationsPage from "./pages/superadmin/NotificationsPage";
 import SendNotificationPage from "./pages/superadmin/send-notification";
+import TransactionsPage from "./pages/superadmin/TransactionsPage";
+
 // const defaultPrivatePath = "/super/institutes";
 
 const router = createBrowserRouter([
@@ -97,6 +99,7 @@ const router = createBrowserRouter([
       { path: "/analytics",element: <Analytics />},
       { path: "/notifications",element: <NotificationsPage />},
       { path: "/notifications/send" , element: <SendNotificationPage /> },
+      { path: "transactions", element: <TransactionsPage /> },
 
       //account routes
       { path: "/profile", element: <Profile />},

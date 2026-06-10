@@ -872,7 +872,7 @@ function EditUserModal({ user, institutes, onClose }) {
           <Field label="Access Valid Until">
             <Input type="date" value={form.validUntil} onChange={(e) => set("validUntil", e.target.value)} />
           </Field>
-          <Field label="Account Status">
+          {/* <Field label="Account Status">
             <Select value={form.status} onValueChange={(v) => set("status", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -880,7 +880,7 @@ function EditUserModal({ user, institutes, onClose }) {
                 <SelectItem value="Inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
-          </Field>
+          </Field> */}
         </div>
       </div>
       <ModalFooter>
