@@ -5,6 +5,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Input } from "../../components/ui/input";
+import { Checkbox } from "../../components/ui/checkbox";
 import {
   Select,
   SelectTrigger,
@@ -566,27 +567,27 @@ export default function NotificationsPage() {
 
           {/* Table */}
           <Card className="border-border/60">
-            <CardContent className="p-0 divide-y divide-border/50">
+            <CardContent className="p-0 divide-y">
               {/* Header row */}
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/30">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 rounded border-border"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                />
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/20 hover:bg-muted/20">
+              <Checkbox
+  checked={allSelected}
+  onCheckedChange={toggleAll}
+  aria-label="Select all"
+  className="h-3.5 w-3.5"
+/>
                 {/* type icon placeholder */}
                 <div className="w-8 shrink-0" />
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex-1">
+                <span className="text-xs font-semibold text-muted-foreground flex-1">
                   Notification
                 </span>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider w-32 hidden md:block">
+                <span className="text-xs font-semibold text-muted-foreground w-32 hidden md:block">
                   Institute
                 </span>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider w-24 text-right">
+                <span className="text-xs font-semibold text-muted-foreground w-24 text-right">
                   Time
                 </span>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider w-16 text-center hidden sm:block">
+                <span className="text-xs font-semibold text-muted-foreground w-16 text-center hidden sm:block">
                   Status
                 </span>
                 {/* actions */}
@@ -611,7 +612,7 @@ export default function NotificationsPage() {
                   return (
                     <div key={n.id}>
                       <div
-                        className={`flex items-start gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer
+                        className={`group flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer
                           ${!n.read ? "bg-primary/[0.03]" : ""}
                           ${selected.has(n.id) ? "bg-primary/[0.06]" : ""}`}
                         onClick={() => {
@@ -620,22 +621,18 @@ export default function NotificationsPage() {
                         }}
                       >
                         {/* Checkbox */}
-                        <input
-                          type="checkbox"
-                          className="h-3.5 w-3.5 rounded border-border mt-0.5 shrink-0"
-                          checked={selected.has(n.id)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            setSelected((s) => {
-                              const next = new Set(s);
-                              next.has(n.id)
-                                ? next.delete(n.id)
-                                : next.add(n.id);
-                              return next;
-                            });
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                    <Checkbox
+  checked={selected.has(n.id)}
+  onCheckedChange={() => {
+    setSelected((s) => {
+      const next = new Set(s);
+      next.has(n.id) ? next.delete(n.id) : next.add(n.id);
+      return next;
+    });
+  }}
+  onClick={(e) => e.stopPropagation()}
+  aria-label={`Select ${n.name}`}
+/>
 
                         {/* Type icon */}
                         <div
@@ -706,7 +703,7 @@ export default function NotificationsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                               title="Mark read"
                               onClick={() => markRead(new Set([n.id]))}
                             >
@@ -717,7 +714,7 @@ export default function NotificationsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                               title="Archive"
                               onClick={() => archiveItems(new Set([n.id]))}
                             >
@@ -727,7 +724,7 @@ export default function NotificationsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Delete"
                             onClick={() => deleteItems(new Set([n.id]))}
                           >
