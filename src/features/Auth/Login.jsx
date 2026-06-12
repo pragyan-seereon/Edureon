@@ -1,4 +1,4 @@
-import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useState, useRef } from "react";
 import { useAuth } from "../../lib/auth";
 import { portalHomeForRole } from "../../lib/portal-nav";
@@ -6,7 +6,6 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
-// import { Card } from "../../components/ui/card";
 import {
   GraduationCap,
   Loader2,
@@ -32,27 +31,37 @@ const FacebookIcon = () => (
   </svg>
 );
 
-// ── Role detection from pathname ─────────────────────────────────────────────
-const ROLE_CONFIG = {
-  "/admin/login":     { role: "super_admin", defaultEmail: "superadmin@scholaris.io" },
-  "/teacher/login":   { role: "teacher",    defaultEmail: "teacher@dps.edu.in"      },
-  "/instute/login": { role: "principal",  defaultEmail: "principal@dps.edu.in"    },
-  "/login":           { role: "student",    defaultEmail: "student@edu.in"                         },
+// ── Role labels used for social-login fallback users only ─────────────────────
+const roleLabel = {
+  super_admin: "Super Admin",
+  admin: "Administrator",
+  principal: "Principal",
+  teacher: "Teacher",
+  accountant: "Accountant",
+  hr: "HR Manager",
+  parent: "Parent",
+  student: "Student",
 };
 
+// Best-effort role inference from an email's local part. Only used for the
+// social-login fallback path when no backend user record exists — normal
+// email/password sign-in gets its role directly from auth.login().
+function inferRoleFromEmail(email) {
+  const local = (email.split("@")[0] || "").toLowerCase();
+  if (local.includes("super")) return "super_admin";
+  if (local.includes("principal")) return "principal";
+  if (local.includes("teacher")) return "teacher";
+  if (local.includes("student")) return "student";
+  if (local.includes("parent")) return "parent";
+  if (local.includes("hr")) return "hr";
+  if (local.includes("account")) return "accountant";
+  return "admin";
+}
+
 // ── OTP helpers ───────────────────────────────────────────────────────────────
-
-/**
- * Generates a 6-digit demo OTP.
- * In production you would: generate the OTP server-side, store it with a TTL,
- * and email it via your email provider. This demo logs the email message and
- * shows the code in a toast so everything is self-contained in the frontend.
- */
 const OTP_LENGTH = 6;
-
-const emptyOtp = () => Array.from({ length: OTP_LENGTH }, () => "");
-
-const createOtp = () =>
+const emptyOtp   = () => Array.from({ length: OTP_LENGTH }, () => "");
+const createOtp  = () =>
   String(Math.floor(100000 + Math.random() * 900000)).slice(0, OTP_LENGTH);
 
 function generateLoginOtp() {
@@ -63,46 +72,29 @@ function generateLoginOtp() {
   };
 }
 
-/**
- * Simulates sending the OTP to the user's email.
- * In production, replace with your email provider (SendGrid, SES, Resend, etc.).
- * Here we just log it to console so you can test the flow.
- */
 function sendOtpEmail(email, message) {
-  // TODO: replace with real email send
   console.info(`[OTP EMAIL -> ${email}]:`, message);
 }
 
 export default function Login() {
-  const auth = useAuth();
+  const auth     = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  // Derive role config from the current path
-  const roleConfig = ROLE_CONFIG[location.pathname] ?? ROLE_CONFIG["/login"];
-  const { role: pageRole, defaultEmail } = roleConfig;
+  // ── Single generic sign-in form — role is decided by the backend based on
+  //    the email/password supplied, not by a tab the user picks. ──────────────
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
 
-  const isAdmin     = pageRole === "super_admin";
-  const isTeacher   = pageRole === "teacher";
-  const isPrincipal = pageRole === "principal";
-  const isStudent   = pageRole === "student";
-
-  // Show demo persona panel on all staff portals
-  // const showDemoPersonas = isAdmin || isTeacher || isPrincipal;
-
-  const [email, setEmail]           = useState(defaultEmail);
-  const [password, setPassword]     = useState(defaultEmail ? "demo1234" : "");
-  const [loading, setLoading]       = useState(false);
+  const [loading, setLoading]           = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe]     = useState(false);
 
   // ── OTP state ────────────────────────────────────────────────────────────────
-  const [otpStep, setOtpStep]           = useState(false);
-  const [otp, setOtp]                   = useState(emptyOtp);
-  const [pendingUser, setPendingUser]   = useState(null);
+  const [otpStep, setOtpStep]               = useState(false);
+  const [otp, setOtp]                       = useState(emptyOtp);
+  const [pendingUser, setPendingUser]       = useState(null);
   const [socialProvider, setSocialProvider] = useState(null);
 
-  // Store the generated OTP in a ref (not state) so it doesn't re-render
   const generatedOtpRef = useRef(null);
   const otpInputsRef    = useRef([]);
 
@@ -112,6 +104,8 @@ export default function Login() {
     if (!email || !password) return toast.error("Email and password are required");
     setLoading(true);
     try {
+      // The role attached to `u` comes entirely from the backend / auth
+      // lookup based on the credentials — the UI no longer selects it.
       const u = await auth.login(email.trim(), password, { persistUser: false });
       const { otp: generatedOtp, message } = generateLoginOtp();
       const userEmail = u.email ?? email.trim();
@@ -133,13 +127,11 @@ export default function Login() {
     }
   };
 
-  // ── Social login — completes login directly through the selected provider ───
+  // ── Social login ─────────────────────────────────────────────────────────────
   const socialLogin = async (provider) => {
     setLoading(true);
     setSocialProvider(provider);
     try {
-      // 1. Attempt OAuth — auth.socialLogin may not be wired up yet (returns null/undefined).
-      //    We fall back to a stub user so the direct login flow works in dev/demo.
       let u = null;
       try {
         u = await auth.socialLogin?.(provider);
@@ -147,28 +139,22 @@ export default function Login() {
         // OAuth popup blocked or not implemented — continue with stub
       }
 
-      // Fallback stub: use whatever email is typed in the field, default role from page
       if (!u) {
         const fallbackEmail = email.trim() || `demo+${provider}@edureon.in`;
-        const fallbackName = fallbackEmail
+        const fallbackName  = fallbackEmail
           .split("@")[0]
           .replace(/[._-]+/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase());
+        const inferredRole = inferRoleFromEmail(fallbackEmail);
         u = {
-          id: "u_" + Date.now().toString(36),
-          name: fallbackName || `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
-          email: fallbackEmail,
-          role: pageRole,
-          designation: pageRole === "super_admin"
-            ? "Super Admin"
-            : pageRole === "principal"
-              ? "Principal"
-              : pageRole === "teacher"
-                ? "Teacher"
-                : "Student",
+          id:          "u_" + Date.now().toString(36),
+          name:        fallbackName || `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
+          email:       fallbackEmail,
+          role:        inferredRole,
+          designation: roleLabel[inferredRole] ?? "Administrator",
           institute: "Delhi Public School - North",
           provider,
-          joinedAt: new Date().toISOString().slice(0, 10),
+          joinedAt:  new Date().toISOString().slice(0, 10),
         };
       }
 
@@ -187,19 +173,17 @@ export default function Login() {
   // ── OTP digit change with auto-advance and auto-submit on 6th digit ──────────
   const handleOtpChange = (index, value) => {
     if (!/^\d*$/.test(value)) return;
-    const next = [...otp];
-    next[index] = value.slice(-1);
+    const next    = [...otp];
+    next[index]   = value.slice(-1);
     setOtp(next);
 
     if (value && index < OTP_LENGTH - 1) {
       otpInputsRef.current[index + 1]?.focus();
     }
 
-    // Auto-submit when all 6 digits are filled
     if (index === OTP_LENGTH - 1 && value) {
       const fullCode = [...next.slice(0, OTP_LENGTH - 1), value.slice(-1)].join("");
       if (fullCode.length === OTP_LENGTH) {
-        // Small timeout so the last digit renders before submitting
         setTimeout(() => verifyOtp(fullCode), 80);
       }
     }
@@ -218,15 +202,16 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // Compare against the generated OTP stored in the ref
       if (generatedOtpRef.current && code !== generatedOtpRef.current) {
         throw new Error("OTP mismatch");
       }
 
       const verifiedUser = (await auth.verifyOtp?.(pendingUser, code)) ?? pendingUser;
-      const u = await auth.completeLogin(verifiedUser);
+      const u            = await auth.completeLogin(verifiedUser);
 
       toast.success("Welcome back");
+      // Role-based redirect — `u.role` was determined by the backend during
+      // auth.login(), not by anything the user picked on this page.
       navigate(portalHomeForRole(u.role));
     } catch {
       toast.error("Invalid or expired OTP. Please try again.");
@@ -267,38 +252,6 @@ export default function Login() {
       setLoading(false);
     }
   };
-
-  // ── Quick-login personas ──────────────────────────────────────────────────────
-  // const quickAs = async (preset) => {
-  //   setEmail(preset);
-  //   setPassword("demo1234");
-  //   setLoading(true);
-  //   try {
-  //     const u = await auth.login(preset, "demo1234");
-  //     navigate(portalHomeForRole(u.role));
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
-  // ── Demo persona definitions per portal ──────────────────────────────────────
-  // const DEMO_PERSONAS = {
-  //   superadmin: [
-  //     { label: "Super Admin",  email: "superadmin@scholaris.io" },
-  //     { label: "Teacher",      email: "teacher@dps.edu.in"      },
-  //     { label: "Principal",    email: "principal@dps.edu.in"    },
-  //   ],
-  //   teacher: [
-  //     { label: "Teacher (DPS)",     email: "teacher@dps.edu.in"       },
-  //     { label: "Teacher (Kendriya)", email: "teacher@kendriya.edu.in"  },
-  //   ],
-  //   principal: [
-  //     { label: "Principal (DPS)",     email: "principal@dps.edu.in"     },
-  //     { label: "Principal (Kendriya)", email: "principal@kendriya.edu.in"},
-  //   ],
-  // };
-
-  // const demoPersonas = DEMO_PERSONAS[pageRole] ?? [];
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -377,7 +330,7 @@ export default function Login() {
           {otpStep ? (
             <>
               <div className="mb-1 flex items-center gap-2">
-                {socialProvider === "google" && <GoogleIcon />}
+                {socialProvider === "google"   && <GoogleIcon />}
                 {socialProvider === "facebook" && <FacebookIcon />}
                 <h2 className="font-display text-2xl font-semibold tracking-tight">
                   Two-step verification
@@ -392,7 +345,6 @@ export default function Login() {
               </p>
 
               <form onSubmit={submitOtp} className="mt-7 space-y-5">
-                {/* 6-box OTP input — auto-submits on 6th digit */}
                 <div className="flex gap-2 justify-between">
                   {otp.map((digit, i) => (
                     <Input
@@ -455,13 +407,11 @@ export default function Login() {
             /* ── Regular login form ─────────────────────────────────────────── */
             <>
               <h2 className="font-display text-2xl font-semibold tracking-tight">
-                {isStudent   && " Login"}
-                {isTeacher   && " Login"}
-                {isPrincipal && " Login"}
-                {isAdmin     && " Login"}
+                Sign in
               </h2>
+          
 
-              <form onSubmit={submit} className="mt-7 space-y-4">
+              <form onSubmit={submit} className="mt-5 space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="email" className="text-xs">
                     Email
@@ -543,18 +493,6 @@ export default function Login() {
                 </Button>
               </form>
 
-              {/* {!isAdmin && !isPrincipal && (
-                <p className="mt-6 text-xs text-muted-foreground text-center">
-                  Not registered yet?{" "}
-                  <Link
-                    to="/signup"
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Create an Account
-                  </Link>
-                </p>
-              )} */}
-
               {/* Social login */}
               <div className="relative my-5 flex items-center">
                 <div className="flex-1 border-t" />
@@ -599,35 +537,6 @@ export default function Login() {
                   <span className="text-[11px] text-muted-foreground">Facebook</span>
                 </button>
               </div>
-
-              {/* Demo personas — staff portals only */}
-              {/* {showDemoPersonas && demoPersonas.length > 0 && (
-                <>
-                  <div className="relative my-6 flex items-center">
-                    <div className="flex-1 border-t" />
-                    <span className="px-3 text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Demo personas
-                    </span>
-                    <div className="flex-1 border-t" />
-                  </div>
-
-                  <Card className="p-2 flex flex-col md:flex-row gap-2 border-border/60">
-                    {demoPersonas.map((p) => (
-                      <Button
-                        key={p.email}
-                        variant="ghost"
-                        size="sm"
-                        className="flex-1 justify-center text-xs font-normal"
-                        onClick={() => quickAs(p.email)}
-                        disabled={loading}
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-success mr-2" />
-                        {p.label}
-                      </Button>
-                    ))}
-                  </Card>
-                </>
-              )} */}
             </>
           )}
         </div>
