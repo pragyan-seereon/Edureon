@@ -53,7 +53,7 @@ const adminGroups = [
       { title: "Assignments", url: "/assignments", icon: ClipboardList },
       { title: "Attendance", url: "/attendance", icon: FileText },
       { title: "Examinations", url: "/exams", icon: BookOpen },
-      { title: "Notices", url: "/teacher/notices", icon: Megaphone },
+      { title: "Notices", url: "/notices", icon: Megaphone },
     ],
   },
   {
@@ -88,27 +88,68 @@ const adminGroups = [
 ];
 const superGroups = [
   {
-    label: "Platform",
+    label: "Platform Overview",
     items: [
-      { title: "Dashboard", url: "/super/dashboard", icon: LayoutDashboard }  ,
-      { title: "Institutes", url: "/super/institutes", icon: School },
-      { title: "Users ", url: "/super/users", icon: UserCog },
-      { title: "Roles & Permissions", url: "/super/roles", icon: Shield },
-      { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
+      { title: "Dashboard", url: "/super/dashboard", icon: LayoutDashboard },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
       { title: "Notifications", url: "/notifications", icon: Bell },
       { title: "Transactions", url: "/transactions", icon: Wallet },
-      { title: " Audit Log", url: "/super/audit", icon: History },
+      { title: "Audit Log", url: "/super/audit", icon: History },
       { title: "Security & Sessions", url: "/super/security", icon: Shield },
     ],
   },
+
+  {
+    label: "Institute Management",
+    items: [
+      { title: "Institutes", url: "/super/institutes", icon: School },
+      { title: "Users", url: "/super/users", icon: Users },
+      { title: "Roles & Permissions", url: "/super/roles", icon: Shield },
+      { title: "Subscriptions", url: "/super/subscription", icon: IndianRupee },
+    ],
+  },
+
+  {
+    label: "Academic Monitoring",
+    items: [
+      { title: "Students", url: "/students", icon: GraduationCap },
+      { title: "Teachers", url: "/teachers", icon: UserCog },
+      { title: "Classes & Sections", url: "/classes", icon: School },
+      { title: "Attendance", url: "/attendance", icon: CalendarCheck },
+      { title: "Assignments", url: "assignments", icon: ClipboardList },
+      { title: "Examinations", url: "/exams", icon: BookOpen },
+      { title: "Timetable", url: "/timetable", icon: CalendarDays },
+      { title: "Admissions", url: "/admin/admissions", icon: KanbanSquare },
+    ],
+  },
+
+  {
+    label: "Operations",
+    items: [
+      { title: "Fees & Finance", url: "/fees", icon: IndianRupee },
+      { title: "Expenses", url: "/admin/expenses", icon: Receipt },
+      { title: "Assets", url: "/admin/assets", icon: Boxes },
+      { title: "Infrastructure", url: "/admin/infrastructure", icon: Network },
+      { title: "Transport", url: "/transport", icon: Bus },
+      { title: "Hostel", url: "/hostel", icon: Building2 },
+      { title: "Library", url: "/library", icon: Library },
+      { title: "Documents", url: "/admin/dms", icon: FolderArchive },
+    ],
+  },
+
+  {
+    label: "Communication",
+    items: [
+      { title: "Notices", url: "/notices", icon: Megaphone },
+      { title: "Communication", url: "/communication", icon: MessageSquare },
+    ],
+  },
+
   {
     label: "Account",
     items: [
       { title: "My Profile", url: "/profile", icon: UserIcon },
-      // { title: "Settings", url: "/settings", icon: Settings },
       { title: "Platform Settings", url: "/super/settings", icon: Settings },
-
     ],
   },
 ];
@@ -131,7 +172,7 @@ const teacherGroups = [
         icon: NotebookPen,
       },
       { title: "Study Materials", url: "/teacher/materials", icon: FileBox },
-      { title: "Notices", url: "/teacher/notices", icon: Megaphone },
+      { title: "Notices", url: "/notices", icon: Megaphone },
       { title: "Timetable", url: "/timetable", icon: CalendarDays },
     ],
   },

@@ -106,7 +106,7 @@ const router = createBrowserRouter([
       { path: "/account", element: <Account />},
       { path: "/settings", element: <Settings />},
       //student routes
-      { path: "/student/dashboard", element: <Dashboard /> },
+      { path: "//dashboard", element: <Dashboard /> },
       { path: "/student/timetable", element: <Timetable /> },
       { path: "/student/attendance", element: <Attendance /> },
       { path: "/student/assignments", element: <Assignments /> },
@@ -124,7 +124,7 @@ const router = createBrowserRouter([
       { path: "/teacher/lesson-plans/:id",  element: <TeacherLessonPlansDetails />, },
       { path: "/teacher/materials", element: <TeacherMaterials /> },
       { path: "/teacher/materials/:id", element: <TeacherMaterialsDetails /> },
-      { path: "/teacher/notices", element: <TeacherNotices /> },
+      { path: "/notices", element: <TeacherNotices /> },
       //instution admin routes
       
       { path: "/admin/audit", element: <AdminAudit /> },

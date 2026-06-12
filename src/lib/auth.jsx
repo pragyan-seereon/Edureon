@@ -12,28 +12,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // to each account determines which portal the user is redirected to.
 export const DEMO_ACCOUNTS = [
   {
-    email: "student@edu.in",
+    email: "student@gmail.com",
     password: "demo1234",
     name: "Aarav Sharma",
     role: "student",
     institute: "Delhi Public School — North",
   },
   {
-    email: "teacher@dps.edu.in",
+    email: "teacher@gmail.com",
     password: "demo1234",
     name: "Priya Verma",
     role: "teacher",
     institute: "Delhi Public School — North",
   },
   {
-    email: "principal@dps.edu.in",
+    email: "principal@gmail.com",
     password: "demo1234",
     name: "Rajesh Kumar",
     role: "principal",
     institute: "Delhi Public School — North",
   },
   {
-    email: "superadmin@scholaris.io",
+    email: "superadmin@gmail.com",
     password: "demo1234",
     name: "Scholaris Admin",
     role: "super_admin",
