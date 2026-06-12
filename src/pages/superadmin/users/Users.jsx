@@ -136,6 +136,11 @@ function getInitials(name = "") {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
+function getUserRoles(u) {
+  if (!u) return [];
+  return Array.isArray(u.role) ? u.role : u.role ? [u.role] : [];
+}
+
 function passwordScore(pw = "") {
   let s = 0;
   if (pw.length >= 8)           s += 25;
@@ -165,6 +170,63 @@ function RoleBadge({ role }) {
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border capitalize ${cls}`}>
       {String(role).replace("_", " ")}
     </span>
+  );
+}
+
+function RoleBadgeList({ roles }) {
+  const list = Array.isArray(roles) ? roles : roles ? [roles] : [];
+  if (list.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {list.map((r) => <RoleBadge key={r} role={r} />)}
+    </div>
+  );
+}
+
+// Multi-select dropdown for assigning one or more roles to a user
+function RoleMultiSelect({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const roles = Array.isArray(value) ? value : value ? [value] : [];
+
+  const toggle = (role) => {
+    onChange(
+      roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]
+    );
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full min-h-9 flex items-center justify-between gap-2 px-3 py-1.5 rounded-md border bg-background text-sm text-left"
+      >
+        <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+          {roles.length === 0
+            ? <span className="text-muted-foreground">Select roles…</span>
+            : roles.map((r) => <RoleBadge key={r} role={r} />)}
+        </div>
+        <span className="text-muted-foreground text-xs shrink-0">▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-lg max-h-60 overflow-y-auto p-1">
+            {ALL_ROLES.map((r) => (
+              <label
+                key={r}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 text-sm cursor-pointer"
+              >
+                <Checkbox checked={roles.includes(r)} onCheckedChange={() => toggle(r)} />
+                {r}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -357,7 +419,7 @@ export default function Users() {
     if (dateError) return [];
     return users.filter((u) => {
       if (filterInst   !== "all" && u.instituteId !== filterInst)           return false;
-      if (filterRole   !== "all" && u.role        !== filterRole)            return false;
+      if (filterRole   !== "all" && !getUserRoles(u).includes(filterRole))   return false;
       if (filterStatus !== "all" && (u.status ?? "Active") !== filterStatus) return false;
       if (q && !u.name?.toLowerCase().includes(q.toLowerCase()) &&
                !u.email?.toLowerCase().includes(q.toLowerCase()))           return false;
@@ -369,8 +431,10 @@ export default function Users() {
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const av = String(a[sort.key] ?? "");
-      const bv = String(b[sort.key] ?? "");
+      const aRaw = sort.key === "role" ? getUserRoles(a).join(", ") : a[sort.key];
+      const bRaw = sort.key === "role" ? getUserRoles(b).join(", ") : b[sort.key];
+      const av = String(aRaw ?? "");
+      const bv = String(bRaw ?? "");
       return sort.dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     });
   }, [filtered, sort]);
@@ -419,10 +483,10 @@ export default function Users() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Total Users"        value={String(users.length)}                                        icon={<UserCog     className="h-5 w-5" />} tone="primary"  />
-        <KpiCard label="Admins"             value={String(users.filter((u) => u.role === "admin").length)}      icon={<ShieldCheck className="h-5 w-5" />} tone="success"  />
-        <KpiCard label="Principals"         value={String(users.filter((u) => u.role === "principal").length)}  icon={<ShieldCheck className="h-5 w-5" />} tone="info"     />
-        <KpiCard label="Institutes Covered" value={String(new Set(users.map((u) => u.instituteId)).size)}       icon={<Building2   className="h-5 w-5" />} tone="warning"  />
+        <KpiCard label="Total Users"        value={String(users.length)}                                                          icon={<UserCog     className="h-5 w-5" />} tone="primary"  />
+        <KpiCard label="Admins"             value={String(users.filter((u) => getUserRoles(u).includes("admin")).length)}        icon={<ShieldCheck className="h-5 w-5" />} tone="success"  />
+        <KpiCard label="Principals"         value={String(users.filter((u) => getUserRoles(u).includes("principal")).length)}    icon={<ShieldCheck className="h-5 w-5" />} tone="info"     />
+        <KpiCard label="Institutes Covered" value={String(new Set(users.map((u) => u.instituteId)).size)}                         icon={<Building2   className="h-5 w-5" />} tone="warning"  />
       </div>
 
       <Card className="max-w-full overflow-hidden border-border/60">
@@ -556,7 +620,7 @@ export default function Users() {
                   <TableHead className="w-10" />
                   <SortableHead className="w-44" label="Full Name"   sortKey="name"      sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-52" label="Email"       sortKey="email"     sort={sort} onSort={setSortKey} />
-                  <SortableHead className="w-32" label="Role"        sortKey="role"      sort={sort} onSort={setSortKey} />
+                  <SortableHead className="w-40" label="Role(s)"     sortKey="role"      sort={sort} onSort={setSortKey} />
                   <TableHead    className="w-44">Institute(s)</TableHead>
                   <SortableHead className="w-24" label="Status"      sortKey="status"    sort={sort} onSort={setSortKey} />
                   <TableHead    className="w-32">Last Login</TableHead>
@@ -582,6 +646,7 @@ export default function Users() {
                 ) : (
                   paginated.map((u) => {
                     const isLocked = (u.status ?? "Active") === "Locked";
+                    const userIsSuperAdmin = getUserRoles(u).includes("Super Admin");
                     return (
                       <TableRow key={u.id}>
                         <TableCell>
@@ -604,8 +669,10 @@ export default function Users() {
                           <div className="text-[10px] font-mono text-muted-foreground">{u.userId ?? u.id}</div>
                         </TableCell>
                         <TableCell className="truncate text-sm text-muted-foreground">{u.email}</TableCell>
-                        <TableCell><RoleBadge role={u.role} /></TableCell>
-                        <TableCell className="truncate text-sm">{instMap[u.instituteId] ?? u.instituteId}</TableCell>
+                        <TableCell><RoleBadgeList roles={u.role} /></TableCell>
+                        <TableCell className="truncate text-sm">
+                          {userIsSuperAdmin ? "All Institutes" : (instMap[u.instituteId] ?? u.instituteId)}
+                        </TableCell>
                         <TableCell><StatusBadge status={u.status ?? "Active"} /></TableCell>
                         <TableCell className="text-xs text-muted-foreground">{u.lastLogin  ?? "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{u.createdAt  ?? "—"}</TableCell>
@@ -705,19 +772,22 @@ export default function Users() {
 function CreateUserModal({ institutes, onClose }) {
   const [form, setForm] = useState({
     name: "", email: "", phone: "",
-    role: "Teacher", instituteId: institutes[0]?.id ?? "",
+    roles: [], instituteId: institutes[0]?.id ?? "",
     department: "", autoPassword: true, password: "",
     sendWelcome: true, accessScope: "Full Access",
     validFrom: "", validUntil: "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const isSuperAdmin = form.roles.includes("Super Admin");
 
   const submit = () => {
     if (!form.name.trim() || !form.email.trim()) { toast.error("Full name and email are required"); return; }
+    if (form.roles.length === 0) { toast.error("At least one role is required"); return; }
+    if (!isSuperAdmin && !form.instituteId) { toast.error("Assigned institute is required"); return; }
     if (!form.autoPassword && form.password.length < 6) { toast.error("Password must be at least 6 characters"); return; }
     appUsersApi.add({
       name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(),
-      role: form.role, instituteId: form.instituteId, status: "Active",
+      role: form.roles, instituteId: isSuperAdmin ? null : form.instituteId, status: "Active",
     });
     toast.success(`${form.name} created`, { description: form.sendWelcome ? "Welcome email sent" : undefined });
     onClose();
@@ -736,23 +806,29 @@ function CreateUserModal({ institutes, onClose }) {
         <Field label="Phone Number">
           <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 …" />
         </Field>
-        <Field label={<>Role <span className="text-destructive">*</span></>}>
-          <Select value={form.role} onValueChange={(v) => set("role", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{ALL_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-          </Select>
+        <Field label={<>Role(s) <span className="text-destructive">*</span></>}>
+          <RoleMultiSelect value={form.roles} onChange={(v) => set("roles", v)} />
         </Field>
-        <Field label={<>Assigned Institute(s) <span className="text-destructive">*</span></>} className="sm:col-span-2">
-          <Select value={form.instituteId} onValueChange={(v) => set("instituteId", v)}>
-            <SelectTrigger><SelectValue placeholder="Select institute" /></SelectTrigger>
-            <SelectContent>{institutes.map((i) => <SelectItem key={i.id} value={i.id}>{i.name} · {i.city}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        {form.role !== "Super Admin" && (
+        {isSuperAdmin && (
+          <div className="sm:col-span-2 flex items-start gap-2 p-3 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 text-xs">
+            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+            Super Admin has access across all institutes. Institute assignment is not required.
+          </div>
+        )}
+        {!isSuperAdmin && (
+          <Field label={<>Assigned Institute(s) <span className="text-destructive">*</span></>} className="sm:col-span-2">
+            <Select value={form.instituteId} onValueChange={(v) => set("instituteId", v)}>
+              <SelectTrigger><SelectValue placeholder="Select institute" /></SelectTrigger>
+              <SelectContent>{institutes.map((i) => <SelectItem key={i.id} value={i.id}>{i.name} · {i.city}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+        )}
+        {!isSuperAdmin && (
           <Field label="Department">
             <Input value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="e.g. Science" />
           </Field>
         )}
+        
         <Field label="Access Scope">
           <Select value={form.accessScope} onValueChange={(v) => set("accessScope", v)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -787,10 +863,11 @@ function CreateUserModal({ institutes, onClose }) {
 // ─── Edit User Modal ──────────────────────────────────────────────────────────
 
 function EditUserModal({ user, institutes, onClose }) {
+  const initialRoles = getUserRoles(user).length ? getUserRoles(user) : ["Teacher"];
   const [form, setForm] = useState({
     name:        user.name        ?? "",
     phone:       user.phone       ?? "",
-    role:        user.role        ?? "Teacher",
+    roles:       initialRoles,
     instituteId: user.instituteId ?? institutes[0]?.id ?? "",
     department:  user.department  ?? "",
     accessScope: user.accessScope ?? "Full Access",
@@ -799,15 +876,24 @@ function EditUserModal({ user, institutes, onClose }) {
     status:      user.status      ?? "Active",
   });
   const [roleWarning, setRoleWarning] = useState(false);
+  const isSuperAdmin = form.roles.includes("Super Admin");
+
   const set = (k, v) => {
-    if (k === "role" && v !== user.role) setRoleWarning(true);
+    if (k === "roles") {
+      const a = [...v].sort();
+      const b = [...initialRoles].sort();
+      const changed = a.length !== b.length || a.some((r, i) => r !== b[i]);
+      if (changed) setRoleWarning(true);
+    }
     setForm((f) => ({ ...f, [k]: v }));
   };
 
   const submit = () => {
+    if (form.roles.length === 0) { toast.error("At least one role is required"); return; }
+    if (!isSuperAdmin && !form.instituteId) { toast.error("Assigned institute is required"); return; }
     appUsersApi.update(user.id, {
       name: form.name.trim(), phone: form.phone,
-      role: form.role, instituteId: form.instituteId,
+      role: form.roles, instituteId: isSuperAdmin ? null : form.instituteId,
       department: form.department, status: form.status,
     });
     toast.success("User updated");
@@ -821,7 +907,13 @@ function EditUserModal({ user, institutes, onClose }) {
         {roleWarning && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            Changing the role will trigger permission recalculation. The user's access may change immediately.
+            Changing the role(s) will trigger permission recalculation. The user's access may change immediately.
+          </div>
+        )}
+        {isSuperAdmin && (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 text-xs">
+            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+            Super Admin has access across all institutes. Institute assignment is not required.
           </div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -842,24 +934,22 @@ function EditUserModal({ user, institutes, onClose }) {
           <Field label="Phone Number">
             <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
           </Field>
-          <Field label="Role">
-            <Select value={form.role} onValueChange={(v) => set("role", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ALL_ROLES.map((r)    => <SelectItem key={r}        value={r}>{r}</SelectItem>)}
-                {LEGACY_ROLES.map((r) => <SelectItem key={`l-${r}`} value={r} className="capitalize">{r}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <Field label={<>Role(s) <span className="text-destructive">*</span></>}>
+            <RoleMultiSelect value={form.roles} onChange={(v) => set("roles", v)} />
           </Field>
-          <Field label="Assigned Institute(s)" className="sm:col-span-2">
-            <Select value={form.instituteId} onValueChange={(v) => set("instituteId", v)}>
-              <SelectTrigger><SelectValue placeholder="Select institute" /></SelectTrigger>
-              <SelectContent>{institutes.map((i) => <SelectItem key={i.id} value={i.id}>{i.name} · {i.city}</SelectItem>)}</SelectContent>
-            </Select>
-          </Field>
-          <Field label="Department">
-            <Input value={form.department} onChange={(e) => set("department", e.target.value)} />
-          </Field>
+          {!isSuperAdmin && (
+            <Field label="Assigned Institute(s)" className="sm:col-span-2">
+              <Select value={form.instituteId} onValueChange={(v) => set("instituteId", v)}>
+                <SelectTrigger><SelectValue placeholder="Select institute" /></SelectTrigger>
+                <SelectContent>{institutes.map((i) => <SelectItem key={i.id} value={i.id}>{i.name} · {i.city}</SelectItem>)}</SelectContent>
+              </Select>
+            </Field>
+          )}
+          {!isSuperAdmin && (
+            <Field label="Department">
+              <Input value={form.department} onChange={(e) => set("department", e.target.value)} />
+            </Field>
+          )}
           <Field label="Access Scope">
             <Select value={form.accessScope} onValueChange={(v) => set("accessScope", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -899,6 +989,8 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
 
+  const userIsSuperAdmin = getUserRoles(user).includes("Super Admin");
+
   const tabs = [
     { id: "profile",     label: "Profile"      },
     // { id: "users",       label: "Users"        },
@@ -922,7 +1014,7 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
             <h2 className="font-semibold text-base truncate">{user.name}</h2>
             <p className="text-sm text-muted-foreground truncate">{user.email}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <RoleBadge role={user.role} />
+              <RoleBadgeList roles={user.role} />
               <StatusBadge status={user.status ?? "Active"} />
             </div>
           </div>
@@ -959,7 +1051,7 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
               ["Email",        user.email],
               ["Phone",        user.phone       || "—"],
               ["Role",         user.role],
-              ["Institute(s)", instMap[user.instituteId] ?? user.instituteId],
+              ["Institute(s)", userIsSuperAdmin ? "All Institutes" : (instMap[user.instituteId] ?? user.instituteId)],
               ["Department",   user.department  || "—"],
               ["Access Scope", user.accessScope || "Full Access"],
               ["Valid From",   user.validFrom   || "—"],
@@ -970,7 +1062,13 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
             ].map(([label, val]) => (
               <div key={label} className="flex items-center justify-between px-5 py-2.5 text-sm">
                 <span className="text-xs text-muted-foreground">{label}</span>
-                <span className="text-xs font-medium text-right max-w-[60%] truncate">{val}</span>
+                {label === "Role" ? (
+                  <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                    <RoleBadgeList roles={user.role} />
+                  </div>
+                ) : (
+                  <span className="text-xs font-medium text-right max-w-[60%] truncate">{val}</span>
+                )}
               </div>
             ))}
           </div>
@@ -1043,9 +1141,10 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
         {tab === "permissions" && (
           <div className="p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                Inherited from role: <span className="font-medium capitalize text-foreground">{user.role}</span>
-              </p>
+              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                <span>Inherited from role{getUserRoles(user).length > 1 ? "s" : ""}:</span>
+                <RoleBadgeList roles={user.role} />
+              </div>
               <Button size="sm" variant="outline" className="h-7 text-xs">Edit Permissions</Button>
             </div>
             <Table>
@@ -1536,6 +1635,7 @@ function DeactivateModal({ user, onClose }) {
 function DeleteModal({ user, instMap, onClose }) {
   const [confirmEmail, setConfirmEmail] = useState("");
   const matches = confirmEmail.toLowerCase() === user.email?.toLowerCase();
+  const userIsSuperAdmin = getUserRoles(user).includes("Super Admin");
 
   const confirm = () => {
     if (!matches) return;
@@ -1549,16 +1649,18 @@ function DeleteModal({ user, instMap, onClose }) {
       <ModalHeader title="Delete User" description="This action is permanent and cannot be undone." onClose={onClose} />
       <div className="px-6 py-4 space-y-4">
         <div className="p-3 rounded-lg border bg-muted/30 space-y-2 text-sm">
-          {[
-            ["Name",         user.name],
-            ["Role",         String(user.role)],
-            ["Institute(s)", instMap[user.instituteId] ?? user.instituteId],
-          ].map(([k, v]) => (
-            <div key={k} className="flex justify-between text-xs">
-              <span className="text-muted-foreground">{k}</span>
-              <span className="font-medium capitalize">{v}</span>
-            </div>
-          ))}
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">Name</span>
+            <span className="font-medium">{user.name}</span>
+          </div>
+          <div className="flex justify-between items-start text-xs gap-2">
+            <span className="text-muted-foreground shrink-0">Role(s)</span>
+            <RoleBadgeList roles={user.role} />
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">Institute(s)</span>
+            <span className="font-medium">{userIsSuperAdmin ? "All Institutes" : (instMap[user.instituteId] ?? user.instituteId)}</span>
+          </div>
         </div>
         <Field label="Type the user's email to confirm">
           <Input value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} placeholder={user.email} />
