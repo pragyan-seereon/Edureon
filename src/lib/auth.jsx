@@ -1,9 +1,46 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react";
 const Ctx = createContext(null);
 const STORAGE_KEY = "scholaris.auth.user";
 const titleCase = (s) =>
   s.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ── Demo accounts ─────────────────────────────────────────────────────────
+// Email + password pairs used purely for the login demo. The role attached
+// to each account determines which portal the user is redirected to.
+export const DEMO_ACCOUNTS = [
+  {
+    email: "student@edu.in",
+    password: "demo1234",
+    name: "Aarav Sharma",
+    role: "student",
+    institute: "Delhi Public School — North",
+  },
+  {
+    email: "teacher@dps.edu.in",
+    password: "demo1234",
+    name: "Priya Verma",
+    role: "teacher",
+    institute: "Delhi Public School — North",
+  },
+  {
+    email: "principal@dps.edu.in",
+    password: "demo1234",
+    name: "Rajesh Kumar",
+    role: "principal",
+    institute: "Delhi Public School — North",
+  },
+  {
+    email: "superadmin@scholaris.io",
+    password: "demo1234",
+    name: "Scholaris Admin",
+    role: "super_admin",
+    institute: "Scholaris HQ",
+  },
+];
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
@@ -29,10 +66,34 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     ready,
-    login: async (email, _password, options = {}) => {
+    login: async (email, password, options = {}) => {
       await sleep(450);
       const shouldPersist = options.persistUser !== false;
-      // Lookup provisioned user by email
+
+      // 1. Check against hardcoded demo accounts first
+      const demo = DEMO_ACCOUNTS.find(
+        (d) => d.email.toLowerCase() === email.toLowerCase()
+      );
+      if (demo) {
+        if (demo.password !== password) {
+          throw new Error("Invalid credentials");
+        }
+        const u = {
+          id: "u_" + Date.now().toString(36),
+          name: demo.name,
+          email: demo.email,
+          role: demo.role,
+          designation: roleLabel[demo.role],
+          phone: "+91 98100 12345",
+          institute: demo.institute,
+          bio: "Building a future-ready learning campus with technology.",
+          joinedAt: "2024-04-01",
+        };
+        if (shouldPersist) persist(u);
+        return u;
+      }
+
+      // 2. Lookup provisioned user by email
       const { appUsersApi, institutesApi } = await import("./store");
       const matched = appUsersApi
         .list()
@@ -52,7 +113,8 @@ export function AuthProvider({ children }) {
         if (shouldPersist) persist(u);
         return u;
       }
-      // Fallback: demo personas inferred from email
+
+      // 3. Fallback: demo personas inferred from email
       const local = email.split("@")[0] || "user";
       const name = titleCase(local) || "Rahul Kapoor";
       const role = local.includes("super")
