@@ -111,9 +111,7 @@ export default function Admissions() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Admin · Academic"
-        title="Admissions Pipeline"
-        description="Drag prospects across stages. Click any card to open the full counseling, document, payment and communication record."
+        title="Admissions "
         actions={
           <NewInquiryDialog
             trigger={
@@ -124,6 +122,7 @@ export default function Admissions() {
             }
             onCreate={(d) => {
               const id = inquiriesApi.add({
+                ...d,
                 name: d.name,
                 class: d.class,
                 parent: d.parent,

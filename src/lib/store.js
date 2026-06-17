@@ -124,7 +124,11 @@ export const usePayrollRuns = () => useStore(payStore);
 let _sn = 2000;
 let _en = 3000;
 export const studentsApi = {
-  add: (s) => studentStore.set((arr) => [{ ...s, id: "STU" + ++_sn }, ...arr]),
+  add: (s) => {
+    const id = "STU" + ++_sn;
+    studentStore.set((arr) => [{ ...s, id }, ...arr]);
+    return id;
+  },
   update: (id, patch) =>
     studentStore.set((arr) =>
       arr.map((x) => (x.id === id ? { ...x, ...patch } : x)),
@@ -1018,6 +1022,57 @@ const initInquiries = [
 const inquiryStore = createStore(initInquiries);
 export const useInquiries = () => useStore(inquiryStore);
 let _iqN = 100;
+const inquiryToStudent = (inq) => ({
+  name: inq.name,
+  admissionNo: inq.admissionNo || `ADM-${new Date().getFullYear()}-${inq.id.replace("ADM-", "")}`,
+  class: inq.class,
+  section: inq.section || "A",
+  rollNo: inq.rollNo || Math.floor(Math.random() * 60) + 1,
+  gender: inq.gender || "Male",
+  parent: inq.parent,
+  phone: inq.phone,
+  feeStatus: inq.feePaid > 0 ? "Paid" : "Pending",
+  attendance: 100,
+  email: inq.email,
+  address: inq.address,
+  city: inq.city,
+  state: inq.state,
+  pin: inq.pin,
+  dob: inq.dob,
+  blood: inq.blood,
+  nationality: inq.nationality,
+  religion: inq.religion,
+  category: inq.category,
+  motherTongue: inq.motherTongue,
+  previousSchool: inq.previousSchool || inq.prevSchool,
+  previousClass: inq.previousClass,
+  board: inq.board,
+  lastPercent: inq.lastPercent,
+  motherName: inq.motherName,
+  parentOccupation: inq.parentOccupation,
+  parentIncome: inq.parentIncome,
+  emergencyContact: inq.emergencyContact,
+  aadhar: inq.aadhar,
+  birthCertificateNo: inq.birthCertificateNo,
+  transportRequired: inq.transportRequired || "No",
+  hostelRequired: inq.hostelRequired || "No",
+  medicalNotes: inq.medicalNotes,
+  sourceInquiryId: inq.id,
+  documents: (inq.documents || []).filter((d) => d.ok).map((d) => d.name),
+});
+const enrollInquiryAsStudent = (inq) => {
+  if (inq.enrolledStudentId) return inq.enrolledStudentId;
+  const existing = studentStore
+    .get()
+    .find(
+      (s) =>
+        s.sourceInquiryId === inq.id ||
+        s.admissionNo ===
+          (inq.admissionNo || `ADM-${new Date().getFullYear()}-${inq.id.replace("ADM-", "")}`),
+    );
+  if (existing) return existing.id;
+  return studentsApi.add(inquiryToStudent(inq));
+};
 export const inquiriesApi = {
   add: (i) => {
     const now = new Date().toISOString();
@@ -1031,13 +1086,16 @@ export const inquiriesApi = {
         history: [{ stage: i.stage, at: now, by: "You" }],
         comms: [],
         followUps: [],
-        documents: [
-          { name: "Birth Certificate", ok: false },
-          { name: "Aadhar Card", ok: false },
-          { name: "Transfer Certificate", ok: false },
-          { name: "Previous Marksheet", ok: false },
-          { name: "Passport Photo", ok: false },
-        ],
+        documents:
+          i.documents?.length > 0
+            ? i.documents
+            : [
+                { name: "Birth Certificate", ok: false },
+                { name: "Aadhar Card", ok: false },
+                { name: "Transfer Certificate", ok: false },
+                { name: "Previous Marksheet", ok: false },
+                { name: "Passport Photo", ok: false },
+              ],
       },
       ...arr,
     ]);
@@ -1065,22 +1123,27 @@ export const inquiriesApi = {
     activityApi.log("inquiry", id, archived ? "Archived" : "Restored");
   },
   moveStage: (id, stage, by = "You") => {
+    let enrolledStudentId = null;
     inquiryStore.set((arr) =>
-      arr.map((x) =>
-        x.id === id
-          ? {
-              ...x,
+      arr.map((x) => {
+        if (x.id !== id) return x;
+        if (stage === "Enrolled") enrolledStudentId = enrollInquiryAsStudent(x);
+        return {
+          ...x,
               stage,
+              enrolledStudentId: enrolledStudentId || x.enrolledStudentId,
               updatedAt: new Date().toISOString(),
               history: [
                 ...x.history,
                 { stage, at: new Date().toISOString(), by },
               ],
-            }
-          : x,
-      ),
+        };
+      }),
     );
     activityApi.log("inquiry", id, `Moved to ${stage}`, by);
+    if (enrolledStudentId)
+      activityApi.log("student", enrolledStudentId, `Created from inquiry ${id}`, by);
+    return enrolledStudentId;
   },
   assignCounselor: (id, counselor) => {
     inquiryStore.set((arr) =>
