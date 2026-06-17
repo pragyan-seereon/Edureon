@@ -26,7 +26,7 @@ export const DEMO_ACCOUNTS = [
     institute: "Delhi Public School — North",
   },
   {
-    email: "principal@gmail.com",
+    email: "institute@gmail.com",
     password: "demo1234",
     name: "Rajesh Kumar",
     role: "principal",
