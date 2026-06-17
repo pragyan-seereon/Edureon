@@ -42,6 +42,9 @@ const TYPE_OPTIONS = ["All", "School", "College", "Coaching", "University"];
 const PLAN_OPTIONS = ["All", "Trial", "Basic", "Professional", "Enterprise"];
 const PAGE_SIZES = [10, 25, 50, 100];
 
+// Key used to persist the super admin session so the dashboard can restore it
+const SUPER_ADMIN_SESSION_KEY = "superAdminSession";
+
 const normalizeType = (type) => {
   if (type === "Coaching Centre") return "Coaching";
   return type || "School";
@@ -242,6 +245,12 @@ export default function Institutes() {
   };
 
   const openInstitute = async (item) => {
+    // ── Save current super admin session so the dashboard can restore it ──
+    const currentUser = auth.user;
+    if (currentUser) {
+      sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, JSON.stringify(currentUser));
+    }
+
     const assignedAdmin = appUsersApi
       .list()
       .find(
