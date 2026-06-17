@@ -25,13 +25,13 @@ import { Eye, FileCheck2, FileUp, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 const DOC_SLOTS = [
-  { id: "aadhar", label: "Aadhar Card", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
-  { id: "birth_certificate", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
+  { id: "aadhar", label: "Aadhar Card", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "birth_certificate", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
   { id: "transfer_certificate", label: "Previous School TC", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
   { id: "last_marksheet", label: "Last Marksheet", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
-  { id: "passport_photo", label: "Passport Photo", accept: ".jpg,.jpeg,.png", acceptLabel: "JPG / PNG", badge: "Mandatory" },
-  { id: "parent_id", label: "Parent ID (PAN/Aadhar)", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
-  { id: "address_proof", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
+  { id: "passport_photo", label: "Passport Photo", accept: ".jpg,.jpeg,.png", acceptLabel: "JPG / PNG", badge: "Optional" },
+  { id: "parent_id", label: "Parent ID (PAN/Aadhar)", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "address_proof", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
   { id: "caste_certificate", label: "Caste / EWS Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
 ];
 
@@ -53,9 +53,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
   const [uploaded, setUploaded] = useState(emptyDocs);
   const [dragOver, setDragOver] = useState(null);
   const [viewingDoc, setViewingDoc] = useState(null);
-  // Track whether save was attempted (to show validation errors)
-  const [submitted, setSubmitted] = useState(false);
-
   const [d, setD] = useState({
     // personal
     name: "",
@@ -101,17 +98,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
-  // Required field keys and which tab they live on
-  // eslint-disable-next-line no-unused-vars
-  const requiredFields = {
-    name: "personal",
-    dob: "personal",
-    parent: "parent",
-    phone: "parent",
-  };
-
-  const isInvalid = (key) => submitted && !d[key];
-
   const handleFileUpload = (slotId, files) => {
     const file = files?.[0];
     const slot = DOC_SLOTS.find((item) => item.id === slotId);
@@ -125,24 +111,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
   };
 
   const save = () => {
-    setSubmitted(true);
-    const missingFields = !d.name || !d.dob || !d.parent || !d.phone;
-    const mandatoryDocIds = DOC_SLOTS.filter((s) => s.badge === "Mandatory").map((s) => s.id);
-    const missingDocs = mandatoryDocIds.some((id) => !uploaded[id]);
-
-    if (missingFields) {
-      if (!d.name || !d.dob) {
-        setTab("personal");
-      } else {
-        setTab("parent");
-      }
-      return toast.error("Please fill all required fields");
-    }
-    if (missingDocs) {
-      setTab("docs");
-      return toast.error("Please upload all mandatory documents");
-    }
-
     onCreate?.({
       name: d.name,
       class: d.class,
@@ -191,7 +159,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
     setOpen(false);
     setTab("personal");
-    setSubmitted(false);
     setUploaded(emptyDocs());
     setD({
       name: "",
@@ -233,7 +200,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSubmitted(false); }}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -252,23 +219,19 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
           {/* ── PERSONAL ── */}
           <TabsContent value="personal" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Full Name *">
+            <F label="Full Name">
               <Input
                 value={d.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="Riya Mehra"
-                className={isInvalid("name") ? "border-destructive focus-visible:ring-destructive" : ""}
               />
-              {isInvalid("name") && <p className="text-[11px] text-destructive mt-0.5">Full name is required</p>}
             </F>
-            <F label="Date of Birth *">
+            <F label="Date of Birth">
               <Input
                 type="date"
                 value={d.dob}
                 onChange={(e) => set("dob", e.target.value)}
-                className={isInvalid("dob") ? "border-destructive focus-visible:ring-destructive" : ""}
               />
-              {isInvalid("dob") && <p className="text-[11px] text-destructive mt-0.5">Date of birth is required</p>}
             </F>
             <F label="Gender">
               <Select value={d.gender} onValueChange={(v) => set("gender", v)}>
@@ -319,7 +282,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
           {/* ── ACADEMIC ── */}
           <TabsContent value="academic" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Applying for Class *">
+            <F label="Applying for Class">
               <Select value={d.class} onValueChange={(v) => set("class", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -381,14 +344,12 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
           {/* ── PARENT ── */}
           <TabsContent value="parent" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Father / Guardian Name *">
+            <F label="Father / Guardian Name">
               <Input
                 value={d.parent}
                 onChange={(e) => set("parent", e.target.value)}
                 placeholder="Anil Mehra"
-                className={isInvalid("parent") ? "border-destructive focus-visible:ring-destructive" : ""}
               />
-              {isInvalid("parent") && <p className="text-[11px] text-destructive mt-0.5">Guardian name is required</p>}
             </F>
             <F label="Mother's Name">
               <Input value={d.motherName} onChange={(e) => set("motherName", e.target.value)} />
@@ -399,14 +360,12 @@ export function NewInquiryDialog({ trigger, onCreate }) {
             <F label="Annual Income">
               <Input type="number" value={d.parentIncome} onChange={(e) => set("parentIncome", e.target.value)} placeholder="1200000" />
             </F>
-            <F label="Primary Mobile *">
+            <F label="Primary Mobile">
               <Input
                 value={d.phone}
                 onChange={(e) => set("phone", e.target.value)}
                 placeholder="+91 ..."
-                className={isInvalid("phone") ? "border-destructive focus-visible:ring-destructive" : ""}
               />
-              {isInvalid("phone") && <p className="text-[11px] text-destructive mt-0.5">Phone number is required</p>}
             </F>
             <F label="Emergency Contact">
               <Input value={d.emergencyContact} onChange={(e) => set("emergencyContact", e.target.value)} placeholder="+91 ..." />
@@ -493,13 +452,11 @@ export function NewInquiryDialog({ trigger, onCreate }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {DOC_SLOTS.map((slot) => {
                 const file = uploaded[slot.id];
-                const showDocError = submitted && slot.badge === "Mandatory" && !file;
                 return (
                   <InquiryDocSlot
                     key={slot.id}
                     slot={slot}
                     file={file}
-                    showError={showDocError}
                     dragOver={dragOver === slot.id}
                     onUpload={(files) => handleFileUpload(slot.id, files)}
                     onDragOver={() => setDragOver(slot.id)}
@@ -554,7 +511,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
   );
 }
 
-function InquiryDocSlot({ slot, file, showError, dragOver, onUpload, onView, onRemove, onDragOver, onDragLeave, onDrop }) {
+function InquiryDocSlot({ slot, file, dragOver, onUpload, onView, onRemove, onDragOver, onDragLeave, onDrop }) {
   const inputId = `inquiry-file-${slot.id}`;
   const handleChange = (e) => {
     if (e.target.files?.length) {
@@ -566,25 +523,20 @@ function InquiryDocSlot({ slot, file, showError, dragOver, onUpload, onView, onR
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${
       dragOver ? "border-primary bg-primary/5"
-      : showError ? "border-destructive bg-destructive/5"
       : "hover:bg-muted/20"
     }`}>
       <div className="flex items-start gap-2 p-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-medium">{slot.label}</span>
-            {slot.badge === "Mandatory" && <span className="text-destructive">*</span>}
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">
             {slot.acceptLabel} · max 5 MB
           </div>
-          {showError && (
-            <p className="text-[10px] text-destructive mt-0.5 font-medium">This document is required</p>
-          )}
         </div>
         <input type="file" id={inputId} accept={slot.accept} className="hidden" onChange={handleChange} />
         {!file && (
-          <Button size="sm" variant="outline" className={`shrink-0 ${showError ? "border-destructive text-destructive hover:bg-destructive/10" : ""}`} onClick={() => document.getElementById(inputId).click()}>
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => document.getElementById(inputId).click()}>
             <FileUp className="h-3.5 w-3.5" />Upload
           </Button>
         )}
@@ -594,7 +546,6 @@ function InquiryDocSlot({ slot, file, showError, dragOver, onUpload, onView, onR
         <div
           className={`mx-3 mb-3 border-2 border-dashed rounded-md p-4 text-center text-xs cursor-pointer transition-colors ${
             dragOver ? "border-primary text-primary"
-            : showError ? "border-destructive text-destructive"
             : "border-border text-muted-foreground hover:border-muted-foreground/40"
           }`}
           onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
