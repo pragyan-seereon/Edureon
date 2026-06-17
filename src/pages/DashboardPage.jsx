@@ -21,6 +21,7 @@ import {
   AlertCircle,
   Plus,
   Download,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -49,6 +50,8 @@ import { useAuth } from "../lib/auth";
 import { portalHomeForRole } from "../lib/portal-nav";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+import { toast } from "sonner";
+
 const inr = (n) =>
   "₹" +
   (n >= 1e7
@@ -63,16 +66,40 @@ const COLORS = [
   "var(--chart-4)",
   "var(--chart-5)",
 ];
+
+const SUPER_ADMIN_SESSION_KEY = "superAdminSession";
+
 export default function DashboardPage() {
   const { user } = useAuth();
+  const auth = useAuth();
   const navigate = useNavigate();
   const firstName = user?.name?.split(" ")[0] || "Admin";
   const instituteName = user?.institute || "your institute";
+
+  // When switching TO institute admin, the Institutes page sets switchedFrom: "super_admin"
+  // on the user object. We also persist the super admin session in sessionStorage so we
+  // can fully restore it when switching back.
+  const isSwitched = user?.switchedFrom === "super_admin";
+
+  const switchBackToSuperAdmin = async () => {
+    const raw = sessionStorage.getItem(SUPER_ADMIN_SESSION_KEY);
+    if (!raw) {
+      toast.error("Could not restore super admin session.");
+      return;
+    }
+    const superAdminUser = JSON.parse(raw);
+    sessionStorage.removeItem(SUPER_ADMIN_SESSION_KEY);
+    await auth.completeLogin(superAdminUser);
+    toast.success("Switched back to Super Admin");
+    navigate("/super/institutes");
+  };
+
   useEffect(() => {
     if (!user) return;
     const target = portalHomeForRole(user.role);
     if (target !== "/") navigate(target);
   }, [user, navigate]);
+
   return (
     <PageContainer>
       <PageHeader
@@ -81,6 +108,19 @@ export default function DashboardPage() {
         description={`Here's a real-time snapshot of ${instituteName}.`}
         actions={
           <>
+            {/* ── Back to Super Admin button — only shown when switched ── */}
+            {isSwitched && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={switchBackToSuperAdmin}
+                className="border-primary/40 text-primary hover:bg-primary/10"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                Back to Super Admin
+              </Button>
+            )}
+
             <Button variant="outline" size="sm">
               <Download className="h-4 w-4" />
               Export
