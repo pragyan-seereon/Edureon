@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import {
   useInquiries,
+  useStudents,
   inquiriesApi,
   ADM_STAGES,
   activityApi,
@@ -66,6 +67,7 @@ export default function AdmissionsDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const inquiries = useInquiries();
+  const students = useStudents();
   useActivity();
   useNotes();
   const inq = inquiries.find((x) => x.id === id);
@@ -97,22 +99,33 @@ export default function AdmissionsDetails() {
   const docsOk = (inq.documents || []).filter((d) => d.ok).length;
   const docsTotal = (inq.documents || []).length;
   const enroll = () => {
-    if (inq.stage !== "Enrolled") inquiriesApi.moveStage(id, "Enrolled");
-    studentsApi.add({
-      name: inq.name,
-      admissionNo: `ADM-${new Date().getFullYear()}-${id.replace("ADM-", "")}`,
-      class: inq.class,
-      section: "A",
-      rollNo: Math.floor(Math.random() * 60) + 1,
-      gender: inq.gender || "Male",
-      parent: inq.parent,
-      phone: inq.phone,
-      feeStatus: "Paid",
-      attendance: 100,
-      email: inq.email,
-      address: inq.address,
-      dob: inq.dob,
-    });
+    const admissionNo =
+      inq.admissionNo || `ADM-${new Date().getFullYear()}-${id.replace("ADM-", "")}`;
+    const existing = students.find(
+      (s) => s.sourceInquiryId === id || s.admissionNo === admissionNo,
+    );
+    if (!existing && inq.stage !== "Enrolled") {
+      inquiriesApi.moveStage(id, "Enrolled");
+    } else if (!existing) {
+      const studentId = studentsApi.add({
+        name: inq.name,
+        admissionNo,
+        class: inq.class,
+        section: inq.section || "A",
+        rollNo: inq.rollNo || Math.floor(Math.random() * 60) + 1,
+        gender: inq.gender || "Male",
+        parent: inq.parent,
+        phone: inq.phone,
+        feeStatus: inq.feePaid > 0 ? "Paid" : "Pending",
+        attendance: 100,
+        email: inq.email,
+        address: inq.address,
+        dob: inq.dob,
+        sourceInquiryId: id,
+        documents: (inq.documents || []).filter((d) => d.ok).map((d) => d.name),
+      });
+      inquiriesApi.update(id, { enrolledStudentId: studentId });
+    }
     toast.success(`${inq.name} enrolled as student`);
     setTimeout(() => navigate("/students"), 400);
   };

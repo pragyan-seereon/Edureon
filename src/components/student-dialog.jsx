@@ -1,8 +1,9 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
+  // DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,7 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
-import { FileCheck2, Upload } from "lucide-react";
+import { Eye, FileCheck2, FileUp, Trash2, X } from "lucide-react";
 import { studentsApi } from "../lib/store";
 import { toast } from "sonner";
 const classes = [
@@ -40,16 +41,26 @@ const classes = [
   "XII",
 ];
 const sections = ["A", "B", "C", "D"];
-const docs = [
-  "Student Aadhar",
-  "Birth Certificate",
-  "Transfer Certificate",
-  "Previous Marksheet",
-  "Parent ID",
-  "Address Proof",
-  "Passport Photo",
-  "Medical Certificate",
+const DOC_SLOTS = [
+  { id: "student_aadhar", label: "Student Aadhar", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
+  { id: "birth_certificate", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
+  { id: "transfer_certificate", label: "Transfer Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
+  { id: "previous_marksheet", label: "Previous Marksheet", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
+  { id: "parent_id", label: "Parent ID", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
+  { id: "address_proof", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
+  { id: "passport_photo", label: "Passport Photo", accept: ".jpg,.jpeg,.png", acceptLabel: "JPG / PNG", badge: "Mandatory" },
+  { id: "medical_certificate", label: "Medical Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
 ];
+const emptyDocs = () => Object.fromEntries(DOC_SLOTS.map((slot) => [slot.id, null]));
+function sanitizeFilename(name) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+function formatBytes(bytes) {
+  if (!bytes) return "On file";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 const empty = {
   name: "",
   admissionNo: "",
@@ -90,31 +101,50 @@ const empty = {
 export function StudentDialog({ open, onOpenChange, student }) {
   const [tab, setTab] = useState("personal");
   const [f, setF] = useState(empty);
-  const [uploaded, setUploaded] = useState({});
+  const [uploaded, setUploaded] = useState(emptyDocs);
+  const [dragOver, setDragOver] = useState(null);
+  const [viewingDoc, setViewingDoc] = useState(null);
   useEffect(() => {
     if (student) {
       setF({ ...empty, ...student });
       setUploaded(
-        Object.fromEntries((student.documents ?? []).map((d) => [d, true])),
+        Object.fromEntries(
+          DOC_SLOTS.map((slot) => [
+            slot.id,
+            (student.documents ?? []).includes(slot.label) ? { name: slot.label, size: 0, type: "" } : null,
+          ]),
+        ),
       );
     } else if (open) {
       setF({
         ...empty,
         admissionNo: "ADM-2025-" + Math.floor(1000 + Math.random() * 8999),
       });
-      setUploaded({});
+      setUploaded(emptyDocs());
     }
     if (open) setTab("personal");
   }, [student, open]);
   const set = (key, value) => setF((p) => ({ ...p, [key]: value }));
+  const handleFileUpload = (slotId, files) => {
+    const file = files?.[0];
+    const slot = DOC_SLOTS.find((item) => item.id === slotId);
+    if (!file || !slot) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 5MB limit`);
+      return;
+    }
+    setUploaded((u) => ({ ...u, [slotId]: file }));
+    toast.success(`${slot.label} uploaded`);
+  };
   const save = () => {
     if (!f.name || !f.parent || !f.phone)
       return toast.error("Student name, guardian and phone are required");
     const payload = {
       ...f,
       documents: Object.entries(uploaded)
-        .filter(([, ok]) => ok)
-        .map(([name]) => name),
+        .filter(([, file]) => file)
+        .map(([slotId]) => DOC_SLOTS.find((slot) => slot.id === slotId)?.label)
+        .filter(Boolean),
     };
     if (student) {
       studentsApi.update(student.id, payload);
@@ -132,10 +162,10 @@ export function StudentDialog({ open, onOpenChange, student }) {
           <DialogTitle className="font-display">
             {student ? "Edit Student Admission" : "New Student Admission"}
           </DialogTitle>
-          <DialogDescription>
+          {/* <DialogDescription>
             Capture personal, academic, guardian, fee, transport, hostel,
             medical and document details.
-          </DialogDescription>
+          </DialogDescription> */}
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab}>
@@ -453,45 +483,57 @@ export function StudentDialog({ open, onOpenChange, student }) {
             </Field>
           </TabsContent>
 
-          <TabsContent value="docs" className="mt-4 space-y-2">
-            {docs.map((doc) => (
-              <div
-                key={doc}
-                className="flex items-center justify-between rounded-md border border-border/60 p-3"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center">
-                    {uploaded[doc] ? (
-                      <FileCheck2 className="h-4 w-4 text-success" />
-                    ) : (
-                      <Upload className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">{doc}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      PDF / JPG record
-                    </div>
-                  </div>
+          <TabsContent value="docs" className="mt-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              {/* <div>
+                <div className="text-sm font-medium">Student Documents</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  PDF preferred · JPG/PNG accepted for scans · Max 5 MB per file
                 </div>
-                {uploaded[doc] ? (
-                  <Badge
-                    variant="outline"
-                    className="bg-success/10 text-success border-success/20"
-                  >
-                    Uploaded
-                  </Badge>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setUploaded((u) => ({ ...u, [doc]: true }))}
-                  >
-                    Upload
-                  </Button>
-                )}
-              </div>
-            ))}
+              </div> */}
+              <Badge variant="outline" className="text-xs shrink-0">
+                {Object.values(uploaded).filter(Boolean).length} uploaded
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {DOC_SLOTS.map((slot) => {
+                const file = uploaded[slot.id];
+                return (
+                  <StudentDocSlot
+                    key={slot.id}
+                    slot={slot}
+                    file={file}
+                    dragOver={dragOver === slot.id}
+                    onUpload={(files) => handleFileUpload(slot.id, files)}
+                    onDragOver={() => setDragOver(slot.id)}
+                    onDragLeave={() => setDragOver(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOver(null);
+                      handleFileUpload(slot.id, e.dataTransfer.files);
+                    }}
+                    onView={() => {
+                      if (!file?.type) {
+                        toast.info(`${slot.label} is already on file`);
+                        return;
+                      }
+                      const isImage = file.type.startsWith("image/");
+                      const isPDF = file.type === "application/pdf";
+                      setViewingDoc({
+                        name: slot.label,
+                        file,
+                        isImage,
+                        isPDF,
+                        url: URL.createObjectURL(file),
+                      });
+                    }}
+                    onRemove={() =>
+                      setUploaded((u) => ({ ...u, [slot.id]: null }))
+                    }
+                  />
+                );
+              })}
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -504,13 +546,155 @@ export function StudentDialog({ open, onOpenChange, student }) {
           </Button>
         </DialogFooter>
       </DialogContent>
+      {viewingDoc && (
+        <DocViewerModal doc={viewingDoc} onClose={() => setViewingDoc(null)} />
+      )}
     </Dialog>
   );
 }
+
+function StudentDocSlot({ slot, file, dragOver, onUpload, onView, onRemove, onDragOver, onDragLeave, onDrop }) {
+  const inputId = `student-file-${slot.id}`;
+  const handleChange = (e) => {
+    if (e.target.files?.length) {
+      onUpload(e.target.files);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div className={`border rounded-md overflow-hidden transition-colors ${dragOver ? "border-primary bg-primary/5" : "hover:bg-muted/20"}`}>
+      <div className="flex items-start gap-2 p-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-medium">{slot.label}</span>
+            {slot.badge === "Mandatory" && (
+              <span className="text-destructive">*</span>
+            )}
+            {/* <DocBadge badge={slot.badge} /> */}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            {slot.acceptLabel} · max 5 MB
+          </div>
+        </div>
+        <input type="file" id={inputId} accept={slot.accept} className="hidden" onChange={handleChange} />
+        {!file && (
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => document.getElementById(inputId).click()}>
+            <FileUp className="h-3.5 w-3.5" />Upload
+          </Button>
+        )}
+      </div>
+
+      {!file ? (
+        <div
+          className={`mx-3 mb-3 border-2 border-dashed rounded-md p-4 text-center text-xs text-muted-foreground cursor-pointer transition-colors ${dragOver ? "border-primary text-primary" : "border-border hover:border-muted-foreground/40"}`}
+          onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => document.getElementById(inputId).click()}
+        >
+          <FileUp className="h-5 w-5 mx-auto mb-1 opacity-50" />
+          Drag & drop or click to upload
+        </div>
+      ) : (
+        <StudentFilePreview file={file} onView={onView} onRemove={onRemove} />
+      )}
+    </div>
+  );
+}
+
+function StudentFilePreview({ file, onView, onRemove }) {
+  const isImage = file.type?.startsWith("image/");
+  const previewURL = isImage ? URL.createObjectURL(file) : "";
+  const sanitized = sanitizeFilename(file.name);
+
+  return (
+    <div className="border-t bg-muted/10">
+      <div className="flex items-center justify-between px-3 py-2">
+        <Badge className="bg-success/15 text-success border-success/20 text-[10px]">
+          <FileCheck2 className="h-3 w-3 mr-1" />Uploaded
+        </Badge>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1.5" onClick={onView}>
+            <Eye className="h-3 w-3 mr-0.5" />View
+          </Button>
+          <Button size="sm" variant="ghost" className="h-6 text-[10px] text-destructive/70 hover:text-destructive px-1.5" onClick={onRemove}>
+            <Trash2 className="h-3 w-3 mr-0.5" />Remove
+          </Button>
+        </div>
+      </div>
+      <div className="px-3 pb-3 cursor-pointer" onClick={onView}>
+        {isImage ? (
+          <div className="rounded-md overflow-hidden border">
+            <img src={previewURL} alt={sanitized} className="w-full max-h-28 object-contain bg-white" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5 rounded-md border bg-background px-3 py-2 hover:bg-muted/30 transition-colors">
+            <div className="h-8 w-8 rounded bg-destructive/10 flex items-center justify-center shrink-0">
+              <FileCheck2 className="h-4 w-4 text-destructive" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium truncate">{sanitized}</div>
+              <div className="text-[10px] text-muted-foreground">{formatBytes(file.size)}</div>
+            </div>
+            <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// function DocBadge({ badge }) {
+//   if (badge === "Mandatory") return <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-[10px]">Mandatory</Badge>;
+//   if (badge === "Recommended") return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">Recommended</Badge>;
+//   return <Badge className="bg-muted text-muted-foreground border-border text-[10px]">Optional</Badge>;
+// }
+
+function DocViewerModal({ doc, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-background rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div className="flex items-center gap-2 min-w-0">
+            <FileCheck2 className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate">{doc.name}</div>
+              <div className="text-[10px] text-muted-foreground">{formatBytes(doc.file.size)} · {sanitizeFilename(doc.file.name)}</div>
+            </div>
+          </div>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex-1 overflow-auto p-4 bg-muted/20">
+          {doc.isImage ? (
+            <div className="flex items-center justify-center min-h-full">
+              <img src={doc.url} alt={doc.name} className="max-w-full max-h-[70vh] object-contain rounded-md border shadow-sm bg-white" />
+            </div>
+          ) : doc.isPDF ? (
+            <iframe src={doc.url} title={doc.name} className="w-full rounded-md border" style={{ height: "70vh" }} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
+              <FileCheck2 className="h-8 w-8" />
+              <p className="text-sm">Preview not available for this file type.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, children, wide }) {
+  const required = typeof label === "string" && label.trim().endsWith("*");
+  const text = required ? label.replace(/\s*\*$/, "") : label;
   return (
     <div className={`space-y-1.5 ${wide ? "sm:col-span-2" : ""}`}>
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Label className="text-xs text-muted-foreground">
+        {text}
+        {required && <span className="text-destructive"> *</span>}
+      </Label>
       {children}
     </div>
   );

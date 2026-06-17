@@ -173,9 +173,7 @@ export default function Students() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Academic"
         title="Student Management"
-        description="Admissions, profiles, attendance, fees and academic records — click any row to open the full ERP record."
         actions={
           <>
             <Button
