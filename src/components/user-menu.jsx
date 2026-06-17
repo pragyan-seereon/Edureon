@@ -51,10 +51,9 @@ export function UserMenu() {
   const navigate = useNavigate();
   if (!user) return null;
 const onLogout = () => {
-  const redirectTo = user.role === "student" ? "/login" : "/admin/login";
   logout();
   toast.success("Signed out");
-  window.location.href = redirectTo;
+  window.location.href = "/login";
 };
   // const onSwitch = (role, label) => {
   //   switchRole(role);
