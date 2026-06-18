@@ -73,13 +73,14 @@ const INSTITUTE_TYPES = [
 ];
 
 const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "UGC", "AICTE", "Other"];
-const ACADEMIC_YEARS = [
-  "2022 Jan – 2023 Dec",
-  "2023 Jan – 2024 Dec",
-  "2024 Jan – 2025 Dec",
-  "2025 Jan – 2026 Dec",
-  "2026 Jan – 2027 Dec",
-];
+const currentYear = new Date().getFullYear();
+
+const ACADEMIC_YEARS = Array.from({ length: 10 }, (_, index) => {
+  const startYear = currentYear + index;
+  const endYear = startYear + 1;
+
+  return `${startYear}-${String(endYear).slice(-2)}`;
+});
 
 function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -92,6 +93,7 @@ function formatBytes(bytes) {
 }
 
 export default function CreateInstitute() {
+  
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
@@ -99,7 +101,7 @@ export default function CreateInstitute() {
     type: "School",
     board: "CBSE",
     customBoardName: "",
-    academicYear: "2026 Jan – 2027 Dec",
+    academicYear: `${currentYear}-${String(currentYear + 1).slice(-2)}`,
     primaryColor: "#1e3a5f",
     secondaryColor: "#f59e0b",
     logo: null,
@@ -491,15 +493,23 @@ export default function CreateInstitute() {
                   </Field>
                 )}
                 <Field label={<>Academic Year <span className="text-destructive">*</span></>}>
-                  <Select value={form.academicYear} onValueChange={(value) => set("academicYear", value)}>
-                    <SelectTrigger><SelectValue placeholder="Select academic year" /></SelectTrigger>
-                    <SelectContent>
-                      {ACADEMIC_YEARS.map((year) => (
-                        <SelectItem key={year} value={year}>{year}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
+  <Select
+    value={form.academicYear}
+    onValueChange={(value) => set("academicYear", value)}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select academic year" />
+    </SelectTrigger>
+
+    <SelectContent>
+      {ACADEMIC_YEARS.map((year) => (
+        <SelectItem key={year} value={year}>
+          {year}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</Field>
                 <Field label="Brand Primary Colour">
                   <ColourField value={form.primaryColor} onChange={(value) => set("primaryColor", value)} />
                 </Field>

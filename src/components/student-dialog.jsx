@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
-  // DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -24,86 +23,86 @@ import { Badge } from "./ui/badge";
 import { Eye, FileCheck2, FileUp, Trash2, X } from "lucide-react";
 import { studentsApi } from "../lib/store";
 import { toast } from "sonner";
-const classes = [
-  "Pre-KG",
-  "KG",
-  "I",
-  "II",
-  "III",
-  "IV",
-  "V",
-  "VI",
-  "VII",
-  "VIII",
-  "IX",
-  "X",
-  "XI",
-  "XII",
-];
-const sections = ["A", "B", "C", "D"];
+
 const DOC_SLOTS = [
-  { id: "student_aadhar", label: "Student Aadhar", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
-  { id: "birth_certificate", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
-  { id: "transfer_certificate", label: "Transfer Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
-  { id: "previous_marksheet", label: "Previous Marksheet", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
-  { id: "parent_id", label: "Parent ID", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
-  { id: "address_proof", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory" },
-  { id: "passport_photo", label: "Passport Photo", accept: ".jpg,.jpeg,.png", acceptLabel: "JPG / PNG", badge: "Mandatory" },
-  { id: "medical_certificate", label: "Medical Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "aadhar", label: "Aadhar Card", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "birth_certificate", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "transfer_certificate", label: "Previous School TC", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
+  { id: "last_marksheet", label: "Last Marksheet", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
+  { id: "passport_photo", label: "Passport Photo", accept: ".jpg,.jpeg,.png", acceptLabel: "JPG / PNG", badge: "Optional" },
+  { id: "parent_id", label: "Parent ID (PAN/Aadhar)", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "address_proof", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "caste_certificate", label: "Caste / EWS Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
 ];
+
 const emptyDocs = () => Object.fromEntries(DOC_SLOTS.map((slot) => [slot.id, null]));
+
 function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
+
 function formatBytes(bytes) {
   if (!bytes) return "On file";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
+
 const empty = {
+  // personal
   name: "",
-  admissionNo: "",
-  class: "X",
-  section: "A",
-  rollNo: 1,
-  gender: "Male",
-  parent: "",
-  phone: "",
-  feeStatus: "Pending",
-  attendance: 95,
   dob: "",
+  gender: "Male",
   blood: "",
   nationality: "Indian",
   religion: "",
   category: "General",
   motherTongue: "",
+  aadhar: "",
+  birthCertificateNo: "",
+  // academic
+  admissionNo: "",
+  rollNo: 1,
+  attendance: 95,
+  class: "VI",
+  section: "A",
   previousSchool: "",
   previousClass: "",
-  board: "CBSE",
   lastPercent: "",
+  board: "CBSE",
+  // address
   address: "",
   city: "",
   state: "",
   pin: "",
-  email: "",
+  country: "India",
+  // parent
+  parent: "",
   motherName: "",
   parentOccupation: "",
   parentIncome: "",
+  phone: "",
   emergencyContact: "",
-  aadhar: "",
-  birthCertificateNo: "",
+  email: "",
+  source: "Walk-in",
+  notes: "",
+  // services
+  feeStatus: "Pending",
   transportRequired: "No",
   hostelRequired: "No",
+  feePlan: "Quarterly",
+  sibling: "",
   medicalNotes: "",
   documents: [],
 };
+
 export function StudentDialog({ open, onOpenChange, student }) {
   const [tab, setTab] = useState("personal");
   const [f, setF] = useState(empty);
   const [uploaded, setUploaded] = useState(emptyDocs);
   const [dragOver, setDragOver] = useState(null);
   const [viewingDoc, setViewingDoc] = useState(null);
+
   useEffect(() => {
     if (student) {
       setF({ ...empty, ...student });
@@ -111,20 +110,21 @@ export function StudentDialog({ open, onOpenChange, student }) {
         Object.fromEntries(
           DOC_SLOTS.map((slot) => [
             slot.id,
-            (student.documents ?? []).includes(slot.label) ? { name: slot.label, size: 0, type: "" } : null,
+            (student.documents ?? []).includes(slot.label)
+              ? { name: slot.label, size: 0, type: "" }
+              : null,
           ]),
         ),
       );
     } else if (open) {
-      setF({
-        ...empty,
-        admissionNo: "ADM-2025-" + Math.floor(1000 + Math.random() * 8999),
-      });
+      setF({ ...empty });
       setUploaded(emptyDocs());
     }
     if (open) setTab("personal");
   }, [student, open]);
+
   const set = (key, value) => setF((p) => ({ ...p, [key]: value }));
+
   const handleFileUpload = (slotId, files) => {
     const file = files?.[0];
     const slot = DOC_SLOTS.find((item) => item.id === slotId);
@@ -136,6 +136,7 @@ export function StudentDialog({ open, onOpenChange, student }) {
     setUploaded((u) => ({ ...u, [slotId]: file }));
     toast.success(`${slot.label} uploaded`);
   };
+
   const save = () => {
     if (!f.name || !f.parent || !f.phone)
       return toast.error("Student name, guardian and phone are required");
@@ -155,6 +156,7 @@ export function StudentDialog({ open, onOpenChange, student }) {
     }
     onOpenChange(false);
   };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -162,335 +164,279 @@ export function StudentDialog({ open, onOpenChange, student }) {
           <DialogTitle className="font-display">
             {student ? "Edit Student Admission" : "New Student Admission"}
           </DialogTitle>
-          {/* <DialogDescription>
-            Capture personal, academic, guardian, fee, transport, hostel,
-            medical and document details.
-          </DialogDescription> */}
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
             <TabsTrigger value="personal">Personal</TabsTrigger>
-            <TabsTrigger value="academic">Academic</TabsTrigger>
-            <TabsTrigger value="guardian">Guardian</TabsTrigger>
+            <TabsTrigger value="academic">Educational</TabsTrigger>
+            <TabsTrigger value="address">Address</TabsTrigger>
+            <TabsTrigger value="parent">Parent</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="medical">Medical</TabsTrigger>
             <TabsTrigger value="docs">Documents</TabsTrigger>
           </TabsList>
 
-          <TabsContent
-            value="personal"
-            className="grid sm:grid-cols-2 gap-4 mt-4"
-          >
-            <Field label="Full name *">
+          {/* ── PERSONAL ── */}
+          <TabsContent value="personal" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Full Name">
               <Input
                 value={f.name}
                 onChange={(e) => set("name", e.target.value)}
+                placeholder="Riya Mehra"
               />
-            </Field>
-            <Field label="Admission No">
-              <Input
-                value={f.admissionNo}
-                onChange={(e) => set("admissionNo", e.target.value)}
-                className="font-mono"
-              />
-            </Field>
-            <Field label="Date of birth">
+            </F>
+            <F label="Date of Birth">
               <Input
                 type="date"
                 value={f.dob}
                 onChange={(e) => set("dob", e.target.value)}
               />
-            </Field>
-            <Field label="Gender">
+            </F>
+            <F label="Gender">
               <Select value={f.gender} onValueChange={(v) => set("gender", v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {["Male", "Female", "Other"].map((x) => (
-                    <SelectItem key={x} value={x}>
-                      {x}
-                    </SelectItem>
+                    <SelectItem key={x} value={x}>{x}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </Field>
-            <Field label="Blood group">
-              <Input
-                value={f.blood ?? ""}
-                onChange={(e) => set("blood", e.target.value)}
-              />
-            </Field>
-            <Field label="Student Aadhar">
-              <Input
-                value={f.aadhar ?? ""}
-                onChange={(e) => set("aadhar", e.target.value)}
-                placeholder="XXXX-XXXX-1234"
-              />
-            </Field>
-            <Field label="Nationality">
-              <Input
-                value={f.nationality ?? ""}
-                onChange={(e) => set("nationality", e.target.value)}
-              />
-            </Field>
-            <Field label="Category">
-              <Select
-                value={f.category}
-                onValueChange={(v) => set("category", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+            </F>
+            <F label="Blood Group">
+              <Select value={f.blood} onValueChange={(v) => set("blood", v)}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((x) => (
+                    <SelectItem key={x} value={x}>{x}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </F>
+            <F label="Nationality">
+              <Input value={f.nationality} onChange={(e) => set("nationality", e.target.value)} />
+            </F>
+            <F label="Religion">
+              <Input value={f.religion} onChange={(e) => set("religion", e.target.value)} />
+            </F>
+            <F label="Category">
+              <Select value={f.category} onValueChange={(v) => set("category", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {["General", "OBC", "SC", "ST", "EWS"].map((x) => (
-                    <SelectItem key={x} value={x}>
-                      {x}
-                    </SelectItem>
+                    <SelectItem key={x} value={x}>{x}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </Field>
+            </F>
+            <F label="Mother Tongue">
+              <Input value={f.motherTongue} onChange={(e) => set("motherTongue", e.target.value)} placeholder="Hindi" />
+            </F>
+            <F label="Student Aadhar">
+              <Input value={f.aadhar} onChange={(e) => set("aadhar", e.target.value)} placeholder="XXXX-XXXX-1234" />
+            </F>
+            <F label="Birth Certificate No.">
+              <Input value={f.birthCertificateNo} onChange={(e) => set("birthCertificateNo", e.target.value)} />
+            </F>
           </TabsContent>
 
-          <TabsContent
-            value="academic"
-            className="grid sm:grid-cols-2 gap-4 mt-4"
-          >
-            <Field label="Class">
-              <Select value={f.class} onValueChange={(v) => set("class", v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {classes.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Section">
-              <Select
-                value={f.section}
-                onValueChange={(v) => set("section", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {sections.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Roll No">
+          {/* ── EDUCATIONAL ── */}
+          <TabsContent value="academic" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Admission No">
+              <Input
+                value={f.admissionNo}
+                onChange={(e) => set("admissionNo", e.target.value)}
+                className="font-mono"
+              />
+            </F>
+            <F label="Roll No">
               <Input
                 type="number"
                 min={1}
                 value={f.rollNo}
                 onChange={(e) => set("rollNo", parseInt(e.target.value) || 1)}
               />
-            </Field>
-            <Field label="Previous school">
-              <Input
-                value={f.previousSchool ?? ""}
-                onChange={(e) => set("previousSchool", e.target.value)}
-              />
-            </Field>
-            <Field label="Previous class">
-              <Input
-                value={f.previousClass ?? ""}
-                onChange={(e) => set("previousClass", e.target.value)}
-              />
-            </Field>
-            <Field label="Board">
-              <Select value={f.board} onValueChange={(v) => set("board", v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+            </F>
+            <F label="Applying for Class">
+              <Select value={f.class} onValueChange={(v) => set("class", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["CBSE", "ICSE", "State Board", "IB", "IGCSE", "Other"].map(
-                    (x) => (
-                      <SelectItem key={x} value={x}>
-                        {x}
-                      </SelectItem>
-                    ),
-                  )}
+                  {["Pre-KG", "KG", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"].map((c) => (
+                    <SelectItem key={c} value={c}>Class {c}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            </Field>
-            <Field label="Last aggregate %">
-              <Input
-                value={f.lastPercent ?? ""}
-                onChange={(e) => set("lastPercent", e.target.value)}
-              />
-            </Field>
-            <Field label="Attendance %">
+            </F>
+            <F label="Preferred Section">
+              <Select value={f.section} onValueChange={(v) => set("section", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["A", "B", "C", "D", "Any"].map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </F>
+            <F label="Previous School">
+              <Input value={f.previousSchool} onChange={(e) => set("previousSchool", e.target.value)} placeholder="DAV Public School" />
+            </F>
+            <F label="Previous Class">
+              <Input value={f.previousClass} onChange={(e) => set("previousClass", e.target.value)} placeholder="Class V" />
+            </F>
+            <F label="Last Aggregate %">
+              <Input type="number" value={f.lastPercent} onChange={(e) => set("lastPercent", e.target.value)} placeholder="87" />
+            </F>
+            <F label="Previous Board">
+              <Select value={f.board} onValueChange={(v) => set("board", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["CBSE", "ICSE", "State Board", "IB", "IGCSE", "Other"].map((x) => (
+                    <SelectItem key={x} value={x}>{x}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </F>
+            <F label="Attendance %">
               <Input
                 type="number"
                 min={0}
                 max={100}
                 value={f.attendance}
-                onChange={(e) =>
-                  set("attendance", parseInt(e.target.value) || 0)
-                }
+                onChange={(e) => set("attendance", parseInt(e.target.value) || 0)}
               />
-            </Field>
+            </F>
           </TabsContent>
 
-          <TabsContent
-            value="guardian"
-            className="grid sm:grid-cols-2 gap-4 mt-4"
-          >
-            <Field label="Father / Guardian *">
+          {/* ── ADDRESS ── */}
+          <TabsContent value="address" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Residential Address" wide>
+              <Textarea rows={2} value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="House no, street, locality" />
+            </F>
+            <F label="City">
+              <Input value={f.city} onChange={(e) => set("city", e.target.value)} placeholder="Delhi" />
+            </F>
+            <F label="State">
+              <Input value={f.state} onChange={(e) => set("state", e.target.value)} />
+            </F>
+            <F label="PIN Code">
+              <Input value={f.pin} onChange={(e) => set("pin", e.target.value)} placeholder="110001" />
+            </F>
+            <F label="Country">
+              <Input value={f.country} onChange={(e) => set("country", e.target.value)} />
+            </F>
+          </TabsContent>
+
+          {/* ── PARENT ── */}
+          <TabsContent value="parent" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Father / Guardian Name">
               <Input
                 value={f.parent}
                 onChange={(e) => set("parent", e.target.value)}
+                placeholder="Anil Mehra"
               />
-            </Field>
-            <Field label="Mother's name">
-              <Input
-                value={f.motherName ?? ""}
-                onChange={(e) => set("motherName", e.target.value)}
-              />
-            </Field>
-            <Field label="Primary phone *">
+            </F>
+            <F label="Mother's Name">
+              <Input value={f.motherName} onChange={(e) => set("motherName", e.target.value)} />
+            </F>
+            <F label="Occupation">
+              <Input value={f.parentOccupation} onChange={(e) => set("parentOccupation", e.target.value)} placeholder="Business / Service" />
+            </F>
+            <F label="Annual Income">
+              <Input type="number" value={f.parentIncome} onChange={(e) => set("parentIncome", e.target.value)} placeholder="1200000" />
+            </F>
+            <F label="Primary Mobile">
               <Input
                 value={f.phone}
                 onChange={(e) => set("phone", e.target.value)}
+                placeholder="+91 ..."
               />
-            </Field>
-            <Field label="Email">
+            </F>
+            <F label="Emergency Contact">
+              <Input value={f.emergencyContact} onChange={(e) => set("emergencyContact", e.target.value)} placeholder="+91 ..." />
+            </F>
+            <F label="Email">
               <Input
                 type="email"
-                value={f.email ?? ""}
+                value={f.email}
                 onChange={(e) => set("email", e.target.value)}
+                placeholder="parent@mail.com"
               />
-            </Field>
-            <Field label="Occupation">
-              <Input
-                value={f.parentOccupation ?? ""}
-                onChange={(e) => set("parentOccupation", e.target.value)}
-              />
-            </Field>
-            <Field label="Annual income">
-              <Input
-                value={f.parentIncome ?? ""}
-                onChange={(e) => set("parentIncome", e.target.value)}
-              />
-            </Field>
-            <Field label="Emergency contact">
-              <Input
-                value={f.emergencyContact ?? ""}
-                onChange={(e) => set("emergencyContact", e.target.value)}
-              />
-            </Field>
-            <Field label="Birth certificate no.">
-              <Input
-                value={f.birthCertificateNo ?? ""}
-                onChange={(e) => set("birthCertificateNo", e.target.value)}
-              />
-            </Field>
-            <Field label="Residential address" wide>
+            </F>
+            <F label="Source">
+              <Select value={f.source} onValueChange={(v) => set("source", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["Walk-in", "Website", "Referral", "Ad Campaign", "Education Fair", "Social Media"].map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </F>
+            <F label="Counselor Notes" wide>
               <Textarea
                 rows={2}
-                value={f.address ?? ""}
-                onChange={(e) => set("address", e.target.value)}
+                value={f.notes}
+                onChange={(e) => set("notes", e.target.value)}
+                placeholder="Sibling, transport, scholarship interest…"
               />
-            </Field>
-            <Field label="City">
-              <Input
-                value={f.city ?? ""}
-                onChange={(e) => set("city", e.target.value)}
-              />
-            </Field>
-            <Field label="State">
-              <Input
-                value={f.state ?? ""}
-                onChange={(e) => set("state", e.target.value)}
-              />
-            </Field>
-            <Field label="PIN">
-              <Input
-                value={f.pin ?? ""}
-                onChange={(e) => set("pin", e.target.value)}
-              />
-            </Field>
+            </F>
           </TabsContent>
 
-          <TabsContent
-            value="services"
-            className="grid sm:grid-cols-2 gap-4 mt-4"
-          >
-            <Field label="Fee status">
-              <Select
-                value={f.feeStatus}
-                onValueChange={(v) => set("feeStatus", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+          {/* ── SERVICES ── */}
+          <TabsContent value="services" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Fee Status">
+              <Select value={f.feeStatus} onValueChange={(v) => set("feeStatus", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Paid">Paid</SelectItem>
                   <SelectItem value="Pending">Pending</SelectItem>
                   <SelectItem value="Overdue">Overdue</SelectItem>
                 </SelectContent>
               </Select>
-            </Field>
-            <Field label="Transport required">
-              <Select
-                value={f.transportRequired}
-                onValueChange={(v) => set("transportRequired", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+            </F>
+            <F label="Transport Required">
+              <Select value={f.transportRequired} onValueChange={(v) => set("transportRequired", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="No">No</SelectItem>
                   <SelectItem value="Yes">Yes</SelectItem>
                 </SelectContent>
               </Select>
-            </Field>
-            <Field label="Hostel required">
-              <Select
-                value={f.hostelRequired}
-                onValueChange={(v) => set("hostelRequired", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+            </F>
+            <F label="Hostel Required">
+              <Select value={f.hostelRequired} onValueChange={(v) => set("hostelRequired", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="No">No</SelectItem>
                   <SelectItem value="Yes">Yes</SelectItem>
                 </SelectContent>
               </Select>
-            </Field>
-          </TabsContent>
-
-          <TabsContent value="medical" className="mt-4">
-            <Field label="Medical notes / allergies / special care" wide>
+            </F>
+            <F label="Fee Plan">
+              <Select value={f.feePlan} onValueChange={(v) => set("feePlan", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["Monthly", "Quarterly", "Half-yearly", "Annual"].map((x) => (
+                    <SelectItem key={x} value={x}>{x}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </F>
+            <F label="Sibling in School">
+              <Input value={f.sibling} onChange={(e) => set("sibling", e.target.value)} placeholder="Name / admission no." />
+            </F>
+            <F label="Medical Notes / Allergies" wide>
               <Textarea
-                rows={5}
-                value={f.medicalNotes ?? ""}
+                rows={3}
+                value={f.medicalNotes}
                 onChange={(e) => set("medicalNotes", e.target.value)}
+                placeholder="Allergies, medication, special care instructions"
               />
-            </Field>
+            </F>
           </TabsContent>
 
+          {/* ── DOCUMENTS ── */}
           <TabsContent value="docs" className="mt-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              {/* <div>
-                <div className="text-sm font-medium">Student Documents</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  PDF preferred · JPG/PNG accepted for scans · Max 5 MB per file
-                </div>
-              </div> */}
               <Badge variant="outline" className="text-xs shrink-0">
                 {Object.values(uploaded).filter(Boolean).length} uploaded
               </Badge>
@@ -527,9 +473,7 @@ export function StudentDialog({ open, onOpenChange, student }) {
                         url: URL.createObjectURL(file),
                       });
                     }}
-                    onRemove={() =>
-                      setUploaded((u) => ({ ...u, [slot.id]: null }))
-                    }
+                    onRemove={() => setUploaded((u) => ({ ...u, [slot.id]: null }))}
                   />
                 );
               })}
@@ -568,10 +512,6 @@ function StudentDocSlot({ slot, file, dragOver, onUpload, onView, onRemove, onDr
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-medium">{slot.label}</span>
-            {slot.badge === "Mandatory" && (
-              <span className="text-destructive">*</span>
-            )}
-            {/* <DocBadge badge={slot.badge} /> */}
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">
             {slot.acceptLabel} · max 5 MB
@@ -645,12 +585,6 @@ function StudentFilePreview({ file, onView, onRemove }) {
   );
 }
 
-// function DocBadge({ badge }) {
-//   if (badge === "Mandatory") return <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-[10px]">Mandatory</Badge>;
-//   if (badge === "Recommended") return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">Recommended</Badge>;
-//   return <Badge className="bg-muted text-muted-foreground border-border text-[10px]">Optional</Badge>;
-// }
-
 function DocViewerModal({ doc, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
@@ -686,7 +620,7 @@ function DocViewerModal({ doc, onClose }) {
   );
 }
 
-function Field({ label, children, wide }) {
+function F({ label, children, wide }) {
   const required = typeof label === "string" && label.trim().endsWith("*");
   const text = required ? label.replace(/\s*\*$/, "") : label;
   return (

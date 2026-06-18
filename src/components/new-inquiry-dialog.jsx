@@ -47,54 +47,60 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+const initialState = {
+  // personal
+  name: "",
+  dob: "",
+  gender: "Male",
+  blood: "",
+  nationality: "Indian",
+  religion: "",
+  category: "General",
+  motherTongue: "",
+  aadhar: "",
+  birthCertificateNo: "",
+  // academic
+  admissionNo: "",
+  rollNo: 1,
+  class: "VI",
+  section: "A",
+  previousSchool: "",
+  previousClass: "",
+  lastPercent: "",
+  board: "CBSE",
+  attendance: 95,
+  // address
+  address: "",
+  city: "",
+  state: "",
+  pin: "",
+  country: "India",
+  // parent
+  parent: "",
+  parentOccupation: "",
+  parentIncome: "",
+  phone: "",
+  email: "",
+  motherName: "",
+  emergencyContact: "",
+  // misc
+  source: "Walk-in",
+  notes: "",
+  feeStatus: "Pending",
+  transportRequired: "No",
+  hostelRequired: "No",
+  sibling: "",
+  feePlan: "Quarterly",
+  medicalNotes: "",
+};
+
 export function NewInquiryDialog({ trigger, onCreate }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("personal");
   const [uploaded, setUploaded] = useState(emptyDocs);
   const [dragOver, setDragOver] = useState(null);
   const [viewingDoc, setViewingDoc] = useState(null);
-  const [d, setD] = useState({
-    // personal
-    name: "",
-    dob: "",
-    gender: "Male",
-    blood: "",
-    nationality: "Indian",
-    religion: "",
-    category: "General",
-    motherTongue: "",
-    aadhar: "",
-    birthCertificateNo: "",
-    // academic
-    class: "VI",
-    section: "A",
-    previousSchool: "",
-    previousClass: "",
-    lastPercent: "",
-    board: "CBSE",
-    // address
-    address: "",
-    city: "",
-    state: "",
-    pin: "",
-    country: "India",
-    // parent
-    parent: "",
-    parentOccupation: "",
-    parentIncome: "",
-    phone: "",
-    email: "",
-    motherName: "",
-    emergencyContact: "",
-    // misc
-    source: "Walk-in",
-    notes: "",
-    transportRequired: "No",
-    hostelRequired: "No",
-    sibling: "",
-    feePlan: "Quarterly",
-    medicalNotes: "",
-  });
+  const [d, setD] = useState(initialState);
 
   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
@@ -112,40 +118,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
   const save = () => {
     onCreate?.({
-      name: d.name,
-      class: d.class,
-      parent: d.parent,
-      phone: d.phone,
-      email: d.email,
-      source: d.source,
-      notes: d.notes,
-      dob: d.dob,
-      gender: d.gender,
-      blood: d.blood,
-      nationality: d.nationality,
-      religion: d.religion,
-      category: d.category,
-      motherTongue: d.motherTongue,
-      aadhar: d.aadhar,
-      birthCertificateNo: d.birthCertificateNo,
-      section: d.section,
-      previousSchool: d.previousSchool,
-      previousClass: d.previousClass,
-      lastPercent: d.lastPercent,
-      board: d.board,
-      address: d.address,
-      city: d.city,
-      state: d.state,
-      pin: d.pin,
-      country: d.country,
-      parentOccupation: d.parentOccupation,
-      parentIncome: d.parentIncome,
-      motherName: d.motherName,
-      emergencyContact: d.emergencyContact,
-      transportRequired: d.transportRequired,
-      hostelRequired: d.hostelRequired,
-      feePlan: d.feePlan,
-      medicalNotes: d.medicalNotes,
+      ...d,
       documents: DOC_SLOTS.map((slot) => ({
         name: slot.label,
         ok: Boolean(uploaded[slot.id]),
@@ -160,43 +133,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
     setOpen(false);
     setTab("personal");
     setUploaded(emptyDocs());
-    setD({
-      name: "",
-      dob: "",
-      gender: "Male",
-      blood: "",
-      nationality: "Indian",
-      religion: "",
-      category: "General",
-      motherTongue: "",
-      aadhar: "",
-      birthCertificateNo: "",
-      class: "VI",
-      section: "A",
-      previousSchool: "",
-      previousClass: "",
-      lastPercent: "",
-      board: "CBSE",
-      address: "",
-      city: "",
-      state: "",
-      pin: "",
-      country: "India",
-      parent: "",
-      parentOccupation: "",
-      parentIncome: "",
-      phone: "",
-      email: "",
-      motherName: "",
-      emergencyContact: "",
-      source: "Walk-in",
-      notes: "",
-      transportRequired: "No",
-      hostelRequired: "No",
-      sibling: "",
-      feePlan: "Quarterly",
-      medicalNotes: "",
-    });
+    setD(initialState);
   };
 
   return (
@@ -220,18 +157,10 @@ export function NewInquiryDialog({ trigger, onCreate }) {
           {/* ── PERSONAL ── */}
           <TabsContent value="personal" className="grid sm:grid-cols-2 gap-3 mt-4">
             <F label="Full Name">
-              <Input
-                value={d.name}
-                onChange={(e) => set("name", e.target.value)}
-                placeholder="Riya Mehra"
-              />
+              <Input value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Riya Mehra" />
             </F>
             <F label="Date of Birth">
-              <Input
-                type="date"
-                value={d.dob}
-                onChange={(e) => set("dob", e.target.value)}
-              />
+              <Input type="date" value={d.dob} onChange={(e) => set("dob", e.target.value)} />
             </F>
             <F label="Gender">
               <Select value={d.gender} onValueChange={(v) => set("gender", v)}>
@@ -280,8 +209,14 @@ export function NewInquiryDialog({ trigger, onCreate }) {
             </F>
           </TabsContent>
 
-          {/* ── ACADEMIC ── */}
+          {/* ── EDUCATIONAL ── */}
           <TabsContent value="academic" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Admission No">
+              <Input value={d.admissionNo} onChange={(e) => set("admissionNo", e.target.value)} className="font-mono" />
+            </F>
+            <F label="Roll No">
+              <Input type="number" min={1} value={d.rollNo} onChange={(e) => set("rollNo", parseInt(e.target.value) || 1)} />
+            </F>
             <F label="Applying for Class">
               <Select value={d.class} onValueChange={(v) => set("class", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -321,6 +256,9 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 </SelectContent>
               </Select>
             </F>
+            {/* <F label="Attendance %">
+              <Input type="number" min={0} max={100} value={d.attendance} onChange={(e) => set("attendance", parseInt(e.target.value) || 0)} />
+            </F> */}
           </TabsContent>
 
           {/* ── ADDRESS ── */}
@@ -345,11 +283,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
           {/* ── PARENT ── */}
           <TabsContent value="parent" className="grid sm:grid-cols-2 gap-3 mt-4">
             <F label="Father / Guardian Name">
-              <Input
-                value={d.parent}
-                onChange={(e) => set("parent", e.target.value)}
-                placeholder="Anil Mehra"
-              />
+              <Input value={d.parent} onChange={(e) => set("parent", e.target.value)} placeholder="Anil Mehra" />
             </F>
             <F label="Mother's Name">
               <Input value={d.motherName} onChange={(e) => set("motherName", e.target.value)} />
@@ -361,23 +295,13 @@ export function NewInquiryDialog({ trigger, onCreate }) {
               <Input type="number" value={d.parentIncome} onChange={(e) => set("parentIncome", e.target.value)} placeholder="1200000" />
             </F>
             <F label="Primary Mobile">
-              <Input
-                value={d.phone}
-                onChange={(e) => set("phone", e.target.value)}
-                placeholder="+91 ..."
-              />
+              <Input value={d.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 ..." />
             </F>
             <F label="Emergency Contact">
               <Input value={d.emergencyContact} onChange={(e) => set("emergencyContact", e.target.value)} placeholder="+91 ..." />
             </F>
-            {/* Email and Source in one row — no `wide` on either */}
             <F label="Email">
-              <Input
-                type="email"
-                value={d.email}
-                onChange={(e) => set("email", e.target.value)}
-                placeholder="parent@mail.com"
-              />
+              <Input type="email" value={d.email} onChange={(e) => set("email", e.target.value)} placeholder="parent@mail.com" />
             </F>
             <F label="Source">
               <Select value={d.source} onValueChange={(v) => set("source", v)}>
@@ -390,17 +314,22 @@ export function NewInquiryDialog({ trigger, onCreate }) {
               </Select>
             </F>
             <F label="Counselor Notes" wide>
-              <Textarea
-                rows={2}
-                value={d.notes}
-                onChange={(e) => set("notes", e.target.value)}
-                placeholder="Sibling, transport, scholarship interest…"
-              />
+              <Textarea rows={2} value={d.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Sibling, transport, scholarship interest…" />
             </F>
           </TabsContent>
 
           {/* ── SERVICES ── */}
           <TabsContent value="services" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Fee Status">
+              <Select value={d.feeStatus} onValueChange={(v) => set("feeStatus", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Paid">Paid</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Overdue">Overdue</SelectItem>
+                </SelectContent>
+              </Select>
+            </F>
             <F label="Transport Required">
               <Select value={d.transportRequired} onValueChange={(v) => set("transportRequired", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -433,12 +362,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
               <Input value={d.sibling} onChange={(e) => set("sibling", e.target.value)} placeholder="Name / admission no." />
             </F>
             <F label="Medical Notes / Allergies" wide>
-              <Textarea
-                rows={3}
-                value={d.medicalNotes}
-                onChange={(e) => set("medicalNotes", e.target.value)}
-                placeholder="Allergies, medication, special care instructions"
-              />
+              <Textarea rows={3} value={d.medicalNotes} onChange={(e) => set("medicalNotes", e.target.value)} placeholder="Allergies, medication, special care instructions" />
             </F>
           </TabsContent>
 
@@ -522,8 +446,7 @@ function InquiryDocSlot({ slot, file, dragOver, onUpload, onView, onRemove, onDr
 
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${
-      dragOver ? "border-primary bg-primary/5"
-      : "hover:bg-muted/20"
+      dragOver ? "border-primary bg-primary/5" : "hover:bg-muted/20"
     }`}>
       <div className="flex items-start gap-2 p-3">
         <div className="min-w-0 flex-1">
@@ -545,8 +468,7 @@ function InquiryDocSlot({ slot, file, dragOver, onUpload, onView, onRemove, onDr
       {!file ? (
         <div
           className={`mx-3 mb-3 border-2 border-dashed rounded-md p-4 text-center text-xs cursor-pointer transition-colors ${
-            dragOver ? "border-primary text-primary"
-            : "border-border text-muted-foreground hover:border-muted-foreground/40"
+            dragOver ? "border-primary text-primary" : "border-border text-muted-foreground hover:border-muted-foreground/40"
           }`}
           onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
           onDragLeave={onDragLeave}
