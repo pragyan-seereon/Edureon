@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
 import { Card, CardContent } from "../../../components/ui/card";
@@ -36,6 +37,8 @@ import {
   Phone,
   Mail,
   Pencil,
+  FileCheck2,
+  Eye,
 } from "lucide-react";
 import {
   useStudents,
@@ -49,6 +52,18 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { StudentDialog } from "../../../components/student-dialog";
+
+const DOC_SLOTS = [
+  { id: "aadhar", label: "Aadhar Card", badge: "Optional" },
+  { id: "birth_certificate", label: "Birth Certificate", badge: "Optional" },
+  { id: "transfer_certificate", label: "Previous School TC", badge: "Recommended" },
+  { id: "last_marksheet", label: "Last Marksheet", badge: "Recommended" },
+  { id: "passport_photo", label: "Passport Photo", badge: "Optional" },
+  { id: "parent_id", label: "Parent ID (PAN/Aadhar)", badge: "Optional" },
+  { id: "address_proof", label: "Address Proof", badge: "Optional" },
+  { id: "caste_certificate", label: "Caste / EWS Certificate", badge: "Optional" },
+];
+
 export default function StudentDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -59,6 +74,10 @@ export default function StudentDetails() {
   const s = students.find((x) => x.id === id);
   const [editOpen, setEditOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
+
+  // ── document viewer state (view-only, no upload) ──
+  const [viewingDoc, setViewingDoc] = useState(null); // { label }
+
   if (!s)
     return (
       <PageContainer>
@@ -71,9 +90,11 @@ export default function StudentDetails() {
         </Link>
       </PageContainer>
     );
+
   const activity = activityApi.for("student", id);
   const notes = notesApi.for("student", id);
   const myTxns = txns.filter((t) => t.studentId === id);
+
   const promote = () => {
     const order = ["VI", "VII", "VIII", "IX", "X", "XI", "XII"];
     const i = order.indexOf(s.class);
@@ -83,18 +104,36 @@ export default function StudentDetails() {
       toast.success(`Promoted to ${order[i + 1]}`);
     } else toast.info("Already in highest class");
   };
+
   const print = (kind) => {
     toast.success(`${kind} sent to printer`);
     activityApi.log("student", id, `Printed: ${kind}`);
   };
+
+  /* ── documents on file (from saved student record) ── */
+  const savedDocs = s.documents ?? [];
+
+  const isOnFile = (slot) => savedDocs.includes(slot.label);
+
+  /* ── open inline viewer for a slot ── */
+  const openViewer = (slot) => {
+    setViewingDoc({ label: slot.label });
+  };
+
+  /* ── helper: field row for view mode ── */
+  const ViewRow = ({ label, value }) =>
+    value ? (
+      <div className="space-y-0.5">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-sm font-medium">{value}</p>
+      </div>
+    ) : null;
+
   return (
     <PageContainer>
       <PageHeader
         eyebrow={
-          <Link
-            to="/students"
-            className="hover:text-primary inline-flex items-center"
-          >
+          <Link to="/students" className="hover:text-primary inline-flex items-center">
             <ChevronLeft className="h-3.5 w-3.5" />
             Students
           </Link>
@@ -103,27 +142,15 @@ export default function StudentDetails() {
         description={`${s.admissionNo} · Class ${s.class}-${s.section} · Roll #${s.rollNo}`}
         actions={
           <>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEditOpen(true)}
-            >
+            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4" />
               Edit
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => print("Profile")}
-            >
+            <Button size="sm" variant="outline" onClick={() => print("Profile")}>
               <Printer className="h-4 w-4" />
               Print
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => print("ID Card")}
-            >
+            <Button size="sm" variant="outline" onClick={() => print("ID Card")}>
               <IdCard className="h-4 w-4" />
               ID Card
             </Button>
@@ -143,16 +170,13 @@ export default function StudentDetails() {
         }
       />
 
+      {/* ── Hero card + Quick actions ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         <Card className="lg:col-span-2 border-border/60">
           <CardContent className="p-5 flex items-center gap-5">
             <Avatar className="h-20 w-20">
               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-2xl">
-                {s.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)}
+                {s.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
@@ -160,6 +184,10 @@ export default function StudentDetails() {
                 <Badge>{s.feeStatus}</Badge>
                 <Badge variant="outline">{s.gender}</Badge>
                 <Badge variant="outline">Attendance {s.attendance}%</Badge>
+                {s.blood && <Badge variant="outline">{s.blood}</Badge>}
+                {s.category && s.category !== "General" && (
+                  <Badge variant="outline">{s.category}</Badge>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                 <div className="flex items-center gap-2">
@@ -168,8 +196,7 @@ export default function StudentDetails() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                  {s.email ||
-                    s.parent.toLowerCase().replace(/\s+/g, ".") + "@gmail.com"}
+                  {s.email || s.parent.toLowerCase().replace(/\s+/g, ".") + "@gmail.com"}
                 </div>
                 <div className="text-muted-foreground">
                   Parent: <span className="text-foreground">{s.parent}</span>
@@ -181,15 +208,13 @@ export default function StudentDetails() {
             </div>
           </CardContent>
         </Card>
+
         <Card className="border-border/60">
           <CardContent className="p-5 space-y-2">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Actions
-            </div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Actions</div>
             <div className="grid grid-cols-2 gap-2">
               <Button size="sm" variant="outline" onClick={promote}>
-                <ArrowUpRight className="h-3.5 w-3.5" />
-                Promote
+                <ArrowUpRight className="h-3.5 w-3.5" />Promote
               </Button>
               <Button
                 size="sm"
@@ -198,30 +223,22 @@ export default function StudentDetails() {
                   const sec = prompt("Transfer to section:", s.section);
                   if (sec) {
                     studentsApi.update(id, { section: sec });
-                    activityApi.log(
-                      "student",
-                      id,
-                      `Transferred to ${s.class}-${sec}`,
-                    );
+                    activityApi.log("student", id, `Transferred to ${s.class}-${sec}`);
                     toast.success("Transferred");
                   }
                 }}
               >
-                <ArrowRightLeft className="h-3.5 w-3.5" />
-                Transfer
+                <ArrowRightLeft className="h-3.5 w-3.5" />Transfer
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  studentsApi.update(id, {
-                    feeStatus: s.feeStatus === "Paid" ? "Pending" : "Paid",
-                  });
+                  studentsApi.update(id, { feeStatus: s.feeStatus === "Paid" ? "Pending" : "Paid" });
                   activityApi.log("student", id, "Status toggled");
                 }}
               >
-                <UserX className="h-3.5 w-3.5" />
-                Suspend
+                <UserX className="h-3.5 w-3.5" />Suspend
               </Button>
               <Button
                 size="sm"
@@ -232,8 +249,7 @@ export default function StudentDetails() {
                   activityApi.log("student", id, "Transport assigned");
                 }}
               >
-                <Bus className="h-3.5 w-3.5" />
-                Transport
+                <Bus className="h-3.5 w-3.5" />Transport
               </Button>
               <Button
                 size="sm"
@@ -244,130 +260,219 @@ export default function StudentDetails() {
                   activityApi.log("student", id, "Hostel assigned");
                 }}
               >
-                <Building2 className="h-3.5 w-3.5" />
-                Hostel
+                <Building2 className="h-3.5 w-3.5" />Hostel
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => print("Bonafide Certificate")}
-              >
-                <FileText className="h-3.5 w-3.5" />
-                Certificate
+              <Button size="sm" variant="outline" onClick={() => print("Bonafide Certificate")}>
+                <FileText className="h-3.5 w-3.5" />Certificate
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* ── Main tabs ── */}
       <Tabs defaultValue="overview">
         <TabsList className="flex-wrap h-auto">
           {[
-            "overview",
-            "personal",
-            "academic",
-            "attendance",
-            "assignments",
-            "results",
-            "fees",
-            "documents",
-            "medical",
-            "transport",
-            "hostel",
-            "parents",
-            "activity",
+            "overview", "documents",
+            "attendance", "assignments", "results", "fees",
+            "transport", "hostel", "activity",
           ].map((t) => (
-            <TabsTrigger key={t} value={t} className="capitalize">
-              {t}
-            </TabsTrigger>
+            <TabsTrigger key={t} value={t} className="capitalize">{t}</TabsTrigger>
           ))}
         </TabsList>
 
-        <TabsContent
-          value="overview"
-          className="mt-4 grid md:grid-cols-4 gap-3"
-        >
-          <Stat label="Attendance" value={`${s.attendance}%`} />
-          <Stat label="Avg Score" value="82%" />
-          <Stat label="Class Rank" value="#7" />
-          <Stat label="Fee Status" value={s.feeStatus} />
-        </TabsContent>
+        {/* ── OVERVIEW ── exact mirror of all creation dialog fields ── */}
+        <TabsContent value="overview" className="mt-4 space-y-5">
 
-        <TabsContent value="personal" className="mt-4">
+          {/* ── Personal Information (Tab 1 of dialog) ── */}
           <Card>
-            <CardContent className="p-5 grid md:grid-cols-2 gap-4">
-              {[
-                ["Full name", "name"],
-                ["Admission no", "admissionNo"],
-                ["DOB", "dob"],
-                ["Blood group", "blood"],
-                ["Nationality", "nationality"],
-                ["Religion", "religion"],
-                ["Category", "category"],
-                ["Mother tongue", "motherTongue"],
-                ["Address", "address"],
-                ["City", "city"],
-                ["State", "state"],
-                ["PIN", "pin"],
-                ["Aadhar", "aadhar"],
-                ["Email", "email"],
-              ].map(([label, k]) => (
-                <EditField
-                  key={k}
-                  label={label}
-                  value={s[k] || ""}
-                  onSave={(v) => {
-                    studentsApi.update(id, { [k]: v });
-                    activityApi.log("student", id, `${label} updated`);
-                  }}
-                />
-              ))}
+            <CardContent className="p-5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-4 pb-2 border-b">
+                Personal Information
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
+                <VF label="Full Name" value={s.name} />
+                <VF label="Admission No" value={s.admissionNo} mono />
+                <VF label="Date of Birth" value={s.dob} />
+                <VF label="Gender" value={s.gender} />
+                <VF label="Blood Group" value={s.blood} />
+                <VF label="Student Aadhar" value={s.aadhar} />
+                <VF label="Nationality" value={s.nationality} />
+                <VF label="Category" value={s.category} />
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="academic" className="mt-4">
+          {/* ── Academic Details (Tab 2 of dialog) ── */}
           <Card>
-            <CardContent className="p-5 grid md:grid-cols-2 gap-4">
-              <EditField
-                label="Class"
-                value={s.class}
-                onSave={(v) => studentsApi.update(id, { class: v })}
-              />
-              <EditField
-                label="Section"
-                value={s.section}
-                onSave={(v) => studentsApi.update(id, { section: v })}
-              />
-              <EditField
-                label="Roll no"
-                value={String(s.rollNo)}
-                onSave={(v) => studentsApi.update(id, { rollNo: Number(v) })}
-              />
-              <EditField
-                label="Previous school"
-                value={s.previousSchool || ""}
-                onSave={(v) => studentsApi.update(id, { previousSchool: v })}
-              />
-              <EditField
-                label="Previous class"
-                value={s.previousClass || ""}
-                onSave={(v) => studentsApi.update(id, { previousClass: v })}
-              />
-              <EditField
-                label="Board"
-                value={s.board || ""}
-                onSave={(v) => studentsApi.update(id, { board: v })}
-              />
-              <EditField
-                label="Last %"
-                value={s.lastPercent || ""}
-                onSave={(v) => studentsApi.update(id, { lastPercent: v })}
-              />
+            <CardContent className="p-5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-4 pb-2 border-b">
+                Academic Details
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
+                <VF label="Class" value={s.class ? `Class ${s.class}` : "—"} />
+                <VF label="Section" value={s.section} />
+                <VF label="Roll No" value={String(s.rollNo)} />
+                <VF label="Board" value={s.board} />
+                <VF label="Previous School" value={s.previousSchool} />
+                <VF label="Previous Class" value={s.previousClass} />
+                <VF label="Last Aggregate %" value={s.lastPercent ? `${s.lastPercent}%` : null} />
+                <VF label="Attendance %" value={`${s.attendance}%`} />
+              </div>
             </CardContent>
           </Card>
+
+          {/* ── Guardian / Family (Tab 3 of dialog) ── */}
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-4 pb-2 border-b">
+                Guardian / Family
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
+                <VF label="Father / Guardian" value={s.parent} />
+                <VF label="Mother's Name" value={s.motherName} />
+                <VF label="Primary Phone" value={s.phone} />
+                <VF label="Email" value={s.email} />
+                <VF label="Occupation" value={s.parentOccupation} />
+                <VF label="Annual Income" value={s.parentIncome ? `₹${Number(s.parentIncome).toLocaleString("en-IN")}` : null} />
+                <VF label="Emergency Contact" value={s.emergencyContact} />
+                <VF label="Birth Certificate No." value={s.birthCertificateNo} />
+                <VF label="City" value={s.city} />
+                <VF label="State" value={s.state} />
+                <VF label="PIN" value={s.pin} />
+              </div>
+              {s.address && (
+                <div className="mt-4 pt-4 border-t space-y-0.5">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Residential Address</p>
+                  <p className="text-sm font-medium">{s.address}{s.city ? `, ${s.city}` : ""}{s.state ? `, ${s.state}` : ""}{s.pin ? ` - ${s.pin}` : ""}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Services (Tab 4 of dialog) ── */}
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-4 pb-2 border-b">
+                Services
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
+                <VF label="Fee Status" value={s.feeStatus} />
+                <VF label="Transport Required" value={s.transportRequired ?? "No"} />
+                <VF label="Hostel Required" value={s.hostelRequired ?? "No"} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Medical (Tab 5 of dialog) ── */}
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-4 pb-2 border-b">
+                Medical
+              </p>
+              {s.medicalNotes ? (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Medical Notes / Allergies / Special Care</p>
+                  <p className="text-sm font-medium whitespace-pre-wrap">{s.medicalNotes}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No medical notes recorded.</p>
+              )}
+            </CardContent>
+          </Card>
+
         </TabsContent>
 
+        {/* ── DOCUMENTS ── view-only ── */}
+        <TabsContent value="documents" className="mt-4">
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4 pb-2 border-b">
+                <p className="text-sm font-medium">Student Documents</p>
+                <Badge variant="outline" className="text-xs">
+                  {DOC_SLOTS.filter(isOnFile).length} / {DOC_SLOTS.length} on file
+                </Badge>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {DOC_SLOTS.map((slot) => {
+                  const onFile = isOnFile(slot);
+                  return (
+                    <div
+                      key={slot.id}
+                      className={`border rounded-md overflow-hidden transition-colors ${onFile ? "hover:bg-muted/20" : "opacity-90"}`}
+                    >
+                      <div className="flex items-center gap-3 p-3">
+                        <div className={`h-9 w-9 rounded flex items-center justify-center shrink-0 ${onFile ? "bg-green-50" : "bg-muted"}`}>
+                          {onFile
+                            ? <FileCheck2 className="h-4.5 w-4.5 text-green-600" />
+                            : <FileText className="h-4 w-4 text-muted-foreground" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{slot.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{slot.badge}</p>
+                        </div>
+                        {onFile ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge className="bg-green-50 text-green-700 border-green-200 text-[10px]">
+                              On file
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-[10px] px-2"
+                              onClick={() => openViewer(slot)}
+                            >
+                              <Eye className="h-3 w-3 mr-0.5" />View
+                            </Button>
+                          </div>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">
+                            Not on file
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* inline doc viewer */}
+          {viewingDoc && (
+            <Card className="mt-4">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FileCheck2 className="h-4 w-4 text-green-600" />
+                    <p className="text-sm font-medium">{viewingDoc.label}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    onClick={() => setViewingDoc(null)}
+                  >
+                    <span className="text-base leading-none">×</span>
+                  </Button>
+                </div>
+
+                <div className="rounded-md border bg-muted/20 flex flex-col items-center justify-center min-h-48 gap-3 p-6">
+                  <FileCheck2 className="h-10 w-10 text-green-600 opacity-60" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium">{viewingDoc.label}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Document is on file but no preview is available here.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── ATTENDANCE ── */}
         <TabsContent value="attendance" className="mt-4">
           <Card>
             <CardContent className="p-5">
@@ -395,6 +500,7 @@ export default function StudentDetails() {
           </Card>
         </TabsContent>
 
+        {/* ── ASSIGNMENTS ── */}
         <TabsContent value="assignments" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -409,26 +515,17 @@ export default function StudentDetails() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[
-                    "Trigonometry W/S",
-                    "Lab Report",
-                    "Essay: Role Models",
-                    "Python Functions",
-                  ].map((t, i) => (
+                  {["Trigonometry W/S", "Lab Report", "Essay: Role Models", "Python Functions"].map((t, i) => (
                     <TableRow key={i}>
                       <TableCell>{t}</TableCell>
                       <TableCell>{["Math", "Sci", "Eng", "CS"][i]}</TableCell>
-                      <TableCell>
-                        {["28 Nov", "30 Nov", "26 Nov", "24 Nov"][i]}
-                      </TableCell>
+                      <TableCell>{["28 Nov", "30 Nov", "26 Nov", "24 Nov"][i]}</TableCell>
                       <TableCell>
                         <Badge variant={i < 2 ? "default" : "outline"}>
                           {i < 2 ? "Submitted" : "Graded"}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        {i >= 2 ? ["18/20", "A"][i - 2] : "—"}
-                      </TableCell>
+                      <TableCell>{i >= 2 ? ["18/20", "A"][i - 2] : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -437,6 +534,7 @@ export default function StudentDetails() {
           </Card>
         </TabsContent>
 
+        {/* ── RESULTS ── */}
         <TabsContent value="results" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -449,28 +547,22 @@ export default function StudentDetails() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[
-                    ["Math", 88, "A"],
-                    ["Science", 82, "A"],
-                    ["English", 91, "A+"],
-                    ["Social", 76, "B"],
-                    ["Hindi", 80, "A"],
-                    ["CS", 95, "A+"],
-                  ].map(([n, m, g], i) => (
-                    <TableRow key={i}>
-                      <TableCell>{n}</TableCell>
-                      <TableCell>{m}/100</TableCell>
-                      <TableCell>
-                        <Badge>{g}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {[["Math", 88, "A"], ["Science", 82, "A"], ["English", 91, "A+"], ["Social", 76, "B"], ["Hindi", 80, "A"], ["CS", 95, "A+"]].map(
+                    ([n, m, g], i) => (
+                      <TableRow key={i}>
+                        <TableCell>{n}</TableCell>
+                        <TableCell>{m}/100</TableCell>
+                        <TableCell><Badge>{g}</Badge></TableCell>
+                      </TableRow>
+                    )
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* ── FEES ── */}
         <TabsContent value="fees" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -487,31 +579,18 @@ export default function StudentDetails() {
                 <TableBody>
                   {myTxns.length === 0 ? (
                     <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-center text-muted-foreground py-6"
-                      >
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
                         No transactions.
                       </TableCell>
                     </TableRow>
                   ) : (
                     myTxns.map((t) => (
                       <TableRow key={t.id}>
-                        <TableCell className="font-mono text-xs">
-                          {t.id}
-                        </TableCell>
+                        <TableCell className="font-mono text-xs">{t.id}</TableCell>
                         <TableCell>{t.head}</TableCell>
+                        <TableCell>₹{t.amount.toLocaleString("en-IN")}</TableCell>
                         <TableCell>
-                          ₹{t.amount.toLocaleString("en-IN")}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              t.status === "Success" ? "default" : "outline"
-                            }
-                          >
-                            {t.status}
-                          </Badge>
+                          <Badge variant={t.status === "Success" ? "default" : "outline"}>{t.status}</Badge>
                         </TableCell>
                         <TableCell>{t.date}</TableCell>
                       </TableRow>
@@ -523,67 +602,7 @@ export default function StudentDetails() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="documents" className="mt-4">
-          <Card>
-            <CardContent className="p-5 space-y-2">
-              {(
-                s.documents || [
-                  "Aadhar",
-                  "Birth Certificate",
-                  "Transfer Cert",
-                  "Previous Marksheet",
-                  "Photograph",
-                ]
-              ).map((d, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 p-3 border rounded-md"
-                >
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <div className="flex-1 text-sm">
-                    {typeof d === "string" ? d : d.name}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => toast.success("Uploaded")}
-                  >
-                    Upload
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="medical" className="mt-4">
-          <Card>
-            <CardContent className="p-5 grid md:grid-cols-2 gap-4">
-              <EditField
-                label="Blood group"
-                value={s.blood || ""}
-                onSave={(v) => studentsApi.update(id, { blood: v })}
-              />
-              <EditField
-                label="Emergency contact"
-                value={s.emergencyContact || ""}
-                onSave={(v) => studentsApi.update(id, { emergencyContact: v })}
-              />
-              <div className="md:col-span-2">
-                <Label className="text-xs">Medical notes</Label>
-                <Textarea
-                  defaultValue={s.medicalNotes || ""}
-                  rows={4}
-                  onBlur={(e) => {
-                    studentsApi.update(id, { medicalNotes: e.target.value });
-                    toast.success("Saved");
-                  }}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        {/* ── TRANSPORT ── */}
         <TabsContent value="transport" className="mt-4">
           <Card>
             <CardContent className="p-5">
@@ -595,6 +614,8 @@ export default function StudentDetails() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ── HOSTEL ── */}
         <TabsContent value="hostel" className="mt-4">
           <Card>
             <CardContent className="p-5">
@@ -607,38 +628,7 @@ export default function StudentDetails() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="parents" className="mt-4">
-          <Card>
-            <CardContent className="p-5 grid md:grid-cols-2 gap-4">
-              <EditField
-                label="Father / Guardian"
-                value={s.parent}
-                onSave={(v) => studentsApi.update(id, { parent: v })}
-              />
-              <EditField
-                label="Mother"
-                value={s.motherName || ""}
-                onSave={(v) => studentsApi.update(id, { motherName: v })}
-              />
-              <EditField
-                label="Occupation"
-                value={s.parentOccupation || ""}
-                onSave={(v) => studentsApi.update(id, { parentOccupation: v })}
-              />
-              <EditField
-                label="Annual income"
-                value={s.parentIncome || ""}
-                onSave={(v) => studentsApi.update(id, { parentIncome: v })}
-              />
-              <EditField
-                label="Phone"
-                value={s.phone}
-                onSave={(v) => studentsApi.update(id, { phone: v })}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
+        {/* ── ACTIVITY ── */}
         <TabsContent value="activity" className="mt-4">
           <Card>
             <CardContent className="p-5 space-y-3">
@@ -672,13 +662,11 @@ export default function StudentDetails() {
                 Activity
               </div>
               {activity.length === 0 && (
-                <div className="text-xs text-muted-foreground">
-                  No activity yet.
-                </div>
+                <div className="text-xs text-muted-foreground">No activity yet.</div>
               )}
               {activity.map((a) => (
                 <div key={a.id} className="flex items-start gap-3 text-xs">
-                  <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
+                  <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
                   <div className="flex-1">
                     <div className="text-sm">{a.action}</div>
                     <div className="text-[11px] text-muted-foreground">
@@ -696,6 +684,7 @@ export default function StudentDetails() {
     </PageContainer>
   );
 }
+
 function EditField({ label, value, onSave }) {
   const [v, setV] = useState(value);
   return (
@@ -718,13 +707,24 @@ function EditField({ label, value, onSave }) {
     </div>
   );
 }
+
+function VF({ label, value, mono }) {
+  return (
+    <div className="space-y-0.5 min-w-0">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+      <p className={`text-sm font-medium break-words ${mono ? "font-mono" : ""}`}>
+        {value || <span className="text-muted-foreground font-normal">—</span>}
+      </p>
+    </div>
+  );
+}
+
+// eslint-disable-next-line no-unused-vars
 function Stat({ label, value }) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          {label}
-        </div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
         <div className="font-display text-2xl font-semibold mt-1">{value}</div>
       </CardContent>
     </Card>

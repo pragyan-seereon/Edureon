@@ -48,6 +48,12 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function generateAdmissionNo() {
+  const year = new Date().getFullYear();
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `ADM-${year}-${rand}`;
+}
+
 const empty = {
   // personal
   name: "",
@@ -55,46 +61,41 @@ const empty = {
   gender: "Male",
   blood: "",
   nationality: "Indian",
-  religion: "",
   category: "General",
-  motherTongue: "",
   aadhar: "",
-  birthCertificateNo: "",
+  admissionNo: generateAdmissionNo(),
   // academic
-  admissionNo: "",
-  rollNo: 1,
-  attendance: 95,
-  class: "VI",
+  class: "X",
   section: "A",
+  rollNo: 1,
   previousSchool: "",
   previousClass: "",
-  lastPercent: "",
   board: "CBSE",
-  // address
+  lastPercent: "",
+  attendance: 95,
+  // guardian
+  parent: "",
+  motherName: "",
+  phone: "",
+  email: "",
+  parentOccupation: "",
+  parentIncome: "",
+  emergencyContact: "",
+  birthCertificateNo: "",
   address: "",
   city: "",
   state: "",
   pin: "",
-  country: "India",
-  // parent
-  parent: "",
-  motherName: "",
-  parentOccupation: "",
-  parentIncome: "",
-  phone: "",
-  emergencyContact: "",
-  email: "",
-  source: "Walk-in",
-  notes: "",
   // services
   feeStatus: "Pending",
   transportRequired: "No",
   hostelRequired: "No",
-  feePlan: "Quarterly",
-  sibling: "",
+  // medical
   medicalNotes: "",
   documents: [],
 };
+
+const TAB_ORDER = ["personal", "academic", "guardian", "services", "medical", "docs"];
 
 export function StudentDialog({ open, onOpenChange, student }) {
   const [tab, setTab] = useState("personal");
@@ -117,7 +118,7 @@ export function StudentDialog({ open, onOpenChange, student }) {
         ),
       );
     } else if (open) {
-      setF({ ...empty });
+      setF({ ...empty, admissionNo: generateAdmissionNo() });
       setUploaded(emptyDocs());
     }
     if (open) setTab("personal");
@@ -137,15 +138,19 @@ export function StudentDialog({ open, onOpenChange, student }) {
     toast.success(`${slot.label} uploaded`);
   };
 
+  const buildDocumentsList = () =>
+    Object.entries(uploaded)
+      .filter(([, file]) => file)
+      .map(([slotId]) => DOC_SLOTS.find((slot) => slot.id === slotId)?.label)
+      .filter(Boolean);
+
   const save = () => {
     if (!f.name || !f.parent || !f.phone)
       return toast.error("Student name, guardian and phone are required");
     const payload = {
       ...f,
-      documents: Object.entries(uploaded)
-        .filter(([, file]) => file)
-        .map(([slotId]) => DOC_SLOTS.find((slot) => slot.id === slotId)?.label)
-        .filter(Boolean),
+      isDraft: false,
+      documents: buildDocumentsList(),
     };
     if (student) {
       studentsApi.update(student.id, payload);
@@ -157,9 +162,27 @@ export function StudentDialog({ open, onOpenChange, student }) {
     onOpenChange(false);
   };
 
+  // FIX: saveDraft no longer calls onOpenChange(false)
+  // Dialog stays open so the user can continue filling in tabs
+  const saveDraft = () => {
+    const payload = {
+      ...f,
+      isDraft: true,
+      documents: buildDocumentsList(),
+    };
+    if (student) {
+      studentsApi.update(student.id, payload);
+      toast.success("Draft updated — continue filling the form");
+    } else {
+      studentsApi.add(payload);
+      toast.success("Saved as draft — continue anytime");
+    }
+    // Intentionally NOT calling onOpenChange(false) here
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display">
             {student ? "Edit Student Admission" : "New Student Admission"}
@@ -169,10 +192,10 @@ export function StudentDialog({ open, onOpenChange, student }) {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
             <TabsTrigger value="personal">Personal</TabsTrigger>
-            <TabsTrigger value="academic">Educational</TabsTrigger>
-            <TabsTrigger value="address">Address</TabsTrigger>
-            <TabsTrigger value="parent">Parent</TabsTrigger>
+            <TabsTrigger value="academic">Academic</TabsTrigger>
+            <TabsTrigger value="guardian">Guardian</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="medical">Medical</TabsTrigger>
             <TabsTrigger value="docs">Documents</TabsTrigger>
           </TabsList>
 
@@ -183,6 +206,13 @@ export function StudentDialog({ open, onOpenChange, student }) {
                 value={f.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="Riya Mehra"
+              />
+            </F>
+            <F label="Admission No">
+              <Input
+                value={f.admissionNo}
+                onChange={(e) => set("admissionNo", e.target.value)}
+                className="font-mono"
               />
             </F>
             <F label="Date of Birth">
@@ -212,11 +242,18 @@ export function StudentDialog({ open, onOpenChange, student }) {
                 </SelectContent>
               </Select>
             </F>
-            <F label="Nationality">
-              <Input value={f.nationality} onChange={(e) => set("nationality", e.target.value)} />
+            <F label="Student Aadhar">
+              <Input
+                value={f.aadhar}
+                onChange={(e) => set("aadhar", e.target.value)}
+                placeholder="XXXX-XXXX-1234"
+              />
             </F>
-            <F label="Religion">
-              <Input value={f.religion} onChange={(e) => set("religion", e.target.value)} />
+            <F label="Nationality">
+              <Input
+                value={f.nationality}
+                onChange={(e) => set("nationality", e.target.value)}
+              />
             </F>
             <F label="Category">
               <Select value={f.category} onValueChange={(v) => set("category", v)}>
@@ -228,35 +265,11 @@ export function StudentDialog({ open, onOpenChange, student }) {
                 </SelectContent>
               </Select>
             </F>
-            <F label="Mother Tongue">
-              <Input value={f.motherTongue} onChange={(e) => set("motherTongue", e.target.value)} placeholder="Hindi" />
-            </F>
-            <F label="Student Aadhar">
-              <Input value={f.aadhar} onChange={(e) => set("aadhar", e.target.value)} placeholder="XXXX-XXXX-1234" />
-            </F>
-            <F label="Birth Certificate No.">
-              <Input value={f.birthCertificateNo} onChange={(e) => set("birthCertificateNo", e.target.value)} />
-            </F>
           </TabsContent>
 
-          {/* ── EDUCATIONAL ── */}
+          {/* ── ACADEMIC ── */}
           <TabsContent value="academic" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Admission No">
-              <Input
-                value={f.admissionNo}
-                onChange={(e) => set("admissionNo", e.target.value)}
-                className="font-mono"
-              />
-            </F>
-            <F label="Roll No">
-              <Input
-                type="number"
-                min={1}
-                value={f.rollNo}
-                onChange={(e) => set("rollNo", parseInt(e.target.value) || 1)}
-              />
-            </F>
-            <F label="Applying for Class">
+            <F label="Class">
               <Select value={f.class} onValueChange={(v) => set("class", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -266,7 +279,7 @@ export function StudentDialog({ open, onOpenChange, student }) {
                 </SelectContent>
               </Select>
             </F>
-            <F label="Preferred Section">
+            <F label="Section">
               <Select value={f.section} onValueChange={(v) => set("section", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -276,16 +289,29 @@ export function StudentDialog({ open, onOpenChange, student }) {
                 </SelectContent>
               </Select>
             </F>
+            <F label="Roll No">
+              <Input
+                type="number"
+                min={1}
+                value={f.rollNo}
+                onChange={(e) => set("rollNo", parseInt(e.target.value) || 1)}
+              />
+            </F>
             <F label="Previous School">
-              <Input value={f.previousSchool} onChange={(e) => set("previousSchool", e.target.value)} placeholder="DAV Public School" />
+              <Input
+                value={f.previousSchool}
+                onChange={(e) => set("previousSchool", e.target.value)}
+                placeholder="DAV Public School"
+              />
             </F>
             <F label="Previous Class">
-              <Input value={f.previousClass} onChange={(e) => set("previousClass", e.target.value)} placeholder="Class V" />
+              <Input
+                value={f.previousClass}
+                onChange={(e) => set("previousClass", e.target.value)}
+                placeholder="Class IX"
+              />
             </F>
-            <F label="Last Aggregate %">
-              <Input type="number" value={f.lastPercent} onChange={(e) => set("lastPercent", e.target.value)} placeholder="87" />
-            </F>
-            <F label="Previous Board">
+            <F label="Board">
               <Select value={f.board} onValueChange={(v) => set("board", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -294,6 +320,14 @@ export function StudentDialog({ open, onOpenChange, student }) {
                   ))}
                 </SelectContent>
               </Select>
+            </F>
+            <F label="Last Aggregate %">
+              <Input
+                type="number"
+                value={f.lastPercent}
+                onChange={(e) => set("lastPercent", e.target.value)}
+                placeholder="87"
+              />
             </F>
             <F label="Attendance %">
               <Input
@@ -306,28 +340,9 @@ export function StudentDialog({ open, onOpenChange, student }) {
             </F>
           </TabsContent>
 
-          {/* ── ADDRESS ── */}
-          <TabsContent value="address" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Residential Address" wide>
-              <Textarea rows={2} value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="House no, street, locality" />
-            </F>
-            <F label="City">
-              <Input value={f.city} onChange={(e) => set("city", e.target.value)} placeholder="Delhi" />
-            </F>
-            <F label="State">
-              <Input value={f.state} onChange={(e) => set("state", e.target.value)} />
-            </F>
-            <F label="PIN Code">
-              <Input value={f.pin} onChange={(e) => set("pin", e.target.value)} placeholder="110001" />
-            </F>
-            <F label="Country">
-              <Input value={f.country} onChange={(e) => set("country", e.target.value)} />
-            </F>
-          </TabsContent>
-
-          {/* ── PARENT ── */}
-          <TabsContent value="parent" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Father / Guardian Name">
+          {/* ── GUARDIAN ── */}
+          <TabsContent value="guardian" className="grid sm:grid-cols-2 gap-3 mt-4">
+            <F label="Father / Guardian">
               <Input
                 value={f.parent}
                 onChange={(e) => set("parent", e.target.value)}
@@ -335,23 +350,17 @@ export function StudentDialog({ open, onOpenChange, student }) {
               />
             </F>
             <F label="Mother's Name">
-              <Input value={f.motherName} onChange={(e) => set("motherName", e.target.value)} />
+              <Input
+                value={f.motherName}
+                onChange={(e) => set("motherName", e.target.value)}
+              />
             </F>
-            <F label="Occupation">
-              <Input value={f.parentOccupation} onChange={(e) => set("parentOccupation", e.target.value)} placeholder="Business / Service" />
-            </F>
-            <F label="Annual Income">
-              <Input type="number" value={f.parentIncome} onChange={(e) => set("parentIncome", e.target.value)} placeholder="1200000" />
-            </F>
-            <F label="Primary Mobile">
+            <F label="Primary Phone">
               <Input
                 value={f.phone}
                 onChange={(e) => set("phone", e.target.value)}
                 placeholder="+91 ..."
               />
-            </F>
-            <F label="Emergency Contact">
-              <Input value={f.emergencyContact} onChange={(e) => set("emergencyContact", e.target.value)} placeholder="+91 ..." />
             </F>
             <F label="Email">
               <Input
@@ -361,22 +370,60 @@ export function StudentDialog({ open, onOpenChange, student }) {
                 placeholder="parent@mail.com"
               />
             </F>
-            <F label="Source">
-              <Select value={f.source} onValueChange={(v) => set("source", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["Walk-in", "Website", "Referral", "Ad Campaign", "Education Fair", "Social Media"].map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <F label="Occupation">
+              <Input
+                value={f.parentOccupation}
+                onChange={(e) => set("parentOccupation", e.target.value)}
+                placeholder="Business / Service"
+              />
             </F>
-            <F label="Counselor Notes" wide>
+            <F label="Annual Income">
+              <Input
+                type="number"
+                value={f.parentIncome}
+                onChange={(e) => set("parentIncome", e.target.value)}
+                placeholder="1200000"
+              />
+            </F>
+            <F label="Emergency Contact">
+              <Input
+                value={f.emergencyContact}
+                onChange={(e) => set("emergencyContact", e.target.value)}
+                placeholder="+91 ..."
+              />
+            </F>
+            <F label="Birth Certificate No.">
+              <Input
+                value={f.birthCertificateNo}
+                onChange={(e) => set("birthCertificateNo", e.target.value)}
+              />
+            </F>
+            <F label="Residential Address" wide>
               <Textarea
                 rows={2}
-                value={f.notes}
-                onChange={(e) => set("notes", e.target.value)}
-                placeholder="Sibling, transport, scholarship interest…"
+                value={f.address}
+                onChange={(e) => set("address", e.target.value)}
+                placeholder="House no, street, locality"
+              />
+            </F>
+            <F label="City">
+              <Input
+                value={f.city}
+                onChange={(e) => set("city", e.target.value)}
+                placeholder="Delhi"
+              />
+            </F>
+            <F label="State">
+              <Input
+                value={f.state}
+                onChange={(e) => set("state", e.target.value)}
+              />
+            </F>
+            <F label="PIN">
+              <Input
+                value={f.pin}
+                onChange={(e) => set("pin", e.target.value)}
+                placeholder="110001"
               />
             </F>
           </TabsContent>
@@ -411,22 +458,13 @@ export function StudentDialog({ open, onOpenChange, student }) {
                 </SelectContent>
               </Select>
             </F>
-            <F label="Fee Plan">
-              <Select value={f.feePlan} onValueChange={(v) => set("feePlan", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["Monthly", "Quarterly", "Half-yearly", "Annual"].map((x) => (
-                    <SelectItem key={x} value={x}>{x}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </F>
-            <F label="Sibling in School">
-              <Input value={f.sibling} onChange={(e) => set("sibling", e.target.value)} placeholder="Name / admission no." />
-            </F>
-            <F label="Medical Notes / Allergies" wide>
+          </TabsContent>
+
+          {/* ── MEDICAL ── */}
+          <TabsContent value="medical" className="mt-4">
+            <F label="Medical Notes / Allergies / Special Care" wide>
               <Textarea
-                rows={3}
+                rows={6}
                 value={f.medicalNotes}
                 onChange={(e) => set("medicalNotes", e.target.value)}
                 placeholder="Allergies, medication, special care instructions"
@@ -481,15 +519,32 @@ export function StudentDialog({ open, onOpenChange, student }) {
           </TabsContent>
         </Tabs>
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="gap-2 sm:gap-2 mt-4 sm:justify-between">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={save} className="gradient-primary border-0">
-            {student ? "Save admission" : "Admit student"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={saveDraft}>
+              Save as Draft
+            </Button>
+            {tab !== "docs" && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  const idx = TAB_ORDER.indexOf(tab);
+                  setTab(TAB_ORDER[idx + 1] ?? "docs");
+                }}
+              >
+                Next
+              </Button>
+            )}
+            <Button onClick={save} className="gradient-primary border-0">
+              {student ? "Save Admission" : "Admit Student"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
+
       {viewingDoc && (
         <DocViewerModal doc={viewingDoc} onClose={() => setViewingDoc(null)} />
       )}
@@ -625,7 +680,7 @@ function F({ label, children, wide }) {
   const text = required ? label.replace(/\s*\*$/, "") : label;
   return (
     <div className={`space-y-1.5 ${wide ? "sm:col-span-2" : ""}`}>
-      <Label className="text-xs text-muted-foreground">
+      <Label className="text-xs">
         {text}
         {required && <span className="text-destructive"> *</span>}
       </Label>
