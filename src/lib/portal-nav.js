@@ -112,6 +112,7 @@ const superGroups = [
   {
     label: "Academic Monitoring",
     items: [
+      { title: "Admissions", url: "/admin/admissions", icon: KanbanSquare },
       { title: "Students", url: "/students", icon: GraduationCap },
       { title: "Teachers", url: "/teachers", icon: UserCog },
       { title: "Classes & Sections", url: "/classes", icon: School },
@@ -119,7 +120,6 @@ const superGroups = [
       { title: "Assignments", url: "assignments", icon: ClipboardList },
       { title: "Examinations", url: "/exams", icon: BookOpen },
       { title: "Timetable", url: "/timetable", icon: CalendarDays },
-      { title: "Admissions", url: "/admin/admissions", icon: KanbanSquare },
     ],
   },
 
