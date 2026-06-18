@@ -16,22 +16,81 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { Switch } from "../../../components/ui/switch";
+// import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { institutesApi, useInstitutes } from "../../../lib/store";
 
 const INSTITUTE_TYPES = ["School", "College", "Coaching Centre", "University", "Other"];
 const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "UGC", "AICTE", "Other"];
-const ACADEMIC_YEARS = [
-  "2022 Jan - 2023 Dec",
-  "2023 Jan - 2024 Dec",
-  "2024 Jan - 2025 Dec",
-  "2025 Jan - 2026 Dec",
-  "2026 Jan - 2027 Dec",
-];
 // const PLANS = ["Trial", "Basic", "Professional", "Enterprise"];
 // const STATUS = ["Active", "Inactive", "Trial", "Suspended"];
 const ACCOUNT_TYPES = ["Savings", "Current", "Overdraft"];
+
+const INDIA_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
+  "West Bengal", "Andaman and Nicobar Islands", "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir", "Ladakh",
+  "Lakshadweep", "Puducherry",
+];
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_OPTIONS = MONTHS_SHORT.map((m, i) => ({ label: m, value: String(i + 1) }));
+const currentYear = new Date().getFullYear();
+
+function getAcademicYearLabel(sm, sy, em, ey) {
+  if (!sm || !sy || !em || !ey) return "—";
+  return `${MONTHS_SHORT[parseInt(sm) - 1]} ${sy} – ${MONTHS_SHORT[parseInt(em) - 1]} ${ey}`;
+}
+
+// Parse a stored academic year label like "2026 Jan - 2027 Dec" or
+// "Jun 2026 – Mar 2027" back into the four discrete fields used by the
+// Create flow's month/year selects. Falls back to current/next year if
+// nothing can be parsed.
+function parseAcademicYear(label) {
+  if (!label) {
+    return {
+      academicYearStartMonth: "",
+      academicYearStartYear: String(currentYear),
+      academicYearEndMonth: "",
+      academicYearEndYear: String(currentYear + 1),
+    };
+  }
+  const monthNameToNum = (name) => {
+    const idx = MONTHS_SHORT.findIndex((m) => m.toLowerCase() === String(name).slice(0, 3).toLowerCase());
+    return idx >= 0 ? String(idx + 1) : "";
+  };
+  // Try "Mon YYYY – Mon YYYY" / "Mon YYYY - Mon YYYY"
+  const monYearMonYear = label.match(/([A-Za-z]+)\s+(\d{4})\s*[-–]\s*([A-Za-z]+)\s+(\d{4})/);
+  if (monYearMonYear) {
+    const [, sm, sy, em, ey] = monYearMonYear;
+    return {
+      academicYearStartMonth: monthNameToNum(sm),
+      academicYearStartYear: sy,
+      academicYearEndMonth: monthNameToNum(em),
+      academicYearEndYear: ey,
+    };
+  }
+  // Try "YYYY Mon - YYYY Mon"
+  const yearMonYearMon = label.match(/(\d{4})\s+([A-Za-z]+)\s*[-–]\s*(\d{4})\s+([A-Za-z]+)/);
+  if (yearMonYearMon) {
+    const [, sy, sm, ey, em] = yearMonYearMon;
+    return {
+      academicYearStartMonth: monthNameToNum(sm),
+      academicYearStartYear: sy,
+      academicYearEndMonth: monthNameToNum(em),
+      academicYearEndYear: ey,
+    };
+  }
+  return {
+    academicYearStartMonth: "",
+    academicYearStartYear: String(currentYear),
+    academicYearEndMonth: "",
+    academicYearEndYear: String(currentYear + 1),
+  };
+}
 
 const DOC_SLOTS = [
   { id: "registration_certificate", label: "Registration Certificate", accept: ".pdf", acceptLabel: "PDF", badge: "Mandatory", gstConditional: false, multi: false },
@@ -46,73 +105,6 @@ const DOC_SLOTS = [
   { id: "other_documents", label: "Any Other Documents", accept: ".pdf,.jpg,.jpeg,.png,.docx", acceptLabel: "PDF / JPG / PNG / DOCX", badge: "Optional", gstConditional: false, multi: true },
 ];
 
-const SECTIONS = [
-  {
-    key: "basic",
-    title: "Basic Info",
-    fields: [
-      ["name", "Institute Name", "text", true],
-      ["type", "Institute Type", "select", true, INSTITUTE_TYPES],
-      ["board", "Board / Affiliation", "select", true, BOARD_OPTIONS],
-      ["customBoardName", "Custom Board Name", "text", true, null, (form) => form.board === "Other"],
-      ["academicYear", "Academic Year", "select", true, ACADEMIC_YEARS],
-      ["primaryColor", "Brand Primary Colour", "color", false],
-      ["secondaryColor", "Brand Secondary Colour", "color", false],
-    ],
-  },
-  {
-    key: "contact",
-    title: "Contact & Address",
-    fields: [
-      ["addressLine1", "Address Line 1", "textarea", true],
-      ["addressLine2", "Address Line 2", "textarea", true],
-      ["city", "City", "text", true],
-      ["state", "State", "text", true],
-      ["pin", "PIN Code", "text", true],
-      ["country", "Country", "text", true],
-      ["phone", "Official Phone Number", "text", true],
-      ["email", "Official Email Address", "email", true],
-      ["website", "Website URL", "text", false],
-    ],
-  },
-  {
-    key: "people",
-    title: "Key People",
-    fields: [
-      ["principalName", "Principal Full Name", "text", true],
-      ["principalPhone", "Principal Mobile", "text", true],
-      ["principalEmail", "Principal Email", "email", true],
-      ["principalDesignation", "Principal Designation", "text", false],
-      ["adminName", "Admin Full Name", "text", true],
-      ["adminEmail", "Admin Email", "email", true],
-      ["adminPhone", "Admin Mobile", "text", true],
-      ["adminDesignation", "Admin Designation", "text", false],
-      ["sendCredentials", "Send login credentials immediately on creation", "switch", false],
-      ["autoGeneratePassword", "Auto-generate secure password", "switch", false],
-      ["manualPassword", "Manual Password", "password", true, null, (form) => !form.autoGeneratePassword],
-    ],
-  },
-  {
-    key: "financial",
-    title: "Financial & Legal",
-    fields: [
-      ["gst", "GST Number", "text", true],
-      ["pan", "PAN Number", "text", true],
-      ["tan", "TAN Number", "text", false],
-      ["bankName", "Bank Name", "text", true],
-      ["accountNumber", "Bank Account Number", "password", true],
-      ["confirmAccountNumber", "Confirm Account Number", "password", true],
-      ["ifscCode", "IFSC Code", "text", true],
-      ["ifscBankName", "Auto-fetched Bank Name", "text", false],
-      ["ifscBranch", "Auto-fetched Branch", "text", false],
-      ["accountHolderName", "Account Holder Name", "text", true],
-      ["accountType", "Account Type", "select", true, ACCOUNT_TYPES],
-      // ["plan", "Plan", "select", true, PLANS],
-      // ["status", "Status", "select", true, STATUS],
-    ],
-  },
-];
-
 function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
@@ -123,55 +115,58 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-const normalizeInstitute = (item) => ({
-  ...item,
-  type: item.type === "Coaching" ? "Coaching Centre" : item.type || "School",
-  board: item.board || "CBSE",
-  customBoardName: item.customBoardName || "",
-  academicYear: item.academicYear || "2026 Jan - 2027 Dec",
-  plan:
-    item.status === "Trial"
-      ? "Trial"
-      : item.plan === "Growth"
-        ? "Basic"
-        : item.plan === "Business"
-          ? "Professional"
-          : item.plan || "Basic",
-  status: item.status || "Active",
-  addressLine1: item.addressLine1 || item.address || "",
-  addressLine2: item.addressLine2 || "",
-  state: item.state || "",
-  pin: item.pin || "",
-  country: item.country || "India",
-  phone: item.phone || "",
-  email: item.email || "",
-  website: item.website || "",
-  principalName: item.principalName || "",
-  principalPhone: item.principalPhone || "",
-  principalEmail: item.principalEmail || "",
-  principalDesignation: item.principalDesignation || "",
-  adminName: item.adminName || "",
-  adminEmail: item.adminEmail || item.email || "",
-  adminPhone: item.adminPhone || item.phone || "",
-  adminDesignation: item.adminDesignation || "",
-  sendCredentials: Boolean(item.sendCredentials),
-  autoGeneratePassword: item.autoGeneratePassword ?? true,
-  manualPassword: item.manualPassword || "",
-  gst: item.gst || "",
-  pan: item.pan || "",
-  tan: item.tan || "",
-  bankName: item.bankName || "",
-  accountNumber: item.accountNumber || "",
-  confirmAccountNumber: item.confirmAccountNumber || item.accountNumber || "",
-  ifscCode: item.ifscCode || "",
-  ifscBankName: item.ifscBankName || "",
-  ifscBranch: item.ifscBranch || "",
-  accountHolderName: item.accountHolderName || "",
-  accountType: item.accountType || "",
-  primaryColor: item.primaryColor || "#1e3a5f",
-  secondaryColor: item.secondaryColor || "#f59e0b",
-  logoPreview: item.logoPreview || "",
-});
+const normalizeInstitute = (item) => {
+  const academicYearParts = parseAcademicYear(item.academicYear);
+  return {
+    ...item,
+    type: item.type === "Coaching" ? "Coaching Centre" : item.type || "School",
+    board: item.board || "CBSE",
+    customBoardName: item.customBoardName || "",
+    ...academicYearParts,
+    plan:
+      item.status === "Trial"
+        ? "Trial"
+        : item.plan === "Growth"
+          ? "Basic"
+          : item.plan === "Business"
+            ? "Professional"
+            : item.plan || "Basic",
+    status: item.status || "Active",
+    addressLine1: item.addressLine1 || item.address || "",
+    addressLine2: item.addressLine2 || "",
+    state: item.state || "",
+    pin: item.pin || "",
+    country: item.country || "India",
+    phone: item.phone || "",
+    email: item.email || "",
+    website: item.website || "",
+    principalName: item.principalName || "",
+    principalPhone: item.principalPhone || "",
+    principalEmail: item.principalEmail || "",
+    principalDesignation: item.principalDesignation || "",
+    adminName: item.adminName || "",
+    adminEmail: item.adminEmail || item.email || "",
+    adminPhone: item.adminPhone || item.phone || "",
+    adminDesignation: item.adminDesignation || "",
+    sendCredentials: Boolean(item.sendCredentials),
+    autoGeneratePassword: item.autoGeneratePassword ?? true,
+    manualPassword: item.manualPassword || "",
+    gst: item.gst || "",
+    pan: item.pan || "",
+    tan: item.tan || "",
+    bankName: item.bankName || "",
+    accountNumber: item.accountNumber || "",
+    confirmAccountNumber: item.confirmAccountNumber || item.accountNumber || "",
+    ifscCode: item.ifscCode || "",
+    ifscBankName: item.ifscBankName || "",
+    ifscBranch: item.ifscBranch || "",
+    accountHolderName: item.accountHolderName || "",
+    accountType: item.accountType || "",
+    primaryColor: item.primaryColor || "#1e3a5f",
+    secondaryColor: item.secondaryColor || "#f59e0b",
+    logoPreview: item.logoPreview || "",
+  };
+};
 
 export default function EditInstitute() {
   const { id } = useParams();
@@ -211,6 +206,13 @@ export default function EditInstitute() {
   }
 
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+  const academicYearLabel = getAcademicYearLabel(
+    form.academicYearStartMonth,
+    form.academicYearStartYear,
+    form.academicYearEndMonth,
+    form.academicYearEndYear
+  );
 
   const changed = Object.fromEntries(
     Object.entries(form).filter(([key, value]) => String(value ?? "") !== String(inst[key] ?? "")),
@@ -290,16 +292,57 @@ export default function EditInstitute() {
   // ── Validation ──
   const validate = () => {
     const nextErrors = {};
-    SECTIONS.forEach((section) => {
-      section.fields.forEach(([key, label, type, required, , visibleWhen]) => {
-        if (visibleWhen && !visibleWhen(form)) return;
-        const value = String(form[key] || "").trim();
-        if (required && !value) nextErrors[key] = `${label} is required`;
-        if (type === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+
+    const requiredChecks = [
+      ["name", "Institute Name"],
+      ["type", "Institute Type"],
+      ["board", "Board / Affiliation"],
+      ["addressLine1", "Address Line 1"],
+      ["addressLine2", "Address Line 2"],
+      ["city", "City"],
+      ["state", "State"],
+      ["pin", "PIN Code"],
+      ["country", "Country"],
+      ["phone", "Official Phone Number"],
+      ["email", "Official Email Address"],
+      ["principalName", "Principal Full Name"],
+      ["principalPhone", "Principal Mobile"],
+      ["principalEmail", "Principal Email"],
+      ["adminName", "Admin Full Name"],
+      ["adminEmail", "Admin Email"],
+      ["adminPhone", "Admin Mobile"],
+      ["gst", "GST Number"],
+      ["pan", "PAN Number"],
+      ["bankName", "Bank Name"],
+      ["accountNumber", "Bank Account Number"],
+      ["confirmAccountNumber", "Confirm Account Number"],
+      ["ifscCode", "IFSC Code"],
+      ["accountHolderName", "Account Holder Name"],
+      ["accountType", "Account Type"],
+    ];
+    requiredChecks.forEach(([key, label]) => {
+      if (!String(form[key] || "").trim()) nextErrors[key] = `${label} is required`;
+    });
+
+    if (form.board === "Other" && !String(form.customBoardName || "").trim()) {
+      nextErrors.customBoardName = "Custom Board Name is required";
+    }
+    if (!form.academicYearStartMonth || !form.academicYearStartYear) {
+      nextErrors.academicYearStart = "Start month & year are required";
+    }
+    if (!form.academicYearEndMonth || !form.academicYearEndYear) {
+      nextErrors.academicYearEnd = "End month & year are required";
+    }
+
+    [["email", form.email], ["principalEmail", form.principalEmail], ["adminEmail", form.adminEmail]].forEach(
+      ([key, value]) => {
+        const v = String(value || "").trim();
+        if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
           nextErrors[key] = "Enter a valid email address";
         }
-      });
-    });
+      },
+    );
+
     const duplicate = institutes.some(
       (item) => item.id !== id && item.name.toLowerCase() === String(form.name || "").trim().toLowerCase(),
     );
@@ -334,6 +377,7 @@ export default function EditInstitute() {
     }
     institutesApi.update(id, {
       ...changed,
+      academicYear: academicYearLabel,
       address: form.addressLine1,
     });
     toast.success("Institute updated");
@@ -354,128 +398,381 @@ export default function EditInstitute() {
       />
 
       <div className="space-y-4">
-        {/* ── Existing form sections ── */}
-        {SECTIONS.map((section) => (
-          <Card key={section.key} className="border-border/60">
-            <CardHeader>
-              <CardTitle className="text-base">{section.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              {section.fields
-                .filter(([, , , , , visibleWhen]) => !visibleWhen || visibleWhen(form))
-                .map(([key, label, type, required, options]) => (
-                  <Field key={key} label={label} required={required} error={errors[key]}>
-                    <Control
-                      keyName={key}
-                      type={type}
-                      value={form[key]}
-                      options={options}
-                      onChange={(value) => set(key, value)}
-                    />
-                  </Field>
-                ))}
+        {/* ── Basic Info ── */}
+        <Card className="border-border/60">
+          <CardHeader>
+            <CardTitle className="text-base">Basic Info</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Field label="Institute Name" required error={errors.name} className="md:col-span-3">
+              <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} placeholder="Delhi Public School — South" />
+            </Field>
 
-              {/* ── Logo upload (injected into Basic Info card) ── */}
-              {section.key === "basic" && (
-                <div className="md:col-span-2 space-y-1.5">
-                  <Label className="text-xs">Institute Logo</Label>
-                  <input
-                    type="file"
-                    id="logo-upload-edit"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                    className="hidden"
-                    onChange={(e) => {
-                      const selected = e.target.files?.[0];
-                      if (!selected) return;
-                      if (!selected.type.startsWith("image/")) {
-                        toast.error("Upload an image file");
-                        return;
-                      }
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setLogo(selected);
-                        setLogoPreview(reader.result);
-                        setLogoCrop({ zoom: 1, x: 50, y: 50 });
-                        toast.success("Logo uploaded");
-                      };
-                      reader.readAsDataURL(selected);
-                      e.target.value = "";
-                    }}
-                  />
-                  {logo instanceof File ? (
-                    <div className="border rounded-md overflow-hidden">
-                      <div className="flex items-center justify-between p-2">
-                        <Badge className="bg-success/15 text-success border-success/20">
-                          <FileCheck2 className="h-3 w-3 mr-1" />Uploaded
-                        </Badge>
-                        <div className="flex items-center gap-1">
-                          <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
-                            onClick={() => setViewingLogo(true)}>
-                            <Eye className="h-3 w-3 mr-0.5" />View
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
-                            onClick={() => document.getElementById("logo-upload-edit").click()}>
-                            Replace
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="border-t bg-muted/20 px-3 pb-3 pt-2 cursor-pointer"
+            <Field label="Institute Type" required error={errors.type}>
+              <Select value={form.type || ""} onValueChange={(v) => set("type", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INSTITUTE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Board / Affiliation" required error={errors.board}>
+              <Select value={form.board || ""} onValueChange={(v) => set("board", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {BOARD_OPTIONS.map((board) => (
+                    <SelectItem key={board} value={board}>{board}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            {form.board === "Other" && (
+              <Field label="Custom Board Name" required error={errors.customBoardName} className="md:col-span-3">
+                <Input
+                  value={form.customBoardName || ""}
+                  onChange={(e) => set("customBoardName", e.target.value)}
+                  placeholder="Enter board or affiliation name"
+                />
+              </Field>
+            )}
+
+            <Field label="Start Month & Year" required error={errors.academicYearStart}>
+              <div className="flex gap-2">
+                <Select value={form.academicYearStartMonth || ""} onValueChange={(v) => set("academicYearStartMonth", v)}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
+                  <SelectContent>
+                    {MONTH_OPTIONS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  className="w-24"
+                  min={2020}
+                  max={2099}
+                  placeholder="Year"
+                  value={form.academicYearStartYear || ""}
+                  onChange={(e) => set("academicYearStartYear", e.target.value)}
+                />
+              </div>
+            </Field>
+
+            <Field label="End Month & Year" required error={errors.academicYearEnd}>
+              <div className="flex gap-2">
+                <Select value={form.academicYearEndMonth || ""} onValueChange={(v) => set("academicYearEndMonth", v)}>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
+                  <SelectContent>
+                    {MONTH_OPTIONS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  className="w-24"
+                  min={2020}
+                  max={2099}
+                  placeholder="Year"
+                  value={form.academicYearEndYear || ""}
+                  onChange={(e) => set("academicYearEndYear", e.target.value)}
+                />
+              </div>
+            </Field>
+
+            <Field label="Academic Year">
+              <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
+                {academicYearLabel}
+              </div>
+            </Field>
+
+            <Field label="Brand Primary Colour">
+              <ColourField value={form.primaryColor} onChange={(v) => set("primaryColor", v)} />
+            </Field>
+
+            <Field label="Brand Secondary Colour">
+              <ColourField value={form.secondaryColor} onChange={(v) => set("secondaryColor", v)} />
+            </Field>
+
+            {/* ── Logo upload ── */}
+            <div className="md:col-span-2 space-y-1.5">
+              <Label className="text-xs font-medium">Institute Logo</Label>
+              <input
+                type="file"
+                id="logo-upload-edit"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(e) => {
+                  const selected = e.target.files?.[0];
+                  if (!selected) return;
+                  if (!selected.type.startsWith("image/")) {
+                    toast.error("Upload an image file");
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setLogo(selected);
+                    setLogoPreview(reader.result);
+                    setLogoCrop({ zoom: 1, x: 50, y: 50 });
+                    toast.success("Logo uploaded");
+                  };
+                  reader.readAsDataURL(selected);
+                  e.target.value = "";
+                }}
+              />
+              {logo instanceof File ? (
+                <div className="border rounded-md overflow-hidden">
+                  <div className="flex items-center justify-between p-2">
+                    <Badge className="bg-success/15 text-success border-success/20">
+                      <FileCheck2 className="h-3 w-3 mr-1" />Uploaded
+                    </Badge>
+                    <div className="flex items-center gap-1">
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
                         onClick={() => setViewingLogo(true)}>
-                        <div className="rounded-md overflow-hidden border bg-white flex items-center justify-center h-24">
-                          <img src={URL.createObjectURL(logo)} alt="Logo preview" className="max-h-20 max-w-full object-contain p-2" />
-                        </div>
-                        <div className="mt-1.5 text-[10px] text-muted-foreground truncate">
-                          {logo.name} · {(logo.size / 1024).toFixed(1)} KB
-                        </div>
-                      </div>
+                        <Eye className="h-3 w-3 mr-0.5" />View
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
+                        onClick={() => document.getElementById("logo-upload-edit").click()}>
+                        Replace
+                      </Button>
                     </div>
-                  ) : logoPreview ? (
-                    <div className="border rounded-md overflow-hidden">
-                      <div className="flex items-center justify-between p-2">
-                        <Badge className="bg-muted text-muted-foreground border-border text-[10px]">Current logo</Badge>
-                        <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
-                          onClick={() => document.getElementById("logo-upload-edit").click()}>
-                          Replace
-                        </Button>
-                      </div>
-                      <div className="border-t bg-muted/20 px-3 pb-3 pt-2">
-                        <div className="rounded-md overflow-hidden border bg-white flex items-center justify-center h-24">
-                          <img src={logoPreview} alt="Current logo" className="max-h-20 max-w-full object-contain p-2" />
-                        </div>
-                      </div>
+                  </div>
+                  <div className="border-t bg-muted/20 px-3 pb-3 pt-2 cursor-pointer"
+                    onClick={() => setViewingLogo(true)}>
+                    <div className="rounded-md overflow-hidden border bg-white flex items-center justify-center h-24">
+                      <img src={URL.createObjectURL(logo)} alt="Logo preview" className="max-h-20 max-w-full object-contain p-2" />
                     </div>
-                  ) : (
-                    <Button variant="outline" className="w-full justify-start"
+                    <div className="mt-1.5 text-[10px] text-muted-foreground truncate">
+                      {logo.name} · {(logo.size / 1024).toFixed(1)} KB
+                    </div>
+                  </div>
+                </div>
+              ) : logoPreview ? (
+                <div className="border rounded-md overflow-hidden">
+                  <div className="flex items-center justify-between p-2">
+                    <Badge className="bg-muted text-muted-foreground border-border text-[10px]">Current logo</Badge>
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
                       onClick={() => document.getElementById("logo-upload-edit").click()}>
-                      <FileUp className="h-4 w-4" />Upload logo (PNG / SVG)
+                      Replace
                     </Button>
-                  )}
-
-                  {/* Crop controls — only shown after a new file is selected */}
-                  {logo instanceof File && logoPreview && (
-                    <div className="mt-3 grid gap-4 rounded-md border border-border/60 p-3 md:grid-cols-[180px_1fr]">
-                      <div className="space-y-2">
-                        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-white">
-                          <img src={logoPreview} alt="Logo crop preview" className="h-full w-full object-contain"
-                            style={{ objectPosition: `${logoCrop.x}% ${logoCrop.y}%`, transform: `scale(${logoCrop.zoom})` }} />
-                        </div>
-                        <div className="text-[10px] text-muted-foreground truncate">{logo.name}</div>
-                      </div>
-                      <div className="space-y-3">
-                        <CropSlider label="Zoom" min="1" max="2" step="0.05" value={logoCrop.zoom}
-                          onChange={(value) => setLogoCrop((c) => ({ ...c, zoom: value }))} />
-                        <CropSlider label="Horizontal" min="0" max="100" value={logoCrop.x}
-                          onChange={(value) => setLogoCrop((c) => ({ ...c, x: value }))} />
-                        <CropSlider label="Vertical" min="0" max="100" value={logoCrop.y}
-                          onChange={(value) => setLogoCrop((c) => ({ ...c, y: value }))} />
-                      </div>
+                  </div>
+                  <div className="border-t bg-muted/20 px-3 pb-3 pt-2">
+                    <div className="rounded-md overflow-hidden border bg-white flex items-center justify-center h-24">
+                      <img src={logoPreview} alt="Current logo" className="max-h-20 max-w-full object-contain p-2" />
                     </div>
-                  )}
+                  </div>
+                </div>
+              ) : (
+                <Button variant="outline" className="w-full justify-start"
+                  onClick={() => document.getElementById("logo-upload-edit").click()}>
+                  <FileUp className="h-4 w-4" />Upload logo (PNG / SVG)
+                </Button>
+              )}
+
+              {logo instanceof File && logoPreview && (
+                <div className="mt-3 grid gap-4 rounded-md border border-border/60 p-3 md:grid-cols-[180px_1fr]">
+                  <div className="space-y-2">
+                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-white">
+                      <img src={logoPreview} alt="Logo crop preview" className="h-full w-full object-contain"
+                        style={{ objectPosition: `${logoCrop.x}% ${logoCrop.y}%`, transform: `scale(${logoCrop.zoom})` }} />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{logo.name}</div>
+                  </div>
+                  <div className="space-y-3">
+                    <CropSlider label="Zoom" min="1" max="2" step="0.05" value={logoCrop.zoom}
+                      onChange={(value) => setLogoCrop((c) => ({ ...c, zoom: value }))} />
+                    <CropSlider label="Horizontal" min="0" max="100" value={logoCrop.x}
+                      onChange={(value) => setLogoCrop((c) => ({ ...c, x: value }))} />
+                    <CropSlider label="Vertical" min="0" max="100" value={logoCrop.y}
+                      onChange={(value) => setLogoCrop((c) => ({ ...c, y: value }))} />
+                  </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Contact & Address ── */}
+        <Card className="border-border/60">
+          <CardHeader>
+            <CardTitle className="text-base">Contact & Address</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Address Line 1" required error={errors.addressLine1} className="md:col-span-2">
+              <Textarea rows={2} value={form.addressLine1 || ""} onChange={(e) => set("addressLine1", e.target.value)} placeholder="Enter address line 1" />
+            </Field>
+            <Field label="Address Line 2" required error={errors.addressLine2} className="md:col-span-2">
+              <Textarea rows={2} value={form.addressLine2 || ""} onChange={(e) => set("addressLine2", e.target.value)} placeholder="Enter address line 2" />
+            </Field>
+            <Field label="City" required error={errors.city}>
+              <Input
+                value={form.city || ""}
+                onChange={(e) => set("city", e.target.value.replace(/[^A-Za-z\s]/g, ""))}
+                placeholder="Enter city"
+              />
+            </Field>
+            <Field label="State" required error={errors.state}>
+              <select
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.state || ""}
+                onChange={(e) => set("state", e.target.value)}
+              >
+                <option value="">Select State</option>
+                {INDIA_STATES.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="PIN Code" required error={errors.pin}>
+              <Input
+                value={form.pin || ""}
+                maxLength={6}
+                onChange={(e) => set("pin", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="6-digit PIN Code"
+              />
+            </Field>
+            <Field label="Country" required error={errors.country}>
+              <select
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.country || "India"}
+                onChange={(e) => set("country", e.target.value)}
+              >
+                <option value="India">India</option>
+              </select>
+            </Field>
+            <Field label="Official Phone Number" required error={errors.phone}>
+              <Input type="tel" value={form.phone || ""} onChange={(e) => set("phone", e.target.value)} placeholder="+91 9876543210" />
+            </Field>
+            <Field label="Official Email Address" required error={errors.email}>
+              <Input type="email" value={form.email || ""} onChange={(e) => set("email", e.target.value)} placeholder="admin@school.edu" />
+            </Field>
+            <Field label="Website URL" className="md:col-span-2">
+              <Input value={form.website || ""} onChange={(e) => set("website", e.target.value)} placeholder="https://example.com" />
+            </Field>
+
+            {form.pin?.length === 6 && form.city && (
+              <Field label="Google Maps Preview" className="md:col-span-2">
+                <div className="rounded-md border overflow-hidden">
+                  <iframe
+                    title="Google Maps Preview"
+                    width="100%"
+                    height="300"
+                    loading="lazy"
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(`${form.city} ${form.pin}`)}&z=14&output=embed`}
+                  />
+                </div>
+              </Field>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Key People ── */}
+        <Card className="border-border/60">
+          <CardHeader>
+            <CardTitle className="text-base">Key People</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Principal Section</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Principal Full Name" required error={errors.principalName}>
+                  <Input value={form.principalName || ""} onChange={(e) => set("principalName", e.target.value)} placeholder="Enter principal full name" />
+                </Field>
+                <Field label="Principal Mobile" required error={errors.principalPhone}>
+                  <Input type="tel" value={form.principalPhone || ""} onChange={(e) => set("principalPhone", e.target.value)} placeholder="9876543210" />
+                </Field>
+                <Field label="Principal Email" required error={errors.principalEmail}>
+                  <Input type="email" value={form.principalEmail || ""} onChange={(e) => set("principalEmail", e.target.value)} placeholder="principal@school.edu" />
+                </Field>
+                <Field label="Principal Designation">
+                  <Input value={form.principalDesignation || ""} onChange={(e) => set("principalDesignation", e.target.value)} placeholder="Principal" />
+                </Field>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Admin Section</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Admin Full Name" required error={errors.adminName}>
+                  <Input value={form.adminName || ""} onChange={(e) => set("adminName", e.target.value)} placeholder="Enter admin full name" />
+                </Field>
+                <Field label="Admin Email" required error={errors.adminEmail}>
+                  <Input type="email" value={form.adminEmail || ""} onChange={(e) => set("adminEmail", e.target.value)} placeholder="admin@school.edu" />
+                </Field>
+                <Field label="Admin Mobile" required error={errors.adminPhone}>
+                  <Input type="tel" value={form.adminPhone || ""} onChange={(e) => set("adminPhone", e.target.value)} placeholder="9876543210" />
+                </Field>
+                <Field label="Admin Designation">
+                  <Input value={form.adminDesignation || ""} onChange={(e) => set("adminDesignation", e.target.value)} placeholder="Institute Admin" />
+                </Field>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Financial & Legal ── */}
+        <Card className="border-border/60">
+          <CardHeader>
+            <CardTitle className="text-base">Financial & Legal</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="GST Number" required error={errors.gst}>
+              <Input value={form.gst || ""} onChange={(e) => set("gst", e.target.value.toUpperCase())} placeholder="22AAAAA0000A1Z5" maxLength={15} />
+            </Field>
+            <Field label="PAN Number" required error={errors.pan}>
+              <Input value={form.pan || ""} onChange={(e) => set("pan", e.target.value.toUpperCase())} placeholder="AAAPL1234C" maxLength={10} />
+            </Field>
+            <Field label="TAN Number">
+              <Input value={form.tan || ""} onChange={(e) => set("tan", e.target.value.toUpperCase())} placeholder="ABCD12345E" maxLength={10} />
+            </Field>
+            <Field label="Bank Name" required error={errors.bankName}>
+              <Input value={form.bankName || ""} onChange={(e) => set("bankName", e.target.value)} placeholder="Enter bank name" />
+            </Field>
+            <Field label="Bank Account Number" required error={errors.accountNumber}>
+              <Input type="password" value={form.accountNumber || ""} onChange={(e) => set("accountNumber", e.target.value)} placeholder="Enter account number" />
+            </Field>
+            <Field label="Confirm Account Number" required error={errors.confirmAccountNumber}>
+              <Input
+                type="password"
+                value={form.confirmAccountNumber || ""}
+                onChange={(e) => set("confirmAccountNumber", e.target.value)}
+                onPaste={(e) => e.preventDefault()}
+                placeholder="Re-enter account number"
+              />
+            </Field>
+            <Field label="IFSC Code" required error={errors.ifscCode}>
+              <Input value={form.ifscCode || ""} onChange={(e) => set("ifscCode", e.target.value.toUpperCase())} placeholder="SBIN0001234" maxLength={11} />
+            </Field>
+            <Field label="Bank Name">
+              <Input value={form.ifscBankName || ""} onChange={(e) => set("ifscBankName", e.target.value)} placeholder="Enter bank name" />
+            </Field>
+            <Field label="Branch">
+              <Input value={form.ifscBranch || ""} onChange={(e) => set("ifscBranch", e.target.value)} placeholder="Enter branch name" />
+            </Field>
+            <Field label="Account Holder Name" required error={errors.accountHolderName}>
+              <Input value={form.accountHolderName || ""} onChange={(e) => set("accountHolderName", e.target.value)} placeholder="Enter account holder name" maxLength={150} />
+            </Field>
+            <Field label="Account Type" required error={errors.accountType}>
+              <select
+                value={form.accountType || ""}
+                onChange={(e) => set("accountType", e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Select Account Type</option>
+                {ACCOUNT_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="md:col-span-2 flex items-start gap-2 p-3 rounded-md bg-info/10 border border-info/20 text-xs">
+              <AlertCircle className="h-4 w-4 text-info shrink-0 mt-0.5" />
+              <div><span className="font-semibold">Note: </span>Tax info is used for invoicing only.</div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* ── Documents section (ported from CreateInstitute Step 5) ── */}
         <Card className="border-border/60">
@@ -530,6 +827,7 @@ export default function EditInstitute() {
             </div>
           </CardContent>
         </Card>
+
         {/* ── Bottom action bar ── */}
         <div className="flex items-center justify-end gap-2 pt-2 pb-4 border-t">
           <Button variant="outline" onClick={cancel}>
@@ -598,10 +896,10 @@ export default function EditInstitute() {
 }
 
 // ── Field wrapper ─────────────────────────────────────────────────────────────
-function Field({ label, required, error, children }) {
+function Field({ label, required, error, children, className = "" }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs">
+    <div className={`space-y-1.5 ${className}`}>
+      <Label className="text-xs font-medium">
         {label} {required && <span className="text-destructive">*</span>}
       </Label>
       {children}
@@ -610,60 +908,13 @@ function Field({ label, required, error, children }) {
   );
 }
 
-// ── Control ───────────────────────────────────────────────────────────────────
-function Control({ keyName, type, value, options, onChange }) {
-  if (type === "switch") {
-    return (
-      <div className="flex h-10 items-center justify-between rounded-md border px-3">
-        <Badge variant={value ? "default" : "outline"}>{value ? "Yes" : "No"}</Badge>
-        <Switch checked={Boolean(value)} onCheckedChange={onChange} />
-      </div>
-    );
-  }
-
-  if (type === "select") {
-    return (
-      <Select value={String(value || "")} onValueChange={onChange}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option} value={option}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    );
-  }
-
-  if (type === "color") {
-    return (
-      <div className="flex gap-2">
-        <Input type="color" value={String(value || "#000000")} onChange={(event) => onChange(event.target.value)} className="w-16 p-1" />
-        <Input value={String(value || "")} onChange={(event) => onChange(event.target.value)} />
-      </div>
-    );
-  }
-
-  if (type === "textarea") {
-    return <Textarea rows={2} value={String(value || "")} onChange={(event) => onChange(event.target.value)} />;
-  }
-
+// ── ColourField (matches CreateInstitute) ──────────────────────────────────────
+function ColourField({ value, onChange }) {
   return (
-    <Input
-      type={type}
-      value={String(value || "")}
-      onPaste={keyName === "confirmAccountNumber" ? (event) => event.preventDefault() : undefined}
-      onChange={(event) => {
-        const next =
-          keyName === "pan" || keyName === "tan" || keyName === "gst" || keyName === "ifscCode"
-            ? event.target.value.toUpperCase()
-            : event.target.value;
-        onChange(next);
-      }}
-    />
+    <div className="flex items-center gap-2">
+      <Input type="color" value={value || "#000000"} onChange={(e) => onChange(e.target.value)} className="h-9 w-16 p-1" />
+      <Input value={value || ""} maxLength={7} onChange={(e) => onChange(e.target.value)} placeholder="#000000" className="font-mono" />
+    </div>
   );
 }
 

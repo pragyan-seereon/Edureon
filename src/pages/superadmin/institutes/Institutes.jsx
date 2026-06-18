@@ -79,11 +79,11 @@ const statusVariant = (status) => {
   return "destructive";
 };
 
-const planVariant = (plan) => {
-  if (plan === "Enterprise") return "default";
-  if (plan === "Professional") return "secondary";
-  return "outline";
-};
+// const planVariant = (plan) => {
+//   if (plan === "Enterprise") return "default";
+//   if (plan === "Professional") return "secondary";
+//   return "outline";
+// };
 
 const exportRows = (rows) => {
   const columns = [
@@ -369,7 +369,7 @@ export default function Institutes() {
                   <SortableHead className="w-28" label="Type" sortKey="type" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-24" label="Board" sortKey="board" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-28" label="City" sortKey="city" sort={sort} onSort={setSortKey} />
-                  <SortableHead className="w-28" label="Plan" sortKey="plan" sort={sort} onSort={setSortKey} />
+                  {/* <SortableHead className="w-28" label="Plan" sortKey="plan" sort={sort} onSort={setSortKey} /> */}
                   <SortableHead className="w-28" label="Status" sortKey="status" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-28" label="Students" sortKey="students" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-36" label="Admin Name" sortKey="adminName" sort={sort} onSort={setSortKey} />
@@ -413,9 +413,9 @@ export default function Institutes() {
                       <TableCell className="truncate">{item.type}</TableCell>
                       <TableCell className="truncate">{item.board}</TableCell>
                       <TableCell className="truncate">{item.city}</TableCell>
-                      <TableCell>
+                      {/* <TableCell>
                         <Badge variant={planVariant(item.plan)}>{item.plan}</Badge>
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell>
                         <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
                       </TableCell>

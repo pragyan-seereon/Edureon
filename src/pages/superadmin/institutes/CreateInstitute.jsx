@@ -75,12 +75,17 @@ const INSTITUTE_TYPES = [
 const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "UGC", "AICTE", "Other"];
 const currentYear = new Date().getFullYear();
 
-const ACADEMIC_YEARS = Array.from({ length: 10 }, (_, index) => {
-  const startYear = currentYear + index;
-  const endYear = startYear + 1;
+// Drafts are kept locally only — they should never appear in the
+// Institutes table until the institute is actually submitted/created.
+const INSTITUTE_DRAFT_STORAGE_KEY = "createInstituteDraft";
 
-  return `${startYear}-${String(endYear).slice(-2)}`;
-});
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_OPTIONS = MONTHS_SHORT.map((m, i) => ({ label: m, value: String(i + 1) }));
+
+function getAcademicYearLabel(sm, sy, em, ey) {
+  if (!sm || !sy || !em || !ey) return "—";
+  return `${MONTHS_SHORT[parseInt(sm) - 1]} ${sy} – ${MONTHS_SHORT[parseInt(em) - 1]} ${ey}`;
+}
 
 function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -101,8 +106,10 @@ export default function CreateInstitute() {
     type: "School",
     board: "CBSE",
     customBoardName: "",
-    academicYear: `${currentYear}-${String(currentYear + 1).slice(-2)}`,
-    primaryColor: "#1e3a5f",
+academicYearStartMonth: "",
+academicYearStartYear: String(currentYear),
+academicYearEndMonth: "",
+academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
     secondaryColor: "#f59e0b",
     logo: null,
     logoPreview: "",
@@ -167,6 +174,13 @@ export default function CreateInstitute() {
   const [dragOver, setDragOver] = useState(null); // slotId being dragged over
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const academicYearLabel = getAcademicYearLabel(
+    form.academicYearStartMonth,
+    form.academicYearStartYear,
+    form.academicYearEndMonth,
+    form.academicYearEndYear
+  );
 
   // Determine which doc slots are effectively mandatory
   const getEffectiveBadge = (slot) => {
@@ -250,54 +264,71 @@ export default function CreateInstitute() {
   const toggleSection = (key) =>
     setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
+  const buildInstituteRecord = (status) => ({
+    name: form.name || "Draft Institute",
+    city: form.city || "—",
+    students: 0,
+    plan: "Growth",
+    status,
+    mrr: 0,
+    type: form.type,
+    board: form.board,
+    customBoardName: form.board === "Other" ? form.customBoardName : "",
+    academicYear: academicYearLabel,
+    address: form.addressLine1,
+    addressLine1: form.addressLine1,
+    addressLine2: form.addressLine2,
+    state: form.state,
+    pin: form.pin,
+    country: form.country,
+    phone: form.phone,
+    email: form.email,
+    website: form.website,
+    principalName: form.principalName,
+    principalPhone: form.principalPhone,
+    principalEmail: form.principalEmail,
+    principalDesignation: form.principalDesignation,
+    adminName: form.adminName,
+    adminPhone: form.adminPhone,
+    adminEmail: form.adminEmail,
+    adminDesignation: form.adminDesignation,
+    gst: form.gst,
+    pan: form.pan,
+    tan: form.tan,
+    bankName: form.bankName,
+    accountNumber: form.accountNumber,
+    confirmAccountNumber: form.confirmAccountNumber,
+    ifscCode: form.ifscCode,
+    ifscBankName: form.ifscBankName,
+    ifscBranch: form.ifscBranch,
+    accountHolderName: form.accountHolderName,
+    accountType: form.accountType,
+    sendCredentials: form.sendCredentials,
+    autoGeneratePassword: form.autoGeneratePassword,
+    primaryColor: form.primaryColor,
+    secondaryColor: form.secondaryColor,
+    documents: DOC_SLOTS.flatMap((slot) => {
+      const f = docs[slot.id];
+      if (slot.multi) return f.map(() => slot.label);
+      return f ? [slot.label] : [];
+    }),
+    lastSavedStep: step,
+  });
+
   const saveAsDraft = () => {
-    institutesApi.add({
-      name: form.name || "Draft Institute",
-      city: form.city || "—",
-      students: 0,
-      plan: "Growth",
-      status: "Draft",
-      mrr: 0,
-      type: form.type,
-      board: form.board,
-      customBoardName: form.board === "Other" ? form.customBoardName : "",
-      academicYear: form.academicYear,
-      address: form.addressLine1,
-      addressLine1: form.addressLine1,
-      addressLine2: form.addressLine2,
-      state: form.state,
-      pin: form.pin,
-      country: form.country,
-      phone: form.phone,
-      email: form.email,
-      website: form.website,
-      principalName: form.principalName,
-      principalPhone: form.principalPhone,
-      principalEmail: form.principalEmail,
-      principalDesignation: form.principalDesignation,
-      adminName: form.adminName,
-      adminPhone: form.adminPhone,
-      adminEmail: form.adminEmail,
-      adminDesignation: form.adminDesignation,
-      gst: form.gst,
-      pan: form.pan,
-      tan: form.tan,
-      bankName: form.bankName,
-      accountNumber: form.accountNumber,
-      confirmAccountNumber: form.confirmAccountNumber,
-      ifscCode: form.ifscCode,
-      ifscBankName: form.ifscBankName,
-      ifscBranch: form.ifscBranch,
-      accountHolderName: form.accountHolderName,
-      accountType: form.accountType,
-      sendCredentials: form.sendCredentials,
-      autoGeneratePassword: form.autoGeneratePassword,
-      primaryColor: form.primaryColor,
-      secondaryColor: form.secondaryColor,
-      documents: [],
-    });
-    toast.success("Saved as draft");
-    navigate("/super/institutes");
+    const draftRecord = buildInstituteRecord("Draft");
+
+    // Drafts are intentionally NOT written to institutesApi — that store
+    // backs the Institutes table, and a draft shouldn't show up there.
+    // Persist locally (sessionStorage) so progress isn't lost on refresh.
+    try {
+      sessionStorage.setItem(INSTITUTE_DRAFT_STORAGE_KEY, JSON.stringify(draftRecord));
+    } catch {
+      // sessionStorage may be unavailable (e.g. private browsing) — safe to ignore
+    }
+
+    toast.success(`Progress saved · Step ${step} of 6`);
+    // Stay on the current step — no navigation away from this page.
   };
 
   const submit = () => {
@@ -316,55 +347,18 @@ export default function CreateInstitute() {
   const confirmSubmit = () => {
     setShowSubmitModal(false);
     const id = `INST-${Date.now().toString(36).toUpperCase()}`;
-    institutesApi.add({
-      name: form.name,
-      city: form.city || "—",
-      students: 0,
-      plan: "Growth",
-      status: "Trial",
-      mrr: 0,
-      type: form.type,
-      board: form.board,
-      customBoardName: form.board === "Other" ? form.customBoardName : "",
-      academicYear: form.academicYear,
-      address: form.addressLine1,
-      addressLine1: form.addressLine1,
-      addressLine2: form.addressLine2,
-      state: form.state,
-      pin: form.pin,
-      country: form.country,
-      phone: form.phone,
-      email: form.email,
-      website: form.website,
-      principalName: form.principalName,
-      principalPhone: form.principalPhone,
-      principalEmail: form.principalEmail,
-      principalDesignation: form.principalDesignation,
-      adminName: form.adminName,
-      adminPhone: form.adminPhone,
-      adminEmail: form.adminEmail,
-      adminDesignation: form.adminDesignation,
-      gst: form.gst,
-      pan: form.pan,
-      tan: form.tan,
-      bankName: form.bankName,
-      accountNumber: form.accountNumber,
-      confirmAccountNumber: form.confirmAccountNumber,
-      ifscCode: form.ifscCode,
-      ifscBankName: form.ifscBankName,
-      ifscBranch: form.ifscBranch,
-      accountHolderName: form.accountHolderName,
-      accountType: form.accountType,
-      sendCredentials: form.sendCredentials,
-      autoGeneratePassword: form.autoGeneratePassword,
-      primaryColor: form.primaryColor,
-      secondaryColor: form.secondaryColor,
-      documents: DOC_SLOTS.flatMap((slot) => {
-        const f = docs[slot.id];
-        if (slot.multi) return f.map(() => slot.label);
-        return f ? [slot.label] : [];
-      }),
-    });
+    const finalRecord = buildInstituteRecord("Trial");
+
+    // This is the only point the institute is written to institutesApi —
+    // so it's also the first point it appears in the Institutes table.
+    institutesApi.add(finalRecord);
+
+    try {
+      sessionStorage.removeItem(INSTITUTE_DRAFT_STORAGE_KEY);
+    } catch {
+      // safe to ignore if storage is unavailable
+    }
+
     setNewInstituteId(id);
     setShowSuccessModal(true);
     setTimeout(() => {
@@ -452,71 +446,109 @@ export default function CreateInstitute() {
           <CardContent className="space-y-5">
 
             {/* ── Step 1: Basic Info ── */}
-            {step === 1 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field
-                  label={<>Institute Name <span className="text-destructive">*</span></>}
-                >
-                  <Input
-                    value={form.name}
-                    onChange={(e) => set("name", e.target.value)}
-                    placeholder="Delhi Public School — South"
-                  />
-                </Field>
-                <Field label={<>Institute Type <span className="text-destructive">*</span></>}>
-                  <Select value={form.type} onValueChange={(v) => set("type", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {INSTITUTE_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label={<>Board / Affiliation <span className="text-destructive">*</span></>}>
-                  <Select value={form.board} onValueChange={(v) => set("board", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {BOARD_OPTIONS.map((board) => (
-                        <SelectItem key={board} value={board}>{board}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {form.board === "Other" && (
-                  <Field label={<>Custom Board Name <span className="text-destructive">*</span></>}>
-                    <Input
-                      value={form.customBoardName}
-                      onChange={(e) => set("customBoardName", e.target.value)}
-                      placeholder="Enter board or affiliation name"
-                    />
-                  </Field>
-                )}
-                <Field label={<>Academic Year <span className="text-destructive">*</span></>}>
-  <Select
-    value={form.academicYear}
-    onValueChange={(value) => set("academicYear", value)}
-  >
-    <SelectTrigger>
-      <SelectValue placeholder="Select academic year" />
-    </SelectTrigger>
+        {step === 1 && (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <Field label={<>Institute Name <span className="text-destructive">*</span></>} className="md:col-span-3">
+      <Input
+        value={form.name}
+        onChange={(e) => set("name", e.target.value)}
+        placeholder="Delhi Public School — South"
+      />
+    </Field>
 
-    <SelectContent>
-      {ACADEMIC_YEARS.map((year) => (
-        <SelectItem key={year} value={year}>
-          {year}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</Field>
-                <Field label="Brand Primary Colour">
-                  <ColourField value={form.primaryColor} onChange={(value) => set("primaryColor", value)} />
-                </Field>
-                <Field label="Brand Secondary Colour">
-                  <ColourField value={form.secondaryColor} onChange={(value) => set("secondaryColor", value)} />
-                </Field>
-                <Field label="Institute Logo" className="md:col-span-2">
+    <Field label={<>Institute Type <span className="text-destructive">*</span></>}>
+      <Select value={form.type} onValueChange={(v) => set("type", v)}>
+        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {INSTITUTE_TYPES.map((type) => (
+            <SelectItem key={type} value={type}>{type}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+
+    {/* Row 1: Board / Affiliation, Start Month & Year, End Month & Year */}
+    <Field label={<>Board / Affiliation <span className="text-destructive">*</span></>}>
+      <Select value={form.board} onValueChange={(v) => set("board", v)}>
+        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {BOARD_OPTIONS.map((board) => (
+            <SelectItem key={board} value={board}>{board}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+    {form.board === "Other" && (
+      <Field label={<>Custom Board Name <span className="text-destructive">*</span></>} className="md:col-span-3">
+        <Input
+          value={form.customBoardName}
+          onChange={(e) => set("customBoardName", e.target.value)}
+          placeholder="Enter board or affiliation name"
+        />
+      </Field>
+    )}
+
+    <Field label={<>Start Month & Year <span className="text-destructive">*</span></>}>
+      <div className="flex gap-2">
+        <Select value={form.academicYearStartMonth} onValueChange={(v) => set("academicYearStartMonth", v)}>
+          <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
+          <SelectContent>
+            {MONTH_OPTIONS.map((m) => (
+              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="number"
+          className="w-24"
+          min={2020}
+          max={2099}
+          placeholder="Year"
+          value={form.academicYearStartYear}
+          onChange={(e) => set("academicYearStartYear", e.target.value)}
+        />
+      </div>
+    </Field>
+
+    <Field label={<>End Month & Year <span className="text-destructive">*</span></>}>
+      <div className="flex gap-2">
+        <Select value={form.academicYearEndMonth} onValueChange={(v) => set("academicYearEndMonth", v)}>
+          <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
+          <SelectContent>
+            {MONTH_OPTIONS.map((m) => (
+              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="number"
+          className="w-24"
+          min={2020}
+          max={2099}
+          placeholder="Year"
+          value={form.academicYearEndYear}
+          onChange={(e) => set("academicYearEndYear", e.target.value)}
+        />
+      </div>
+    </Field>
+
+    {/* Row 2: Academic Year, Brand Primary Colour, Brand Secondary Colour */}
+    <Field label="Academic Year">
+      <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
+        {academicYearLabel}
+      </div>
+    </Field>
+
+    <Field label="Brand Primary Colour">
+      <ColourField value={form.primaryColor} onChange={(value) => set("primaryColor", value)} />
+    </Field>
+
+    <Field label="Brand Secondary Colour">
+      <ColourField value={form.secondaryColor} onChange={(value) => set("secondaryColor", value)} />
+    </Field>
+
+    {/* Logo spans full width */}
+    <Field label="Institute Logo" className="md:col-span-2">
                   <input
                     type="file"
                     id="logo-upload"
@@ -593,9 +625,8 @@ export default function CreateInstitute() {
                     </div>
                   )}
                 </Field>
-              </div>
-            )}
-
+  </div>
+)}
             {/* ── Step 2: Contact & Address ── */}
             {step === 2 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -730,12 +761,20 @@ export default function CreateInstitute() {
                 <Field label={<>IFSC Code <span className="text-red-500">*</span></>}>
                   <Input value={form.ifscCode} onChange={(e) => set("ifscCode", e.target.value.toUpperCase())} placeholder="SBIN0001234" maxLength={11} />
                 </Field>
-                <Field label="Auto-fetched Bank Name">
-                  <Input value={form.ifscBankName || ""} readOnly placeholder="Auto-filled after IFSC validation" />
-                </Field>
-                <Field label="Auto-fetched Branch">
-                  <Input value={form.ifscBranch || ""} readOnly placeholder="Auto-filled after IFSC validation" />
-                </Field>
+               <Field label="Bank Name">
+  <Input
+    value={form.ifscBankName || ""}
+    onChange={(e) => set("ifscBankName", e.target.value)}
+    placeholder=" enter bank name"
+  />
+</Field>
+<Field label="Branch">
+  <Input
+    value={form.ifscBranch || ""}
+    onChange={(e) => set("ifscBranch", e.target.value)}
+    placeholder=" enter branch name "
+  />
+</Field>
                 <Field label={<>Account Holder Name <span className="text-red-500">*</span></>}>
                   <Input value={form.accountHolderName} onChange={(e) => set("accountHolderName", e.target.value)} placeholder="Enter account holder name" maxLength={150} />
                 </Field>
@@ -861,7 +900,7 @@ export default function CreateInstitute() {
                     ["Name", form.name || "—"],
                     ["Type", form.type],
                     ["Board", form.board === "Other" ? form.customBoardName || "Other" : form.board],
-                    ["Academic Year", form.academicYear],
+                    ["Academic Year", academicYearLabel],
                     ["Primary Color", form.primaryColor],
                     ["Secondary Color", form.secondaryColor],
                   ]}
