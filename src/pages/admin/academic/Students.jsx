@@ -56,11 +56,13 @@ import { useStudents, studentsApi } from "../../../lib/store";
 import { useMemo, useState } from "react";
 import { StudentDialog } from "../../../components/student-dialog";
 import { toast } from "sonner";
+
 const feeColor = {
   Paid: "bg-success/10 text-success border-success/20",
   Pending: "bg-warning/15 text-warning border-warning/30",
   Overdue: "bg-destructive/10 text-destructive border-destructive/20",
 };
+
 export default function Students() {
   const navigate = useNavigate();
   const students = useStudents();
@@ -72,8 +74,12 @@ export default function Students() {
   const [selected, setSelected] = useState(new Set());
   const [page, setPage] = useState(1);
   const PAGE = 12;
+
   const filtered = useMemo(() => {
     return students.filter((s) => {
+      // FIX: always exclude draft students from the main table
+      if (s.isDraft) return false;
+
       if (
         q &&
         !(
@@ -89,13 +95,16 @@ export default function Students() {
       return true;
     });
   }, [students, q, classFilter, tab]);
+
   const pageItems = filtered.slice((page - 1) * PAGE, page * PAGE);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE));
   const classes = Array.from(new Set(students.map((s) => s.class))).sort();
+
   const remove = (s) => {
     studentsApi.remove(s.id);
     toast.success(`${s.name} removed`);
   };
+
   const toggleSel = (id) =>
     setSelected((p) => {
       const n = new Set(p);
@@ -103,8 +112,10 @@ export default function Students() {
       else n.add(id);
       return n;
     });
+
   const allSelected =
     pageItems.length > 0 && pageItems.every((s) => selected.has(s.id));
+
   const toggleAll = () =>
     setSelected((p) => {
       const n = new Set(p);
@@ -112,6 +123,7 @@ export default function Students() {
       else pageItems.forEach((s) => n.add(s.id));
       return n;
     });
+
   const bulkPromote = () => {
     const order = ["VI", "VII", "VIII", "IX", "X", "XI", "XII"];
     selected.forEach((id) => {
@@ -124,16 +136,19 @@ export default function Students() {
     toast.success(`Promoted ${selected.size} students`);
     setSelected(new Set());
   };
+
   const bulkSuspend = () => {
     selected.forEach((id) => studentsApi.update(id, { feeStatus: "Overdue" }));
     toast.success(`Suspended ${selected.size}`);
     setSelected(new Set());
   };
+
   const bulkRemove = () => {
     selected.forEach((id) => studentsApi.remove(id));
     toast.success(`Removed ${selected.size}`);
     setSelected(new Set());
   };
+
   const exportCsv = () => {
     const headers = [
       "ID",
@@ -170,6 +185,7 @@ export default function Students() {
     URL.revokeObjectURL(url);
     toast.success("Exported");
   };
+
   return (
     <PageContainer>
       <PageHeader
@@ -206,14 +222,14 @@ export default function Students() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard
           label="Total Students"
-          value={students.length.toLocaleString("en-IN")}
+          value={students.filter((s) => !s.isDraft).length.toLocaleString("en-IN")}
           delta={3.2}
           icon={<GraduationCap className="h-5 w-5" />}
           tone="primary"
         />
         <KpiCard
           label="Present Today"
-          value={Math.round(students.length * 0.92).toString()}
+          value={Math.round(students.filter((s) => !s.isDraft).length * 0.92).toString()}
           delta={1.4}
           icon={<UserCheck className="h-5 w-5" />}
           tone="success"
@@ -221,7 +237,7 @@ export default function Students() {
         <KpiCard
           label="Fee Defaulters"
           value={students
-            .filter((s) => s.feeStatus !== "Paid")
+            .filter((s) => !s.isDraft && s.feeStatus !== "Paid")
             .length.toString()}
           delta={-6.2}
           icon={<AlertCircle className="h-5 w-5" />}
