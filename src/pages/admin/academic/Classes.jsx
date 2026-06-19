@@ -43,10 +43,29 @@ import {
   Pencil,
   Trash2,
   Eye,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CrudDialog } from "../../../components/crud-dialog";
+import { Input } from "../../../components/ui/input";
+import { Checkbox } from "../../../components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
+import { Label } from "../../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import {
   useSections,
   useSubjects,
@@ -56,13 +75,18 @@ import {
   useAcademicCalendar,
   subjectMappingsApi,
   academicCalendarApi,
+  useStudents,
+  studentsApi,
 } from "../../../lib/store";
+
 export default function Classes() {
   const navigate = useNavigate();
   const sections = useSections();
   const subjects = useSubjects();
   const mappings = useSubjectMappings();
   const calendar = useAcademicCalendar();
+  const students = useStudents();
+
   const [secOpen, setSecOpen] = useState(false);
   const [secEdit, setSecEdit] = useState(null);
   const [subOpen, setSubOpen] = useState(false);
@@ -71,6 +95,89 @@ export default function Classes() {
   const [mapEdit, setMapEdit] = useState(null);
   const [calOpen, setCalOpen] = useState(false);
   const [calEdit, setCalEdit] = useState(null);
+
+  // Students tab state
+  const [stuQ, setStuQ] = useState("");
+  const [stuClass, setStuClass] = useState("all");
+  const [stuSection, setStuSection] = useState("all");
+  const [stuSelected, setStuSelected] = useState(new Set());
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignTo, setAssignTo] = useState({
+    class: "",
+    section: "",
+    session:
+      String(new Date().getFullYear()) +
+      "-" +
+      String(new Date().getFullYear() + 1).slice(-2),
+  });
+
+  const classOptions = useMemo(
+    () => Array.from(new Set(students.map((s) => s.class))).sort(),
+    [students],
+  );
+  const sectionOptions = useMemo(
+    () => Array.from(new Set(students.map((s) => s.section))).sort(),
+    [students],
+  );
+
+  const filteredStudents = useMemo(
+    () =>
+      students.filter((s) => {
+        if (stuClass !== "all" && s.class !== stuClass) return false;
+        if (stuSection !== "all" && s.section !== stuSection) return false;
+        if (
+          stuQ &&
+          !(
+            s.name.toLowerCase().includes(stuQ.toLowerCase()) ||
+            s.admissionNo.toLowerCase().includes(stuQ.toLowerCase()) ||
+            s.parent.toLowerCase().includes(stuQ.toLowerCase())
+          )
+        )
+          return false;
+        return true;
+      }),
+    [students, stuQ, stuClass, stuSection],
+  );
+
+  const allStuSelected =
+    filteredStudents.length > 0 &&
+    filteredStudents.every((s) => stuSelected.has(s.id));
+
+  const toggleAllStu = () =>
+    setStuSelected((p) => {
+      const n = new Set(p);
+      if (allStuSelected) filteredStudents.forEach((s) => n.delete(s.id));
+      else filteredStudents.forEach((s) => n.add(s.id));
+      return n;
+    });
+
+  const toggleStu = (id) =>
+    setStuSelected((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  const performAssign = () => {
+    if (!assignTo.class || !assignTo.section) {
+      toast.error("Pick a class and section to assign");
+      return;
+    }
+    stuSelected.forEach((id) =>
+      studentsApi.update(id, {
+        class: assignTo.class,
+        section: assignTo.section,
+        session: assignTo.session,
+      }),
+    );
+    toast.success(
+      `Assigned ${stuSelected.size} student(s) to ${assignTo.class}-${assignTo.section} · ${assignTo.session}`,
+    );
+    setStuSelected(new Set());
+    setAssignOpen(false);
+  };
+
   const submitSection = (d) => {
     const payload = {
       name: String(d.name),
@@ -136,9 +243,7 @@ export default function Classes() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Academic"
         title="Classes, Sections & Subjects"
-        description="Define academic structure — streams, departments, classes, sections, batches and subject mapping."
         actions={
           <>
             <Button
@@ -200,6 +305,7 @@ export default function Classes() {
           <TabsTrigger value="subjects">Subjects</TabsTrigger>
           <TabsTrigger value="mapping">Subject Mapping</TabsTrigger>
           <TabsTrigger value="calendar">Academic Calendar</TabsTrigger>
+          <TabsTrigger value="students">Students</TabsTrigger>
         </TabsList>
 
         <TabsContent
@@ -595,7 +701,248 @@ export default function Classes() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="students" className="mt-4">
+          <Card className="border-border/60">
+            <CardHeader className="flex-row items-center justify-between space-y-0 gap-3 flex-wrap">
+              <div>
+                <CardTitle className="text-base">Students</CardTitle>
+                {/* <CardDescription>
+                  Filter, multi-select students and bulk-assign them to a
+                  Class, Section and Session.
+                </CardDescription> */}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+                  <Input
+                    value={stuQ}
+                    onChange={(e) => setStuQ(e.target.value)}
+                    placeholder="Search name / admission / parent…"
+                    className="pl-8 h-9 w-64"
+                  />
+                </div>
+                <Select value={stuClass} onValueChange={setStuClass}>
+                  <SelectTrigger className="h-9 w-32">
+                    <SelectValue placeholder="Class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All classes</SelectItem>
+                    {classOptions.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        Class {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={stuSection} onValueChange={setStuSection}>
+                  <SelectTrigger className="h-9 w-32">
+                    <SelectValue placeholder="Section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All sections</SelectItem>
+                    {sectionOptions.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        Section {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  className="gradient-primary border-0"
+                  disabled={stuSelected.size === 0}
+                  onClick={() => {
+                    setAssignTo((a) => ({
+                      ...a,
+                      class: a.class || (stuClass !== "all" ? stuClass : ""),
+                      section:
+                        a.section || (stuSection !== "all" ? stuSection : ""),
+                    }));
+                    setAssignOpen(true);
+                  }}
+                >
+                  Assign{stuSelected.size > 0 ? ` (${stuSelected.size})` : ""}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8">
+                      <Checkbox
+                        checked={allStuSelected}
+                        onCheckedChange={toggleAllStu}
+                      />
+                    </TableHead>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Admission No</TableHead>
+                    <TableHead>Class</TableHead>
+                    <TableHead>Roll</TableHead>
+                    <TableHead>Parent</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Session</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStudents.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={8}
+                        className="text-center text-sm text-muted-foreground py-10"
+                      >
+                        No students match the current filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {filteredStudents.slice(0, 200).map((s) => (
+                    <TableRow
+                      key={s.id}
+                      className="cursor-pointer"
+                      onClick={() => toggleStu(s.id)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={stuSelected.has(s.id)}
+                          onCheckedChange={() => toggleStu(s.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {s.admissionNo}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="font-mono">
+                          {s.class}-{s.section}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{s.rollNo}</TableCell>
+                      <TableCell className="text-sm">{s.parent}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {s.phone}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {s.session ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {filteredStudents.length > 200 && (
+                <div className="p-3 text-xs text-muted-foreground border-t">
+                  Showing first 200 of {filteredStudents.length}. Refine
+                  filters to narrow down.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Assign Students</DialogTitle>
+            <DialogDescription>
+              {stuSelected.size} student(s) selected. Choose the target Class,
+              Section and Session.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Class</Label>
+              <Select
+                value={assignTo.class}
+                onValueChange={(v) => setAssignTo((a) => ({ ...a, class: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    "Pre-KG",
+                    "KG",
+                    "I",
+                    "II",
+                    "III",
+                    "IV",
+                    "V",
+                    "VI",
+                    "VII",
+                    "VIII",
+                    "IX",
+                    "X",
+                    "XI",
+                    "XII",
+                  ].map((c) => (
+                    <SelectItem key={c} value={c}>
+                      Class {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Section</Label>
+              <Select
+                value={assignTo.section}
+                onValueChange={(v) =>
+                  setAssignTo((a) => ({ ...a, section: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["A", "B", "C", "D", "E", "F"].map((c) => (
+                    <SelectItem key={c} value={c}>
+                      Section {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Session (Year)
+              </Label>
+              <Select
+                value={assignTo.session}
+                onValueChange={(v) =>
+                  setAssignTo((a) => ({ ...a, session: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select session" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    const y = new Date().getFullYear();
+                    return [y - 1, y, y + 1].map((yr) => {
+                      const label = `${yr}-${String(yr + 1).slice(-2)}`;
+                      return (
+                        <SelectItem key={label} value={label}>
+                          {label}
+                        </SelectItem>
+                      );
+                    });
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={performAssign} className="gradient-primary border-0">
+              Assign {stuSelected.size} Student
+              {stuSelected.size === 1 ? "" : "s"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CrudDialog
         open={secOpen}
