@@ -4,7 +4,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
+  // CardDescription,
 } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -257,9 +257,7 @@ export default function Infrastructure() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Admin · Operations"
         title="Infrastructure"
-        description="Buildings, blocks, floors, and rooms. Build out your campus tree with unlimited depth."
         actions={
           <Button
             size="sm"
@@ -574,10 +572,10 @@ export default function Infrastructure() {
               <CardTitle className="font-display text-base">
                 Buildings → Blocks → Floors → Rooms
               </CardTitle>
-              <CardDescription>
+              {/* <CardDescription>
                 Add unlimited blocks, floors and rooms in each building. Hover
                 for actions.
-              </CardDescription>
+              </CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-1">
               {tree.map((b) => {
@@ -834,7 +832,7 @@ export default function Infrastructure() {
                 <CardTitle className="font-display text-base">
                   All Rooms
                 </CardTitle>
-                <CardDescription>Searchable across the campus.</CardDescription>
+                {/* <CardDescription>Searchable across the campus.</CardDescription> */}
               </div>
               <div className="relative w-64">
                 <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -853,6 +851,7 @@ export default function Infrastructure() {
                     <TableHead>Room</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Block</TableHead>
                     <TableHead>Floor</TableHead>
                     <TableHead>Building</TableHead>
                     <TableHead className="text-right">Capacity</TableHead>
@@ -869,6 +868,9 @@ export default function Infrastructure() {
                         {r.name}
                       </TableCell>
                       <TableCell className="text-xs">{r.type}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {r.block}
+                     </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {r.floor}
                       </TableCell>
