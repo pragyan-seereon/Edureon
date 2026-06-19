@@ -13,7 +13,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from "./ui/sidebar";
-import { useAuth, initials } from "../lib/auth";
+import { initials } from "../lib/auth";
 import { navForRole, portalLabelForRole } from "../lib/portal-nav";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 export function AppSidebar() {
@@ -22,9 +22,11 @@ export function AppSidebar() {
   const { pathname } = useLocation();
   const isActive = (url) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
-  const { user } = useAuth();
-  const groups = navForRole(user?.role ?? "admin");
-  const portalLabel = portalLabelForRole(user?.role ?? "admin");
+  const user = JSON.parse(localStorage.getItem("user"));
+ const role = user?.role_code;
+
+const groups = navForRole(role);
+const portalLabel = portalLabelForRole(role);
   return (
     <Sidebar collapsible="icon" className="border-r">
       <SidebarHeader className="border-b border-sidebar-border">

@@ -1,4 +1,4 @@
-import { useAuth, initials, roleLabel } from "../lib/auth";
+import { initials } from "../lib/auth";
 // import { portalHomeForRole } from "../lib/portal-nav";
 import {
   DropdownMenu,
@@ -46,13 +46,18 @@ import { toast } from "sonner";
 //   },
 // ];
 export function UserMenu() {
-  const { user, logout,  } = useAuth();
+ const user = JSON.parse(localStorage.getItem("user"));
   // eslint-disable-next-line no-unused-vars
   const navigate = useNavigate();
   if (!user) return null;
 const onLogout = () => {
-  logout();
+  localStorage.removeItem("user");
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.removeItem("session_uuid");
+
   toast.success("Signed out");
+
   window.location.href = "/login";
 };
   // const onSwitch = (role, label) => {
@@ -75,7 +80,8 @@ const onLogout = () => {
               {user.name}
             </span>
             <span className="text-[10px] text-muted-foreground">
-              {roleLabel[user.role]}
+                {user.role_name}
+
             </span>
           </div>
         </Button>
@@ -98,7 +104,7 @@ const onLogout = () => {
                 variant="secondary"
                 className="mt-1 text-[9px] uppercase tracking-wider"
               >
-                {roleLabel[user.role]}
+                {user.role_name}
               </Badge>
             </div>
           </div>

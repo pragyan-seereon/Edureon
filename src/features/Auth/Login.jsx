@@ -1,6 +1,6 @@
 import { useNavigate, Link } from "react-router-dom";
 import { useState, useRef } from "react";
-import { useAuth } from "../../lib/auth";
+import { login, verifyOtp as verifyOtpRequest } from "../../api/auth.js"; // adjust path to match your project structure
 import { portalHomeForRole } from "../../lib/portal-nav";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// ── Inline SVG icons for Google & Facebook ────────────────────────────────────
+// ── Inline SVG icons for Google & Facebook (kept for visual parity — wire up
+//    real OAuth endpoints when available) ──────────────────────────────────
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -31,150 +32,59 @@ const FacebookIcon = () => (
   </svg>
 );
 
-// ── Role labels used for social-login fallback users only ─────────────────────
-const roleLabel = {
-  super_admin: "Super Admin",
-  admin: "Administrator",
-  principal: "Principal",
-  teacher: "Teacher",
-  accountant: "Accountant",
-  hr: "HR Manager",
-  parent: "Parent",
-  student: "Student",
-};
-
-// Best-effort role inference from an email's local part. Only used for the
-// social-login fallback path when no backend user record exists — normal
-// email/password sign-in gets its role directly from auth.login().
-function inferRoleFromEmail(email) {
-  const local = (email.split("@")[0] || "").toLowerCase();
-  if (local.includes("super")) return "super_admin";
-  if (local.includes("principal")) return "principal";
-  if (local.includes("teacher")) return "teacher";
-  if (local.includes("student")) return "student";
-  if (local.includes("parent")) return "parent";
-  if (local.includes("hr")) return "hr";
-  if (local.includes("account")) return "accountant";
-  return "admin";
-}
-
-// ── OTP helpers ───────────────────────────────────────────────────────────────
 const OTP_LENGTH = 6;
-const emptyOtp   = () => Array.from({ length: OTP_LENGTH }, () => "");
-const createOtp  = () =>
-  String(Math.floor(100000 + Math.random() * 900000)).slice(0, OTP_LENGTH);
-
-function generateLoginOtp() {
-  const otp = createOtp();
-  return {
-    otp,
-    message: `Your EDUREON verification code is ${otp}. It expires in 10 minutes. Do not share this code with anyone.`,
-  };
-}
-
-function sendOtpEmail(email, message) {
-  console.info(`[OTP EMAIL -> ${email}]:`, message);
-}
+const emptyOtp = () => Array.from({ length: OTP_LENGTH }, () => "");
 
 export default function Login() {
-  const auth     = useAuth();
   const navigate = useNavigate();
 
-  // ── Single generic sign-in form — role is decided by the backend based on
-  //    the email/password supplied, not by a tab the user picks. ──────────────
-  const [email, setEmail]       = useState("");
+  // ── Sign-in form state ───────────────────────────────────────────────────
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  const [loading, setLoading]           = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe]     = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
-  // ── OTP state ────────────────────────────────────────────────────────────────
-  const [otpStep, setOtpStep]               = useState(false);
-  const [otp, setOtp]                       = useState(emptyOtp);
-  const [pendingUser, setPendingUser]       = useState(null);
-  const [socialProvider, setSocialProvider] = useState(null);
+  // ── OTP step state ───────────────────────────────────────────────────────
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState(emptyOtp);
+  const [pendingEmail, setPendingEmail] = useState("");
 
-  const generatedOtpRef = useRef(null);
-  const otpInputsRef    = useRef([]);
+  const otpInputsRef = useRef([]);
 
-  // ── Regular email/password login ─────────────────────────────────────────────
+  // ── Step 1: email + password → backend sends OTP ────────────────────────
   const submit = async (e) => {
     e?.preventDefault();
-    if (!email || !password) return toast.error("Email and password are required");
+    if (!email || !password) {
+      return toast.error("Email and password are required");
+    }
+
     setLoading(true);
     try {
-      // The role attached to `u` comes entirely from the backend / auth
-      // lookup based on the credentials — the UI no longer selects it.
-      const u = await auth.login(email.trim(), password, { persistUser: false });
-      const { otp: generatedOtp, message } = generateLoginOtp();
-      const userEmail = u.email ?? email.trim();
+      const data = await login(email.trim(), password, rememberMe);
 
-      generatedOtpRef.current = generatedOtp;
-      sendOtpEmail(userEmail, message);
-      setPendingUser(u);
-      setSocialProvider(null);
+      setPendingEmail(email.trim());
       setOtpStep(true);
       setOtp(emptyOtp());
 
-      toast.success(`OTP sent to ${userEmail}`);
-      toast.info(`Demo OTP: ${generatedOtp}`, { duration: 6000 });
+      toast.success(data?.message || `OTP sent to ${email.trim()}`);
       window.setTimeout(() => otpInputsRef.current[0]?.focus(), 80);
-    } catch {
-      toast.error("Invalid credentials");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Social login ─────────────────────────────────────────────────────────────
-  const socialLogin = async (provider) => {
-    setLoading(true);
-    setSocialProvider(provider);
-    try {
-      let u = null;
-      try {
-        u = await auth.socialLogin?.(provider);
-      } catch {
-        // OAuth popup blocked or not implemented — continue with stub
-      }
-
-      if (!u) {
-        const fallbackEmail = email.trim() || `demo+${provider}@edureon.in`;
-        const fallbackName  = fallbackEmail
-          .split("@")[0]
-          .replace(/[._-]+/g, " ")
-          .replace(/\b\w/g, (c) => c.toUpperCase());
-        const inferredRole = inferRoleFromEmail(fallbackEmail);
-        u = {
-          id:          "u_" + Date.now().toString(36),
-          name:        fallbackName || `${provider.charAt(0).toUpperCase() + provider.slice(1)} User`,
-          email:       fallbackEmail,
-          role:        inferredRole,
-          designation: roleLabel[inferredRole] ?? "Administrator",
-          institute: "Delhi Public School - North",
-          provider,
-          joinedAt:  new Date().toISOString().slice(0, 10),
-        };
-      }
-
-      const loggedInUser = await auth.completeLogin(u);
-      toast.success(`Signed in with ${provider.charAt(0).toUpperCase() + provider.slice(1)}`);
-      navigate(portalHomeForRole(loggedInUser.role));
     } catch (err) {
-      console.error(err);
-      toast.error(`${provider} sign-in failed. Please try again.`);
+      toast.error(
+        err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          "Invalid credentials"
+      );
     } finally {
-      setSocialProvider(null);
       setLoading(false);
     }
   };
 
-  // ── OTP digit change with auto-advance and auto-submit on 6th digit ──────────
+  // ── OTP digit change with auto-advance and auto-submit on 6th digit ─────
   const handleOtpChange = (index, value) => {
     if (!/^\d*$/.test(value)) return;
-    const next    = [...otp];
-    next[index]   = value.slice(-1);
+    const next = [...otp];
+    next[index] = value.slice(-1);
     setOtp(next);
 
     if (value && index < OTP_LENGTH - 1) {
@@ -195,26 +105,43 @@ export default function Login() {
     }
   };
 
-  // ── OTP verification ─────────────────────────────────────────────────────────
+  // ── Step 2: verify OTP → backend issues tokens + user record ────────────
   const verifyOtp = async (codeOverride) => {
     const code = codeOverride ?? otp.join("");
-    if (code.length < OTP_LENGTH) return toast.error("Please enter the 6-digit OTP");
+    if (code.length < OTP_LENGTH) {
+      return toast.error("Please enter the 6-digit OTP");
+    }
 
     setLoading(true);
     try {
-      if (generatedOtpRef.current && code !== generatedOtpRef.current) {
-        throw new Error("OTP mismatch");
+      const data = await verifyOtpRequest(pendingEmail, code);
+      // access_token / refresh_token are already persisted to localStorage
+      // inside verifyOtpRequest(). The backend should also return the
+      // authenticated user (with role) in the same response — adjust the
+      // key below (`data.user`) to match your actual API shape.
+    const user = data.user;
+
+localStorage.setItem("user", JSON.stringify(user));
+localStorage.setItem("access_token", data.access_token);
+localStorage.setItem("refresh_token", data.refresh_token);
+localStorage.setItem("session_uuid", data.session_uuid);
+
+navigate(portalHomeForRole(user.role_code));
+
+      if (!user) {
+        throw new Error("No user payload returned from verify-otp");
       }
 
-      const verifiedUser = (await auth.verifyOtp?.(pendingUser, code)) ?? pendingUser;
-      const u            = await auth.completeLogin(verifiedUser);
+      localStorage.setItem("user", JSON.stringify(user));
 
       toast.success("Welcome back");
-      // Role-based redirect — `u.role` was determined by the backend during
-      // auth.login(), not by anything the user picked on this page.
-      navigate(portalHomeForRole(u.role));
-    } catch {
-      toast.error("Invalid or expired OTP. Please try again.");
+     navigate(portalHomeForRole(user.role_code));
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          "Invalid or expired OTP. Please try again."
+      );
       setOtp(emptyOtp());
       otpInputsRef.current[0]?.focus();
     } finally {
@@ -227,33 +154,39 @@ export default function Login() {
     verifyOtp();
   };
 
-  // ── Resend OTP ───────────────────────────────────────────────────────────────
+  // ── Resend OTP — re-runs login() to get the backend to issue a new code ─
   const resendOtp = async () => {
-    if (!pendingUser) {
+    if (!pendingEmail || !password) {
       toast.error("Please sign in again");
+      setOtpStep(false);
       return;
     }
     setLoading(true);
     try {
-      const userEmail = pendingUser.email ?? email;
       toast.loading("Resending OTP…", { id: "otp-resend" });
-      const { otp: newOtp, message } = generateLoginOtp();
-      generatedOtpRef.current = newOtp;
-      sendOtpEmail(userEmail, message);
+      const data = await login(pendingEmail, password, rememberMe);
       toast.dismiss("otp-resend");
-      toast.success("New OTP sent!");
-      toast.info(`Demo OTP: ${newOtp}`, { duration: 6000 });
+      toast.success(data?.message || "New OTP sent!");
       setOtp(emptyOtp());
       otpInputsRef.current[0]?.focus();
-    } catch {
+    } catch (err) {
       toast.dismiss("otp-resend");
-      toast.error("Failed to resend OTP");
+      toast.error(
+        err?.response?.data?.message || "Failed to resend OTP"
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Placeholder for OAuth providers — no backend endpoint provided yet.
+  const socialLogin = (provider) => {
+    toast.info(
+      `${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in isn't wired up yet`
+    );
+  };
+
+  // ───────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       {/* Brand panel */}
@@ -326,22 +259,15 @@ export default function Login() {
             <span className="font-display font-semibold">Scholaris ERP</span>
           </div>
 
-          {/* ── OTP / 2FA Screen ───────────────────────────────────────────── */}
+          {/* ── OTP / 2FA Screen ─────────────────────────────────────────── */}
           {otpStep ? (
             <>
-              <div className="mb-1 flex items-center gap-2">
-                {socialProvider === "google"   && <GoogleIcon />}
-                {socialProvider === "facebook" && <FacebookIcon />}
-                <h2 className="font-display text-2xl font-semibold tracking-tight">
-                  Two-step verification
-                </h2>
-              </div>
+              <h2 className="font-display text-2xl font-semibold tracking-tight">
+                Two-step verification
+              </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {socialProvider
-                  ? `We sent a 6-digit code to the email linked to your ${
-                      socialProvider.charAt(0).toUpperCase() + socialProvider.slice(1)
-                    } account.`
-                  : "Enter the 6-digit code sent to your registered email or phone."}
+                Enter the 6-digit code sent to{" "}
+                <span className="font-medium text-foreground">{pendingEmail}</span>.
               </p>
 
               <form onSubmit={submitOtp} className="mt-7 space-y-5">
@@ -395,8 +321,6 @@ export default function Login() {
                   onClick={() => {
                     setOtpStep(false);
                     setOtp(emptyOtp());
-                    setSocialProvider(null);
-                    generatedOtpRef.current = null;
                   }}
                 >
                   ← Back to login
@@ -404,12 +328,11 @@ export default function Login() {
               </p>
             </>
           ) : (
-            /* ── Regular login form ─────────────────────────────────────────── */
+            /* ── Regular login form ───────────────────────────────────── */
             <>
               <h2 className="font-display text-2xl font-semibold tracking-tight">
                 Sign in
               </h2>
-          
 
               <form onSubmit={submit} className="mt-5 space-y-4">
                 <div className="space-y-1.5">
@@ -493,7 +416,7 @@ export default function Login() {
                 </Button>
               </form>
 
-              {/* Social login */}
+              {/* Social login (UI only — wire up real OAuth when available) */}
               <div className="relative my-5 flex items-center">
                 <div className="flex-1 border-t" />
                 <span className="px-3 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -506,16 +429,11 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => socialLogin("google")}
-                  disabled={loading}
                   className="flex flex-col items-center gap-1.5 group"
                   aria-label="Sign in with Google"
                 >
                   <span className="h-14 w-14 rounded-full border border-border bg-background flex items-center justify-center shadow-sm group-hover:border-primary/40 transition-colors">
-                    {loading && socialProvider === "google" ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <GoogleIcon />
-                    )}
+                    <GoogleIcon />
                   </span>
                   <span className="text-[11px] text-muted-foreground">Google</span>
                 </button>
@@ -523,16 +441,11 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => socialLogin("facebook")}
-                  disabled={loading}
                   className="flex flex-col items-center gap-1.5 group"
                   aria-label="Sign in with Facebook"
                 >
                   <span className="h-14 w-14 rounded-full border border-border bg-background flex items-center justify-center shadow-sm group-hover:border-primary/40 transition-colors">
-                    {loading && socialProvider === "facebook" ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <FacebookIcon />
-                    )}
+                    <FacebookIcon />
                   </span>
                   <span className="text-[11px] text-muted-foreground">Facebook</span>
                 </button>
