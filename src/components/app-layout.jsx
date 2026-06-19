@@ -7,7 +7,7 @@ import { SidebarProvider } from "./ui/sidebar";
 import { Topbar } from "./topbar";
 import { Toaster } from "./ui/sonner";
 
-import { useAuth } from "../lib/auth";
+// import { useAuth } from "../lib/auth";
 
 const publicPaths = [
   "/login",
@@ -30,7 +30,8 @@ function LoadingScreen() {
 }
 
 export function AppLayout() {
-  const { user, ready } = useAuth();
+const user = JSON.parse(localStorage.getItem("user"));
+const ready = true;
   const { pathname } = useLocation();
 
   const isPublic = publicPaths.some(

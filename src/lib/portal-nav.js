@@ -37,7 +37,7 @@ const adminGroups = [
   {
     label: "Overview",
     items: [
-      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+      { title: "Dashboard", url: "/admin/dashboard", icon: LayoutDashboard },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
       { title: "Notifications", url: "/notifications", icon: Bell },
       { title: "Audit Log", url: "/admin/audit", icon: History },
@@ -236,21 +236,21 @@ const parentGroups = [
   },
 ];
 export function navForRole(role) {
-  if (role === "super_admin") return superGroups;
+  if (role === "SUPER_ADMIN") return superGroups;
   if (role === "teacher") return teacherGroups;
   if (role === "student") return studentGroups;
   if (role === "parent") return parentGroups;
   return adminGroups;
 }
 export function portalHomeForRole(role) {
-  if (role === "super_admin") return "/super/dashboard";
+  if (role === "SUPER_ADMIN") return "/super/dashboard";
   if (role === "teacher") return "/teacher/dashboard";
   if (role === "student") return "/student/dashboard";
   if (role === "parent") return "/parent/dashboard";
   return "/";
 }
 export function portalLabelForRole(role) {
-  if (role === "super_admin") return "Super Admin Portal";
+  if (role === "SUPER_ADMIN") return "Super Admin Portal";
   if (role === "teacher") return "Teacher Portal";
   if (role === "student") return "Student Portal";
   if (role === "parent") return "Parent Portal";
