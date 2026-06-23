@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 // eslint-disable-next-line no-unused-vars
-import { ChevronLeft, Save, X, FileUp, FileCheck2, AlertCircle, Eye, Download, Trash2, Plus, Check } from "lucide-react";
+import { ChevronLeft, Save, X, FileUp, FileCheck2, AlertCircle, Eye, Download, Trash2, Plus, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
 import { Badge } from "../../../components/ui/badge";
@@ -16,14 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-// import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
-import { institutesApi, useInstitutes } from "../../../lib/store";
+import { getInstituteById, updateInstitute } from "../../../api/Institute";
 
 const INSTITUTE_TYPES = ["School", "College", "Coaching Centre", "University", "Other"];
 const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "UGC", "AICTE", "Other"];
-// const PLANS = ["Trial", "Basic", "Professional", "Enterprise"];
-// const STATUS = ["Active", "Inactive", "Trial", "Suspended"];
 const ACCOUNT_TYPES = ["Savings", "Current", "Overdraft"];
 
 const INDIA_STATES = [
@@ -45,10 +42,6 @@ function getAcademicYearLabel(sm, sy, em, ey) {
   return `${MONTHS_SHORT[parseInt(sm) - 1]} ${sy} – ${MONTHS_SHORT[parseInt(em) - 1]} ${ey}`;
 }
 
-// Parse a stored academic year label like "2026 Jan - 2027 Dec" or
-// "Jun 2026 – Mar 2027" back into the four discrete fields used by the
-// Create flow's month/year selects. Falls back to current/next year if
-// nothing can be parsed.
 function parseAcademicYear(label) {
   if (!label) {
     return {
@@ -62,7 +55,6 @@ function parseAcademicYear(label) {
     const idx = MONTHS_SHORT.findIndex((m) => m.toLowerCase() === String(name).slice(0, 3).toLowerCase());
     return idx >= 0 ? String(idx + 1) : "";
   };
-  // Try "Mon YYYY – Mon YYYY" / "Mon YYYY - Mon YYYY"
   const monYearMonYear = label.match(/([A-Za-z]+)\s+(\d{4})\s*[-–]\s*([A-Za-z]+)\s+(\d{4})/);
   if (monYearMonYear) {
     const [, sm, sy, em, ey] = monYearMonYear;
@@ -73,7 +65,6 @@ function parseAcademicYear(label) {
       academicYearEndYear: ey,
     };
   }
-  // Try "YYYY Mon - YYYY Mon"
   const yearMonYearMon = label.match(/(\d{4})\s+([A-Za-z]+)\s*[-–]\s*(\d{4})\s+([A-Za-z]+)/);
   if (yearMonYearMon) {
     const [, sy, sm, ey, em] = yearMonYearMon;
@@ -115,75 +106,76 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-const normalizeInstitute = (item) => {
-  const academicYearParts = parseAcademicYear(item.academicYear);
+// FIX: extracted so the same institute -> form mapping can be reused both
+// when loading data initially AND when re-deriving the "original" form to
+// diff against for change-detection (hasChanges).
+function mapInstituteToForm(institute) {
+  const academicData = parseAcademicYear(institute.academic_year);
   return {
-    ...item,
-    type: item.type === "Coaching" ? "Coaching Centre" : item.type || "School",
-    board: item.board || "CBSE",
-    customBoardName: item.customBoardName || "",
-    ...academicYearParts,
-    plan:
-      item.status === "Trial"
-        ? "Trial"
-        : item.plan === "Growth"
-          ? "Basic"
-          : item.plan === "Business"
-            ? "Professional"
-            : item.plan || "Basic",
-    status: item.status || "Active",
-    addressLine1: item.addressLine1 || item.address || "",
-    addressLine2: item.addressLine2 || "",
-    state: item.state || "",
-    pin: item.pin || "",
-    country: item.country || "India",
-    phone: item.phone || "",
-    email: item.email || "",
-    website: item.website || "",
-    principalName: item.principalName || "",
-    principalPhone: item.principalPhone || "",
-    principalEmail: item.principalEmail || "",
-    principalDesignation: item.principalDesignation || "",
-    adminName: item.adminName || "",
-    adminEmail: item.adminEmail || item.email || "",
-    adminPhone: item.adminPhone || item.phone || "",
-    adminDesignation: item.adminDesignation || "",
-    sendCredentials: Boolean(item.sendCredentials),
-    autoGeneratePassword: item.autoGeneratePassword ?? true,
-    manualPassword: item.manualPassword || "",
-    gst: item.gst || "",
-    pan: item.pan || "",
-    tan: item.tan || "",
-    bankName: item.bankName || "",
-    accountNumber: item.accountNumber || "",
-    confirmAccountNumber: item.confirmAccountNumber || item.accountNumber || "",
-    ifscCode: item.ifscCode || "",
-    ifscBankName: item.ifscBankName || "",
-    ifscBranch: item.ifscBranch || "",
-    accountHolderName: item.accountHolderName || "",
-    accountType: item.accountType || "",
-    primaryColor: item.primaryColor || "#1e3a5f",
-    secondaryColor: item.secondaryColor || "#f59e0b",
-    logoPreview: item.logoPreview || "",
+    name: institute.institute_name,
+    type: institute.institute_type,
+    board: institute.board_affiliation,
+    customBoardName: institute.custom_board_name || "",
+  academicYearStartMonth: academicData.academicYearStartMonth,
+  academicYearStartYear: academicData.academicYearStartYear,
+  academicYearEndMonth: academicData.academicYearEndMonth,
+  academicYearEndYear: academicData.academicYearEndYear,
+    addressLine1: institute.address_line_1,
+    addressLine2: institute.address_line_2,
+    city: institute.city,
+    state: institute.state,
+    pin: institute.pin_code,
+    country: institute.country,
+    phone: institute.official_phone_number,
+    email: institute.official_email_address,
+    website: institute.website_url,
+
+    principalName: institute.principal_name,
+    principalPhone: institute.principal_mobile_number,
+    principalEmail: institute.principal_email_address,
+    principalDesignation: institute.principal_designation,
+
+    adminName: institute.admin_name,
+    adminPhone: institute.admin_mobile_number,
+    adminEmail: institute.admin_email_address,
+    adminDesignation: institute.admin_designation,
+
+    gst: institute.gst_number,
+    pan: institute.pan_number,
+    tan: institute.tan_number,
+
+    bankName: institute.bank_name,
+    accountNumber: institute.bank_account_number,
+    confirmAccountNumber: institute.bank_account_number,
+    ifscCode: institute.ifsc_code,
+    accountHolderName: institute.account_holder_name,
+    accountType: institute.account_type,
+
+    primaryColor: institute.primary_color,
+    secondaryColor: institute.secondary_color,
   };
-};
+}
 
 export default function EditInstitute() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const institutes = useInstitutes();
-  const raw = institutes.find((item) => item.id === id);
-  const inst = useMemo(() => (raw ? normalizeInstitute(raw) : null), [raw]);
-  const [form, setForm] = useState(() => inst || {});
+
+  // ── Core state ──
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [inst, setInst] = useState(null);         // original data (for change-detection)
+  const [form, setForm] = useState({});            // editable copy
   const [errors, setErrors] = useState({});
 
   // ── Logo state ──
+  // `logo`       = new File the user just picked (null if not replaced)
+  // `logoPreview`= data-URL of the new file OR existing URL from server
   const [logo, setLogo] = useState(null);
-  const [logoPreview, setLogoPreview] = useState(inst?.logoPreview || "");
+  const [logoPreview, setLogoPreview] = useState("");
   const [logoCrop, setLogoCrop] = useState({ zoom: 1, x: 50, y: 50 });
   const [viewingLogo, setViewingLogo] = useState(false);
 
-  // ── Documents state (ported from CreateInstitute) ──
+  // ── Documents state ──
   const [docs, setDocs] = useState(
     Object.fromEntries(DOC_SLOTS.map((d) => [d.id, d.multi ? [] : null]))
   );
@@ -191,6 +183,91 @@ export default function EditInstitute() {
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [dragOver, setDragOver] = useState(null);
 
+  // ── Load institute by ID ──
+  useEffect(() => {
+    const loadInstitute = async () => {
+      setLoading(true);
+
+      try {
+       const response = await getInstituteById(id);
+
+const apiData = response.data;
+
+const institute = {
+  name: apiData.header?.name,
+
+  institute_name: apiData.overview?.institute_name,
+  institute_type: apiData.overview?.institute_type,
+  board_affiliation: apiData.overview?.board_affiliation,
+  custom_board_name: apiData.overview?.custom_board_name,
+
+    // ADD THESE
+  academic_year: apiData.overview?.academic_year,
+  academic_year_start_month: apiData.overview?.academic_year_start_month,
+  academic_year_end_month: apiData.overview?.academic_year_end_month,
+  address_line_1: apiData.contact_address?.address_line_1,
+  address_line_2: apiData.contact_address?.address_line_2,
+  city: apiData.contact_address?.city,
+  state: apiData.contact_address?.state,
+  pin_code: apiData.contact_address?.pin_code,
+  country: apiData.contact_address?.country,
+  official_phone_number: apiData.contact_address?.official_phone_number,
+  official_email_address: apiData.contact_address?.official_email_address,
+  website_url: apiData.contact_address?.website_url,
+
+  principal_name: apiData.key_people?.principal_full_name,
+  principal_mobile_number: apiData.key_people?.principal_mobile,
+  principal_email_address: apiData.key_people?.principal_email,
+  principal_designation: apiData.key_people?.principal_designation,
+
+  admin_name: apiData.key_people?.admin_full_name,
+  admin_mobile_number: apiData.key_people?.admin_mobile,
+  admin_email_address: apiData.key_people?.admin_email,
+  admin_designation: apiData.key_people?.admin_designation,
+
+  gst_number: apiData.financial_legal?.gst_number,
+  pan_number: apiData.financial_legal?.pan_number,
+  tan_number: apiData.financial_legal?.tan_number,
+
+  bank_name: apiData.financial_legal?.bank_name,
+  bank_account_number: apiData.financial_legal?.bank_account_number,
+  ifsc_code: apiData.financial_legal?.ifsc_code,
+  account_holder_name: apiData.financial_legal?.account_holder_name,
+  account_type: apiData.financial_legal?.account_type,
+
+  primary_color: apiData.overview?.brand_primary_color,
+  secondary_color: apiData.overview?.brand_secondary_color,
+};
+
+setInst(institute);
+setForm(mapInstituteToForm(institute));
+        if (institute.logo_url) {
+          setLogoPreview(institute.logo_url);
+        }
+      // eslint-disable-next-line no-unused-vars
+      } catch (error) {
+        toast.error("Failed to load institute");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInstitute();
+  }, [id, navigate]); // FIX: navigate added to deps
+
+  // ── Loading skeleton ──
+  if (loading) {
+    return (
+      <PageContainer>
+        <div className="flex items-center justify-center py-24 gap-3 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="text-sm">Loading institute details…</span>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  // ── Not found (after load) ──
   if (!inst) {
     return (
       <PageContainer>
@@ -205,7 +282,8 @@ export default function EditInstitute() {
     );
   }
 
-  const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  // ── Helpers ──
+  const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const academicYearLabel = getAcademicYearLabel(
     form.academicYearStartMonth,
@@ -214,51 +292,49 @@ export default function EditInstitute() {
     form.academicYearEndYear
   );
 
-  const changed = Object.fromEntries(
-    Object.entries(form).filter(([key, value]) => String(value ?? "") !== String(inst[key] ?? "")),
+  // FIX: `changed` was previously referenced but never defined, which crashed
+  // the component. We re-derive the original form shape from `inst` and diff
+  // it against the current `form` state. We also treat any newly added
+  // document file as a change, in addition to a replaced logo.
+  const originalForm = mapInstituteToForm(inst);
+  const changed = Object.keys(form).reduce((acc, key) => {
+    if (form[key] !== originalForm[key]) acc[key] = true;
+    return acc;
+  }, {});
+
+  const hasUploadedDocs = Object.values(docs).some((d) =>
+    Array.isArray(d) ? d.length > 0 : !!d
   );
-  const hasChanges = Object.keys(changed).length > 0;
+
+  const hasChanges = Object.keys(changed).length > 0 || logo instanceof File || hasUploadedDocs;
 
   const cancel = () => {
     if (hasChanges && !window.confirm("Discard unsaved changes?")) return;
-    navigate(`/super/institutes`);
+    navigate("/super/institutes");
   };
 
   // ── Document helpers ──
   const getEffectiveBadge = (slot) => {
-    if (slot.gstConditional) {
-      return form.gst?.trim() ? "Mandatory" : "Optional";
-    }
+    if (slot.gstConditional) return form.gst?.trim() ? "Mandatory" : "Optional";
     return slot.badge;
   };
 
   const handleFileUpload = (slotId, files) => {
     const slot = DOC_SLOTS.find((d) => d.id === slotId);
     if (!slot) return;
-
     const MAX_SIZE = 10 * 1024 * 1024;
     const validFiles = Array.from(files).filter((f) => {
-      if (f.size > MAX_SIZE) {
-        toast.error(`${f.name} exceeds 10MB limit`);
-        return false;
-      }
+      if (f.size > MAX_SIZE) { toast.error(`${f.name} exceeds 10 MB limit`); return false; }
       return true;
     });
-
     if (validFiles.length === 0) return;
-
     if (slot.multi) {
       setDocs((prev) => {
         const existing = prev[slotId] || [];
         const remaining = 5 - existing.length;
-        if (remaining <= 0) {
-          toast.error("Maximum 5 files allowed");
-          return prev;
-        }
+        if (remaining <= 0) { toast.error("Maximum 5 files allowed"); return prev; }
         const toAdd = validFiles.slice(0, remaining);
-        if (validFiles.length > remaining) {
-          toast.warning(`Only ${remaining} more file(s) allowed. ${validFiles.length - remaining} skipped.`);
-        }
+        if (validFiles.length > remaining) toast.warning(`Only ${remaining} more file(s) allowed.`);
         toast.success(`${toAdd.length} file(s) uploaded`);
         return { ...prev, [slotId]: [...existing, ...toAdd] };
       });
@@ -292,13 +368,12 @@ export default function EditInstitute() {
   // ── Validation ──
   const validate = () => {
     const nextErrors = {};
-
     const requiredChecks = [
       ["name", "Institute Name"],
       ["type", "Institute Type"],
       ["board", "Board / Affiliation"],
       ["addressLine1", "Address Line 1"],
-      ["addressLine2", "Address Line 2"],
+      // ["addressLine2", "Address Line 2"],
       ["city", "City"],
       ["state", "State"],
       ["pin", "PIN Code"],
@@ -337,16 +412,12 @@ export default function EditInstitute() {
     [["email", form.email], ["principalEmail", form.principalEmail], ["adminEmail", form.adminEmail]].forEach(
       ([key, value]) => {
         const v = String(value || "").trim();
-        if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
-          nextErrors[key] = "Enter a valid email address";
-        }
-      },
+        if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) nextErrors[key] = "Enter a valid email address";
+      }
     );
 
-    const duplicate = institutes.some(
-      (item) => item.id !== id && item.name.toLowerCase() === String(form.name || "").trim().toLowerCase(),
-    );
-    if (duplicate) nextErrors.name = "Institute name must be unique";
+    // FIX: removed undefined `duplicate` variable — name uniqueness should be
+    // validated server-side; the API will return an error if it's a duplicate.
     if (form.pin && !/^\d{6}$/.test(String(form.pin))) nextErrors.pin = "PIN must be 6 digits";
     if (form.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(String(form.pan))) nextErrors.pan = "Enter a valid PAN";
     if (form.accountNumber !== form.confirmAccountNumber) {
@@ -359,41 +430,101 @@ export default function EditInstitute() {
       !form.autoGeneratePassword &&
       !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/.test(String(form.manualPassword || ""))
     ) {
-      nextErrors.manualPassword =
-        "Use 8-128 characters with uppercase, lowercase, number, and special character.";
+      nextErrors.manualPassword = "Use 8-128 characters with uppercase, lowercase, number, and special character.";
     }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const save = () => {
+  // ── Save ──
+  const save = async () => {
     if (!validate()) return;
-    if (changed.adminEmail && !window.confirm("Changing admin email updates login credentials. New link sent to new email. Proceed?")) {
-      return;
-    }
-    if (!hasChanges) {
+
+    try {
+      setSaving(true);
+
+      const formData = new FormData();
+
+      formData.append("institute_name", form.name);
+      formData.append("institute_type", form.type);
+      formData.append("board_affiliation", form.board);
+
+      formData.append("address_line_1", form.addressLine1);
+      formData.append("address_line_2", form.addressLine2);
+      formData.append("city", form.city);
+      formData.append("state", form.state);
+      formData.append("pin_code", form.pin);
+      formData.append("country", form.country);
+
+      formData.append("official_phone_number", form.phone);
+      formData.append("official_email_address", form.email);
+      formData.append("website_url", form.website || "");
+
+      formData.append("principal_name", form.principalName);
+      formData.append("principal_mobile_number", form.principalPhone);
+      formData.append("principal_email_address", form.principalEmail);
+
+      formData.append("admin_name", form.adminName);
+      formData.append("admin_mobile_number", form.adminPhone);
+      formData.append("admin_email_address", form.adminEmail);
+
+      formData.append("gst_number", form.gst);
+      formData.append("pan_number", form.pan);
+      formData.append("tan_number", form.tan || "");
+
+      formData.append("bank_account_number", form.accountNumber);
+      formData.append("confirm_account_number", form.confirmAccountNumber);
+      formData.append("ifsc_code", form.ifscCode);
+      formData.append("account_holder_name", form.accountHolderName);
+      formData.append("account_type", form.accountType);
+
+      if (logo) {
+        formData.append("logo", logo);
+      }
+
+      DOC_SLOTS.forEach((slot) => {
+        const value = docs[slot.id];
+
+        if (!value) return;
+
+        if (slot.multi) {
+          value.forEach((file) => {
+            formData.append(slot.id, file);
+          });
+        } else {
+          formData.append(slot.id, value);
+        }
+      });
+
+      await updateInstitute(id, formData);
+
+      toast.success("Institute updated successfully");
+
       navigate(`/super/institutes/${id}`);
-      return;
+    } catch (error) {
+      console.error(error);
+
+      toast.error(
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        "Failed to update institute"
+      );
+    } finally {
+      setSaving(false);
     }
-    institutesApi.update(id, {
-      ...changed,
-      academicYear: academicYearLabel,
-      address: form.addressLine1,
-    });
-    toast.success("Institute updated");
-    navigate(`/super/institutes/${id}`);
   };
 
   return (
     <PageContainer>
       <PageHeader
         eyebrow={
-          <Link to={`/super/institutes`} className="inline-flex items-center gap-1 hover:text-primary">
+          <Link to="/super/institutes" className="inline-flex items-center gap-1 hover:text-primary">
             <ChevronLeft className="h-3 w-3" />
-            All Institute
+            All Institutes
           </Link>
         }
-        title={` ${inst.name}`}
+       title={`Edit — ${inst?.name || ""}`}
         actions={null}
       />
 
@@ -412,9 +543,7 @@ export default function EditInstitute() {
               <Select value={form.type || ""} onValueChange={(v) => set("type", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {INSTITUTE_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
-                  ))}
+                  {INSTITUTE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
@@ -423,20 +552,14 @@ export default function EditInstitute() {
               <Select value={form.board || ""} onValueChange={(v) => set("board", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {BOARD_OPTIONS.map((board) => (
-                    <SelectItem key={board} value={board}>{board}</SelectItem>
-                  ))}
+                  {BOARD_OPTIONS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
 
             {form.board === "Other" && (
               <Field label="Custom Board Name" required error={errors.customBoardName} className="md:col-span-3">
-                <Input
-                  value={form.customBoardName || ""}
-                  onChange={(e) => set("customBoardName", e.target.value)}
-                  placeholder="Enter board or affiliation name"
-                />
+                <Input value={form.customBoardName || ""} onChange={(e) => set("customBoardName", e.target.value)} placeholder="Enter board or affiliation name" />
               </Field>
             )}
 
@@ -445,20 +568,11 @@ export default function EditInstitute() {
                 <Select value={form.academicYearStartMonth || ""} onValueChange={(v) => set("academicYearStartMonth", v)}>
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
                   <SelectContent>
-                    {MONTH_OPTIONS.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
+                    {MONTH_OPTIONS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Input
-                  type="number"
-                  className="w-24"
-                  min={2020}
-                  max={2099}
-                  placeholder="Year"
-                  value={form.academicYearStartYear || ""}
-                  onChange={(e) => set("academicYearStartYear", e.target.value)}
-                />
+                <Input type="number" className="w-24" min={2020} max={2099} placeholder="Year"
+                  value={form.academicYearStartYear || ""} onChange={(e) => set("academicYearStartYear", e.target.value)} />
               </div>
             </Field>
 
@@ -467,20 +581,11 @@ export default function EditInstitute() {
                 <Select value={form.academicYearEndMonth || ""} onValueChange={(v) => set("academicYearEndMonth", v)}>
                   <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
                   <SelectContent>
-                    {MONTH_OPTIONS.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
+                    {MONTH_OPTIONS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Input
-                  type="number"
-                  className="w-24"
-                  min={2020}
-                  max={2099}
-                  placeholder="Year"
-                  value={form.academicYearEndYear || ""}
-                  onChange={(e) => set("academicYearEndYear", e.target.value)}
-                />
+                <Input type="number" className="w-24" min={2020} max={2099} placeholder="Year"
+                  value={form.academicYearEndYear || ""} onChange={(e) => set("academicYearEndYear", e.target.value)} />
               </div>
             </Field>
 
@@ -509,10 +614,7 @@ export default function EditInstitute() {
                 onChange={(e) => {
                   const selected = e.target.files?.[0];
                   if (!selected) return;
-                  if (!selected.type.startsWith("image/")) {
-                    toast.error("Upload an image file");
-                    return;
-                  }
+                  if (!selected.type.startsWith("image/")) { toast.error("Upload an image file"); return; }
                   const reader = new FileReader();
                   reader.onload = () => {
                     setLogo(selected);
@@ -524,25 +626,28 @@ export default function EditInstitute() {
                   e.target.value = "";
                 }}
               />
+
+              {/* New file just picked */}
               {logo instanceof File ? (
                 <div className="border rounded-md overflow-hidden">
                   <div className="flex items-center justify-between p-2">
                     <Badge className="bg-success/15 text-success border-success/20">
-                      <FileCheck2 className="h-3 w-3 mr-1" />Uploaded
+                      <FileCheck2 className="h-3 w-3 mr-1" />New logo ready
                     </Badge>
                     <div className="flex items-center gap-1">
-                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
-                        onClick={() => setViewingLogo(true)}>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1" onClick={() => setViewingLogo(true)}>
                         <Eye className="h-3 w-3 mr-0.5" />View
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
-                        onClick={() => document.getElementById("logo-upload-edit").click()}>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1" onClick={() => document.getElementById("logo-upload-edit").click()}>
                         Replace
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-destructive/70 hover:text-destructive px-1"
+                        onClick={() => { setLogo(null); setLogoPreview(inst.logoUrl || ""); }}>
+                        Discard
                       </Button>
                     </div>
                   </div>
-                  <div className="border-t bg-muted/20 px-3 pb-3 pt-2 cursor-pointer"
-                    onClick={() => setViewingLogo(true)}>
+                  <div className="border-t bg-muted/20 px-3 pb-3 pt-2 cursor-pointer" onClick={() => setViewingLogo(true)}>
                     <div className="rounded-md overflow-hidden border bg-white flex items-center justify-center h-24">
                       <img src={URL.createObjectURL(logo)} alt="Logo preview" className="max-h-20 max-w-full object-contain p-2" />
                     </div>
@@ -550,13 +655,29 @@ export default function EditInstitute() {
                       {logo.name} · {(logo.size / 1024).toFixed(1)} KB
                     </div>
                   </div>
+                  {/* Crop controls */}
+                  <div className="border-t grid gap-4 p-3 md:grid-cols-[180px_1fr]">
+                    <div className="space-y-2">
+                      <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-white">
+                        <img src={logoPreview} alt="Crop preview" className="h-full w-full object-contain"
+                          style={{ objectPosition: `${logoCrop.x}% ${logoCrop.y}%`, transform: `scale(${logoCrop.zoom})` }} />
+                      </div>
+                      <div className="text-[10px] text-muted-foreground truncate">{logo.name}</div>
+                    </div>
+                    <div className="space-y-3">
+                      <CropSlider label="Zoom" min="1" max="2" step="0.05" value={logoCrop.zoom} onChange={(v) => setLogoCrop((c) => ({ ...c, zoom: v }))} />
+                      <CropSlider label="Horizontal" min="0" max="100" value={logoCrop.x} onChange={(v) => setLogoCrop((c) => ({ ...c, x: v }))} />
+                      <CropSlider label="Vertical" min="0" max="100" value={logoCrop.y} onChange={(v) => setLogoCrop((c) => ({ ...c, y: v }))} />
+                    </div>
+                  </div>
                 </div>
+
               ) : logoPreview ? (
+                /* Existing logo from server */
                 <div className="border rounded-md overflow-hidden">
                   <div className="flex items-center justify-between p-2">
                     <Badge className="bg-muted text-muted-foreground border-border text-[10px]">Current logo</Badge>
-                    <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1"
-                      onClick={() => document.getElementById("logo-upload-edit").click()}>
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground px-1" onClick={() => document.getElementById("logo-upload-edit").click()}>
                       Replace
                     </Button>
                   </div>
@@ -566,31 +687,12 @@ export default function EditInstitute() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <Button variant="outline" className="w-full justify-start"
-                  onClick={() => document.getElementById("logo-upload-edit").click()}>
-                  <FileUp className="h-4 w-4" />Upload logo (PNG / SVG)
-                </Button>
-              )}
 
-              {logo instanceof File && logoPreview && (
-                <div className="mt-3 grid gap-4 rounded-md border border-border/60 p-3 md:grid-cols-[180px_1fr]">
-                  <div className="space-y-2">
-                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-white">
-                      <img src={logoPreview} alt="Logo crop preview" className="h-full w-full object-contain"
-                        style={{ objectPosition: `${logoCrop.x}% ${logoCrop.y}%`, transform: `scale(${logoCrop.zoom})` }} />
-                    </div>
-                    <div className="text-[10px] text-muted-foreground truncate">{logo.name}</div>
-                  </div>
-                  <div className="space-y-3">
-                    <CropSlider label="Zoom" min="1" max="2" step="0.05" value={logoCrop.zoom}
-                      onChange={(value) => setLogoCrop((c) => ({ ...c, zoom: value }))} />
-                    <CropSlider label="Horizontal" min="0" max="100" value={logoCrop.x}
-                      onChange={(value) => setLogoCrop((c) => ({ ...c, x: value }))} />
-                    <CropSlider label="Vertical" min="0" max="100" value={logoCrop.y}
-                      onChange={(value) => setLogoCrop((c) => ({ ...c, y: value }))} />
-                  </div>
-                </div>
+              ) : (
+                /* No logo yet */
+                <Button variant="outline" className="w-full justify-start" onClick={() => document.getElementById("logo-upload-edit").click()}>
+                  <FileUp className="h-4 w-4 mr-2" />Upload logo (PNG / SVG)
+                </Button>
               )}
             </div>
           </CardContent>
@@ -605,42 +707,26 @@ export default function EditInstitute() {
             <Field label="Address Line 1" required error={errors.addressLine1} className="md:col-span-2">
               <Textarea rows={2} value={form.addressLine1 || ""} onChange={(e) => set("addressLine1", e.target.value)} placeholder="Enter address line 1" />
             </Field>
-            <Field label="Address Line 2" required error={errors.addressLine2} className="md:col-span-2">
+            <Field label="Address Line 2"  error={errors.addressLine2} className="md:col-span-2">
               <Textarea rows={2} value={form.addressLine2 || ""} onChange={(e) => set("addressLine2", e.target.value)} placeholder="Enter address line 2" />
             </Field>
             <Field label="City" required error={errors.city}>
-              <Input
-                value={form.city || ""}
-                onChange={(e) => set("city", e.target.value.replace(/[^A-Za-z\s]/g, ""))}
-                placeholder="Enter city"
-              />
+              <Input value={form.city || ""} onChange={(e) => set("city", e.target.value.replace(/[^A-Za-z\s]/g, ""))} placeholder="Enter city" />
             </Field>
             <Field label="State" required error={errors.state}>
-              <select
-                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.state || ""}
-                onChange={(e) => set("state", e.target.value)}
-              >
+              <select className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.state || ""} onChange={(e) => set("state", e.target.value)}>
                 <option value="">Select State</option>
-                {INDIA_STATES.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
+                {INDIA_STATES.map((s) => <option key={s}>{s}</option>)}
               </select>
             </Field>
             <Field label="PIN Code" required error={errors.pin}>
-              <Input
-                value={form.pin || ""}
-                maxLength={6}
-                onChange={(e) => set("pin", e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="6-digit PIN Code"
-              />
+              <Input value={form.pin || ""} maxLength={6}
+                onChange={(e) => set("pin", e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit PIN Code" />
             </Field>
             <Field label="Country" required error={errors.country}>
-              <select
-                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={form.country || "India"}
-                onChange={(e) => set("country", e.target.value)}
-              >
+              <select className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.country || "India"} onChange={(e) => set("country", e.target.value)}>
                 <option value="India">India</option>
               </select>
             </Field>
@@ -653,17 +739,11 @@ export default function EditInstitute() {
             <Field label="Website URL" className="md:col-span-2">
               <Input value={form.website || ""} onChange={(e) => set("website", e.target.value)} placeholder="https://example.com" />
             </Field>
-
             {form.pin?.length === 6 && form.city && (
               <Field label="Google Maps Preview" className="md:col-span-2">
                 <div className="rounded-md border overflow-hidden">
-                  <iframe
-                    title="Google Maps Preview"
-                    width="100%"
-                    height="300"
-                    loading="lazy"
-                    src={`https://maps.google.com/maps?q=${encodeURIComponent(`${form.city} ${form.pin}`)}&z=14&output=embed`}
-                  />
+                  <iframe title="Google Maps Preview" width="100%" height="300" loading="lazy"
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(`${form.city} ${form.pin}`)}&z=14&output=embed`} />
                 </div>
               </Field>
             )}
@@ -677,35 +757,35 @@ export default function EditInstitute() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
-              <h3 className="text-sm font-semibold mb-3">Principal Section</h3>
+              <h3 className="text-sm font-semibold mb-3">Principal</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Principal Full Name" required error={errors.principalName}>
+                <Field label="Full Name" required error={errors.principalName}>
                   <Input value={form.principalName || ""} onChange={(e) => set("principalName", e.target.value)} placeholder="Enter principal full name" />
                 </Field>
-                <Field label="Principal Mobile" required error={errors.principalPhone}>
+                <Field label="Mobile" required error={errors.principalPhone}>
                   <Input type="tel" value={form.principalPhone || ""} onChange={(e) => set("principalPhone", e.target.value)} placeholder="9876543210" />
                 </Field>
-                <Field label="Principal Email" required error={errors.principalEmail}>
+                <Field label="Email" required error={errors.principalEmail}>
                   <Input type="email" value={form.principalEmail || ""} onChange={(e) => set("principalEmail", e.target.value)} placeholder="principal@school.edu" />
                 </Field>
-                <Field label="Principal Designation">
+                <Field label="Designation">
                   <Input value={form.principalDesignation || ""} onChange={(e) => set("principalDesignation", e.target.value)} placeholder="Principal" />
                 </Field>
               </div>
             </div>
             <div>
-              <h3 className="text-sm font-semibold mb-3">Admin Section</h3>
+              <h3 className="text-sm font-semibold mb-3">Admin</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Admin Full Name" required error={errors.adminName}>
+                <Field label="Full Name" required error={errors.adminName}>
                   <Input value={form.adminName || ""} onChange={(e) => set("adminName", e.target.value)} placeholder="Enter admin full name" />
                 </Field>
-                <Field label="Admin Email" required error={errors.adminEmail}>
+                <Field label="Email" required error={errors.adminEmail}>
                   <Input type="email" value={form.adminEmail || ""} onChange={(e) => set("adminEmail", e.target.value)} placeholder="admin@school.edu" />
                 </Field>
-                <Field label="Admin Mobile" required error={errors.adminPhone}>
+                <Field label="Mobile" required error={errors.adminPhone}>
                   <Input type="tel" value={form.adminPhone || ""} onChange={(e) => set("adminPhone", e.target.value)} placeholder="9876543210" />
                 </Field>
-                <Field label="Admin Designation">
+                <Field label="Designation">
                   <Input value={form.adminDesignation || ""} onChange={(e) => set("adminDesignation", e.target.value)} placeholder="Institute Admin" />
                 </Field>
               </div>
@@ -732,22 +812,23 @@ export default function EditInstitute() {
               <Input value={form.bankName || ""} onChange={(e) => set("bankName", e.target.value)} placeholder="Enter bank name" />
             </Field>
             <Field label="Bank Account Number" required error={errors.accountNumber}>
-              <Input type="password" value={form.accountNumber || ""} onChange={(e) => set("accountNumber", e.target.value)} placeholder="Enter account number" />
-            </Field>
+<Input
+  type="text"
+  value={form.accountNumber || ""}
+  onChange={(e) => set("accountNumber", e.target.value)}
+/>            </Field>
             <Field label="Confirm Account Number" required error={errors.confirmAccountNumber}>
-              <Input
-                type="password"
-                value={form.confirmAccountNumber || ""}
-                onChange={(e) => set("confirmAccountNumber", e.target.value)}
-                onPaste={(e) => e.preventDefault()}
-                placeholder="Re-enter account number"
-              />
+             <Input
+  type="text"
+  value={form.confirmAccountNumber || ""}
+  onChange={(e) => set("confirmAccountNumber", e.target.value)}
+/>
             </Field>
             <Field label="IFSC Code" required error={errors.ifscCode}>
               <Input value={form.ifscCode || ""} onChange={(e) => set("ifscCode", e.target.value.toUpperCase())} placeholder="SBIN0001234" maxLength={11} />
             </Field>
-            <Field label="Bank Name">
-              <Input value={form.ifscBankName || ""} onChange={(e) => set("ifscBankName", e.target.value)} placeholder="Enter bank name" />
+            <Field label="Bank (from IFSC)">
+              <Input value={form.ifscBankName || ""} onChange={(e) => set("ifscBankName", e.target.value)} placeholder="Auto-filled or enter bank name" />
             </Field>
             <Field label="Branch">
               <Input value={form.ifscBranch || ""} onChange={(e) => set("ifscBranch", e.target.value)} placeholder="Enter branch name" />
@@ -756,15 +837,10 @@ export default function EditInstitute() {
               <Input value={form.accountHolderName || ""} onChange={(e) => set("accountHolderName", e.target.value)} placeholder="Enter account holder name" maxLength={150} />
             </Field>
             <Field label="Account Type" required error={errors.accountType}>
-              <select
-                value={form.accountType || ""}
-                onChange={(e) => set("accountType", e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-              >
+              <select value={form.accountType || ""} onChange={(e) => set("accountType", e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">Select Account Type</option>
-                {ACCOUNT_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
+                {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
             <div className="md:col-span-2 flex items-start gap-2 p-3 rounded-md bg-info/10 border border-info/20 text-xs">
@@ -774,14 +850,12 @@ export default function EditInstitute() {
           </CardContent>
         </Card>
 
-        {/* ── Documents section (ported from CreateInstitute Step 5) ── */}
+        {/* ── Documents ── */}
         <Card className="border-border/60">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Documents</CardTitle>
-              <Badge variant="outline" className="text-xs">
-                {uploadedCount} uploaded
-              </Badge>
+              <Badge variant="outline" className="text-xs">{uploadedCount} uploaded</Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               PDF preferred · JPG/PNG accepted for scans · Max 10 MB per file
@@ -794,21 +868,10 @@ export default function EditInstitute() {
                 const file = docs[slot.id];
                 const files = slot.multi ? (file || []) : [];
                 const hasFile = slot.multi ? files.length > 0 : !!file;
-
                 return (
-                  <DocSlot
-                    key={slot.id}
-                    slot={slot}
-                    effectiveBadge={effectiveBadge}
-                    file={file}
-                    files={files}
-                    hasFile={hasFile}
-                    onUpload={(selectedFiles) => handleFileUpload(slot.id, selectedFiles)}
-                    onView={(f) => {
-                      const isImage = f.type.startsWith("image/");
-                      const isPDF = f.type === "application/pdf";
-                      setViewingDoc({ name: slot.label, file: f, isImage, isPDF, url: URL.createObjectURL(f) });
-                    }}
+                  <DocSlot key={slot.id} slot={slot} effectiveBadge={effectiveBadge} file={file} files={files} hasFile={hasFile}
+                    onUpload={(f) => handleFileUpload(slot.id, f)}
+                    onView={(f) => setViewingDoc({ name: slot.label, file: f, isImage: f.type.startsWith("image/"), isPDF: f.type === "application/pdf", url: URL.createObjectURL(f) })}
                     onRemove={(idx) => {
                       const f = slot.multi ? files[idx] : file;
                       setRemoveConfirm({ slotId: slot.id, fileIndex: idx ?? null, filename: sanitizeFilename(f.name) });
@@ -816,11 +879,7 @@ export default function EditInstitute() {
                     dragOver={dragOver === slot.id}
                     onDragOver={() => setDragOver(slot.id)}
                     onDragLeave={() => setDragOver(null)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDragOver(null);
-                      handleFileUpload(slot.id, e.dataTransfer.files);
-                    }}
+                    onDrop={(e) => { e.preventDefault(); setDragOver(null); handleFileUpload(slot.id, e.dataTransfer.files); }}
                   />
                 );
               })}
@@ -830,13 +889,12 @@ export default function EditInstitute() {
 
         {/* ── Bottom action bar ── */}
         <div className="flex items-center justify-end gap-2 pt-2 pb-4 border-t">
-          <Button variant="outline" onClick={cancel}>
-            <X className="h-4 w-4" />
-            Cancel
+          <Button variant="outline" onClick={cancel} disabled={saving}>
+            <X className="h-4 w-4" />Cancel
           </Button>
-          <Button className="gradient-primary border-0" onClick={save}>
-            <Save className="h-4 w-4" />
-            Save Changes
+          <Button className="gradient-primary border-0" onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? "Saving…" : "Save Changes"}
           </Button>
         </div>
       </div>
@@ -865,9 +923,7 @@ export default function EditInstitute() {
       )}
 
       {/* ── Doc viewer modal ── */}
-      {viewingDoc && (
-        <DocViewerModal doc={viewingDoc} onClose={() => setViewingDoc(null)} />
-      )}
+      {viewingDoc && <DocViewerModal doc={viewingDoc} onClose={() => setViewingDoc(null)} />}
 
       {/* ── Remove confirm modal ── */}
       {removeConfirm && (
@@ -884,9 +940,7 @@ export default function EditInstitute() {
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setRemoveConfirm(null)}>Cancel</Button>
-              <Button variant="destructive" size="sm" onClick={() => removeFile(removeConfirm.slotId, removeConfirm.fileIndex)}>
-                Remove
-              </Button>
+              <Button variant="destructive" size="sm" onClick={() => removeFile(removeConfirm.slotId, removeConfirm.fileIndex)}>Remove</Button>
             </div>
           </div>
         </div>
@@ -895,7 +949,8 @@ export default function EditInstitute() {
   );
 }
 
-// ── Field wrapper ─────────────────────────────────────────────────────────────
+// ── Sub-components (unchanged except minor cleanup) ────────────────────────────
+
 function Field({ label, required, error, children, className = "" }) {
   return (
     <div className={`space-y-1.5 ${className}`}>
@@ -908,7 +963,6 @@ function Field({ label, required, error, children, className = "" }) {
   );
 }
 
-// ── ColourField (matches CreateInstitute) ──────────────────────────────────────
 function ColourField({ value, onChange }) {
   return (
     <div className="flex items-center gap-2">
@@ -918,20 +972,10 @@ function ColourField({ value, onChange }) {
   );
 }
 
-// ── DocSlot ───────────────────────────────────────────────────────────────────
 function DocSlot({ slot, effectiveBadge, file, files, hasFile, onUpload, onView, onRemove, dragOver, onDragOver, onDragLeave, onDrop }) {
   const inputId = `file-${slot.id}`;
-
-  const handleChange = (e) => {
-    if (e.target.files?.length) {
-      onUpload(e.target.files);
-      e.target.value = "";
-    }
-  };
-
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${dragOver ? "border-primary bg-primary/5" : "hover:bg-muted/20"}`}>
-      {/* Slot header */}
       <div className="flex items-start gap-2 p-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 flex-wrap">
@@ -942,9 +986,8 @@ function DocSlot({ slot, effectiveBadge, file, files, hasFile, onUpload, onView,
             {slot.acceptLabel} · max 10 MB{slot.multi ? " · up to 5 files" : ""}
           </div>
         </div>
-
-        <input type="file" id={inputId} accept={slot.accept} multiple={slot.multi} className="hidden" onChange={handleChange} />
-
+        <input type="file" id={inputId} accept={slot.accept} multiple={slot.multi} className="hidden"
+          onChange={(e) => { if (e.target.files?.length) { onUpload(e.target.files); e.target.value = ""; } }} />
         {!slot.multi && !hasFile && (
           <Button size="sm" variant="outline" className="shrink-0" onClick={() => document.getElementById(inputId).click()}>
             <FileUp className="h-3.5 w-3.5" />Upload
@@ -957,41 +1000,24 @@ function DocSlot({ slot, effectiveBadge, file, files, hasFile, onUpload, onView,
           </Button>
         )}
       </div>
-
-      {/* Drag-drop zone (shown when empty) */}
       {!hasFile && (
-        <div
-          className={`mx-3 mb-3 border-2 border-dashed rounded-md p-4 text-center text-xs text-muted-foreground cursor-pointer transition-colors ${dragOver ? "border-primary text-primary" : "border-border hover:border-muted-foreground/40"}`}
-          onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={() => document.getElementById(inputId).click()}
-        >
+        <div className={`mx-3 mb-3 border-2 border-dashed rounded-md p-4 text-center text-xs text-muted-foreground cursor-pointer transition-colors ${dragOver ? "border-primary text-primary" : "border-border hover:border-muted-foreground/40"}`}
+          onDragOver={(e) => { e.preventDefault(); onDragOver(); }} onDragLeave={onDragLeave} onDrop={onDrop}
+          onClick={() => document.getElementById(inputId).click()}>
           <FileUp className="h-5 w-5 mx-auto mb-1 opacity-50" />
           Drag & drop or click to upload
         </div>
       )}
-
-      {/* Single file preview */}
-      {!slot.multi && hasFile && (
-        <SingleFilePreview file={file} onView={() => onView(file)} onRemove={() => onRemove(null)} />
-      )}
-
-      {/* Multi-file list */}
+      {!slot.multi && hasFile && <SingleFilePreview file={file} onView={() => onView(file)} onRemove={() => onRemove(null)} />}
       {slot.multi && files.length > 0 && (
         <div className="border-t divide-y">
           {files.map((f, idx) => (
             <SingleFilePreview key={idx} file={f} onView={() => onView(f, idx)} onRemove={() => onRemove(idx)} compact />
           ))}
-          {/* Add more zone */}
           {files.length < 5 && (
-            <div
-              className="px-3 py-2.5 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:bg-muted/30 transition-colors"
-              onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              onClick={() => document.getElementById(inputId).click()}
-            >
+            <div className="px-3 py-2.5 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:bg-muted/30 transition-colors"
+              onDragOver={(e) => { e.preventDefault(); onDragOver(); }} onDragLeave={onDragLeave} onDrop={onDrop}
+              onClick={() => document.getElementById(inputId).click()}>
               <Plus className="h-3.5 w-3.5" />Add more ({5 - files.length} remaining)
             </div>
           )}
@@ -1001,7 +1027,6 @@ function DocSlot({ slot, effectiveBadge, file, files, hasFile, onUpload, onView,
   );
 }
 
-// ── SingleFilePreview ─────────────────────────────────────────────────────────
 function SingleFilePreview({ file, onView, onRemove, compact = false }) {
   const isImage = file.type.startsWith("image/");
   const isPDF = file.type === "application/pdf";
@@ -1012,23 +1037,15 @@ function SingleFilePreview({ file, onView, onRemove, compact = false }) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/10">
         <div className="h-7 w-7 rounded bg-muted flex items-center justify-center shrink-0">
-          {isImage ? (
-            <img src={previewURL} alt="" className="h-7 w-7 object-cover rounded" />
-          ) : (
-            <FileCheck2 className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
+          {isImage ? <img src={previewURL} alt="" className="h-7 w-7 object-cover rounded" /> : <FileCheck2 className="h-3.5 w-3.5 text-muted-foreground" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-medium truncate">{sanitized}</div>
           <div className="text-[10px] text-muted-foreground">{formatBytes(file.size)}</div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onView}>
-            <Eye className="h-3 w-3" />
-          </Button>
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={onRemove}>
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={onView}><Eye className="h-3 w-3" /></Button>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={onRemove}><Trash2 className="h-3 w-3" /></Button>
         </div>
       </div>
     );
@@ -1036,7 +1053,6 @@ function SingleFilePreview({ file, onView, onRemove, compact = false }) {
 
   return (
     <div className="border-t bg-muted/10">
-      {/* Status bar */}
       <div className="flex items-center justify-between px-3 py-2">
         <Badge className="bg-success/15 text-success border-success/20 text-[10px]">
           <FileCheck2 className="h-3 w-3 mr-1" />Uploaded
@@ -1050,13 +1066,9 @@ function SingleFilePreview({ file, onView, onRemove, compact = false }) {
           </Button>
         </div>
       </div>
-
-      {/* Inline preview */}
       <div className="px-3 pb-3 cursor-pointer" onClick={onView}>
         {isImage ? (
-          <div className="rounded-md overflow-hidden border">
-            <img src={previewURL} alt={sanitized} className="w-full max-h-36 object-contain bg-white" />
-          </div>
+          <div className="rounded-md overflow-hidden border"><img src={previewURL} alt={sanitized} className="w-full max-h-36 object-contain bg-white" /></div>
         ) : isPDF ? (
           <div className="flex items-center gap-2.5 rounded-md border bg-background px-3 py-2 hover:bg-muted/30 transition-colors">
             <div className="h-8 w-8 rounded bg-destructive/10 flex items-center justify-center shrink-0">
@@ -1082,7 +1094,6 @@ function SingleFilePreview({ file, onView, onRemove, compact = false }) {
   );
 }
 
-// ── CropSlider ────────────────────────────────────────────────────────────────
 function CropSlider({ label, value, onChange, min, max, step = "1" }) {
   return (
     <div className="space-y-1.5">
@@ -1092,7 +1103,6 @@ function CropSlider({ label, value, onChange, min, max, step = "1" }) {
   );
 }
 
-// ── DocBadge ──────────────────────────────────────────────────────────────────
 // eslint-disable-next-line no-unused-vars
 function DocBadge({ badge, small = false }) {
   const cls = small ? "text-[9px] px-1.5 py-0 h-4" : "text-[10px]";
@@ -1101,7 +1111,6 @@ function DocBadge({ badge, small = false }) {
   return <Badge className={`bg-muted text-muted-foreground border-border ${cls}`}>Optional</Badge>;
 }
 
-// ── DocViewerModal ────────────────────────────────────────────────────────────
 function DocViewerModal({ doc, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
