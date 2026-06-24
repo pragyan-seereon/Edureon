@@ -24,6 +24,23 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { Progress } from "../../../components/ui/progress";
+import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "../../../components/ui/dialog";
 import {
   Bus,
   Plus,
@@ -32,9 +49,14 @@ import {
   Wrench,
   Users,
   Navigation,
+  UserPlus,
+  Trash2,
 } from "lucide-react";
 import { useState } from "react";
 import { CrudDialog } from "../../../components/crud-dialog";
+import { useStudents, useEmployees } from "../../../lib/store";
+import { toast } from "sonner";
+
 const seedRoutes = [
   {
     id: "RT-01",
@@ -87,6 +109,7 @@ const seedRoutes = [
     status: "Idle",
   },
 ];
+
 const seedVehicles = [
   {
     reg: "DL-1C-AB-4521",
@@ -125,6 +148,7 @@ const seedVehicles = [
     service: "OVERDUE",
   },
 ];
+
 const seedDrivers = [
   {
     name: "Sunil Yadav",
@@ -162,25 +186,383 @@ const seedDrivers = [
     trips: 1340,
   },
 ];
+
 const seedFuel = [
   { bus: "DL-1C-AB-4521", date: "28 Nov", litres: 62, cost: "6,448" },
   { bus: "DL-1C-AB-4522", date: "27 Nov", litres: 58, cost: "6,032" },
   { bus: "DL-1C-AB-4524", date: "26 Nov", litres: 70, cost: "7,280" },
   { bus: "DL-1C-AB-4523", date: "25 Nov", litres: 55, cost: "5,720" },
 ];
+
 const seedMaint = [
   { bus: "DL-1C-AB-4524", task: "Brake Pads + Oil", due: "Overdue" },
   { bus: "DL-1C-AB-4521", task: "Tyre Rotation", due: "800 km" },
   { bus: "DL-1C-AB-4522", task: "AC Service", due: "12 Dec" },
   { bus: "DL-1C-AB-4523", task: "Battery Check", due: "18 Dec" },
 ];
+
+function batchOf(s) {
+  const m = (s.admissionNo ?? "").match(/(\d{4})/);
+  return m ? m[1] : "—";
+}
+
+function RosterDialog({
+  route,
+  students,
+  employees,
+  initial,
+  onClose,
+  onSave,
+}) {
+  const [tab, setTab] = useState("students");
+  const [sPicked, setSPicked] = useState(new Set(initial.students));
+  const [fPicked, setFPicked] = useState(new Set(initial.faculty));
+  const [query, setQuery] = useState("");
+  const [fClass, setFClass] = useState("all");
+  const [fSection, setFSection] = useState("all");
+  const [fBatch, setFBatch] = useState("all");
+  const [fYear, setFYear] = useState("all");
+  const [fDept, setFDept] = useState("all");
+
+  const classes = Array.from(
+    new Set(students.map((s) => s.class).filter(Boolean))
+  );
+  const sections = Array.from(
+    new Set(students.map((s) => s.section).filter(Boolean))
+  );
+  const batches = Array.from(new Set(students.map(batchOf))).filter(
+    (b) => b !== "—"
+  );
+  const depts = Array.from(
+    new Set(employees.map((e) => e.department).filter(Boolean))
+  );
+  const years = ["2024-25", "2025-26", "2026-27"];
+
+  const sFiltered = students.filter((s) => {
+    if (fClass !== "all" && s.class !== fClass) return false;
+    if (fSection !== "all" && s.section !== fSection) return false;
+    if (fBatch !== "all" && batchOf(s) !== fBatch) return false;
+    if (
+      query &&
+      !(s.name + " " + s.id).toLowerCase().includes(query.toLowerCase())
+    )
+      return false;
+    return true;
+  });
+
+  const eFiltered = employees.filter((e) => {
+    if (fDept !== "all" && e.department !== fDept) return false;
+    if (
+      query &&
+      !(e.name + " " + e.id).toLowerCase().includes(query.toLowerCase())
+    )
+      return false;
+    return true;
+  });
+
+  const toggleS = (id) => {
+    const n = new Set(sPicked);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setSPicked(n);
+  };
+
+  const toggleF = (id) => {
+    const n = new Set(fPicked);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setFPicked(n);
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            Manage Riders — {route.name}
+          </DialogTitle>
+          <DialogDescription>
+            Bus {route.bus} · Driver {route.driver}. Select students and faculty
+            enrolled to this route.
+          </DialogDescription>
+        </DialogHeader>
+        <Tabs value={tab} onValueChange={(v) => setTab(v)}>
+          <TabsList>
+            <TabsTrigger value="students">
+              Students ({sPicked.size})
+            </TabsTrigger>
+            <TabsTrigger value="faculty">Faculty ({fPicked.size})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="students" className="mt-3 space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <div>
+                <Label className="text-xs">Search</Label>
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Name or ID…"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Year</Label>
+                <Select value={fYear} onValueChange={setFYear}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {years.map((y) => (
+                      <SelectItem key={y} value={y}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Batch</Label>
+                <Select value={fBatch} onValueChange={setFBatch}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {batches.map((b) => (
+                      <SelectItem key={b} value={b}>
+                        {b}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Class</Label>
+                <Select value={fClass} onValueChange={setFClass}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {classes.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Section</Label>
+                <Select value={fSection} onValueChange={setFSection}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {sections.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="border rounded-md max-h-72 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Student</TableHead>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Class</TableHead>
+                    <TableHead>Section</TableHead>
+                    <TableHead>Batch</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sFiltered.map((s) => (
+                    <TableRow
+                      key={s.id}
+                      className="cursor-pointer"
+                      onClick={() => toggleS(s.id)}
+                    >
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={sPicked.has(s.id)}
+                          onChange={() => toggleS(s.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {s.name}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {s.id}
+                      </TableCell>
+                      <TableCell className="text-xs">{s.class}</TableCell>
+                      <TableCell className="text-xs">{s.section}</TableCell>
+                      <TableCell className="text-xs">{batchOf(s)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {sFiltered.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="text-center text-xs text-muted-foreground py-6"
+                      >
+                        No students match.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+          <TabsContent value="faculty" className="mt-3 space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <div>
+                <Label className="text-xs">Search</Label>
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Name or ID…"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Department</Label>
+                <Select value={fDept} onValueChange={setFDept}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {depts.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="border rounded-md max-h-72 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Faculty</TableHead>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Role</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {eFiltered.map((e) => (
+                    <TableRow
+                      key={e.id}
+                      className="cursor-pointer"
+                      onClick={() => toggleF(e.id)}
+                    >
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={fPicked.has(e.id)}
+                          onChange={() => toggleF(e.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {e.name}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {e.id}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {e.department}
+                      </TableCell>
+                      <TableCell className="text-xs">{e.role}</TableCell>
+                    </TableRow>
+                  ))}
+                  {eFiltered.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center text-xs text-muted-foreground py-6"
+                      >
+                        No faculty match.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            className="gradient-primary border-0"
+            onClick={() =>
+              onSave({
+                students: Array.from(sPicked),
+                faculty: Array.from(fPicked),
+              })
+            }
+          >
+            Save Roster
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Transport() {
+  const students = useStudents();
+  const employees = useEmployees();
   const [routes, setRoutes] = useState(seedRoutes);
   const [vehicles, setVehicles] = useState(seedVehicles);
   const [drivers, setDrivers] = useState(seedDrivers);
   const [fuelLogs, setFuelLogs] = useState(seedFuel);
   const [maintLogs, setMaintLogs] = useState(seedMaint);
   const [dlg, setDlg] = useState(null);
+  const [rosterFor, setRosterFor] = useState(null);
+  const [roster, setRoster] = useState({
+    "RT-01": {
+      students: students.slice(0, 3).map((s) => s.id),
+      faculty: employees.slice(0, 1).map((e) => e.id),
+    },
+    "RT-02": {
+      students: students.slice(3, 6).map((s) => s.id),
+      faculty: [],
+    },
+  });
+
+  const studentName = (id) => students.find((s) => s.id === id)?.name ?? id;
+  const employeeName = (id) => employees.find((e) => e.id === id)?.name ?? id;
+
+  const removeStudent = (rid, sid) => {
+    setRoster((p) => ({
+      ...p,
+      [rid]: {
+        students: (p[rid]?.students ?? []).filter((x) => x !== sid),
+        faculty: p[rid]?.faculty ?? [],
+      },
+    }));
+    toast.success("Removed from route");
+  };
+
+  const removeFaculty = (rid, eid) => {
+    setRoster((p) => ({
+      ...p,
+      [rid]: {
+        students: p[rid]?.students ?? [],
+        faculty: (p[rid]?.faculty ?? []).filter((x) => x !== eid),
+      },
+    }));
+    toast.success("Removed from route");
+  };
+
   return (
     <PageContainer>
       <PageHeader
@@ -198,6 +580,27 @@ export default function Transport() {
           </Button>
         }
       />
+
+      {rosterFor && (
+        <RosterDialog
+          route={rosterFor}
+          students={students}
+          employees={employees}
+          initial={roster[rosterFor.id] ?? { students: [], faculty: [] }}
+          onClose={() => setRosterFor(null)}
+          onSave={(next) => {
+            const ref = rosterFor;
+            setRoster((p) => ({ ...p, [ref.id]: next }));
+            setRoutes((p) =>
+              p.map((r) =>
+                r.id === ref.id ? { ...r, students: next.students.length } : r
+              )
+            );
+            toast.success(`Roster updated for ${ref.name}`);
+            setRosterFor(null);
+          }}
+        />
+      )}
 
       <CrudDialog
         open={dlg === "route"}
@@ -387,6 +790,7 @@ export default function Transport() {
       <Tabs defaultValue="live">
         <TabsList>
           <TabsTrigger value="live">Live Routes</TabsTrigger>
+          <TabsTrigger value="roster">Roster</TabsTrigger>
           <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
           <TabsTrigger value="drivers">Drivers</TabsTrigger>
           <TabsTrigger value="fuel">Fuel & Maintenance</TabsTrigger>
@@ -402,50 +806,73 @@ export default function Transport() {
                     <TableHead>Driver</TableHead>
                     <TableHead>Bus</TableHead>
                     <TableHead>Stops</TableHead>
-                    <TableHead>Students</TableHead>
+                    <TableHead>Riders</TableHead>
                     <TableHead>ETA</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {routes.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">
-                        <div>{r.name}</div>
-                        <div className="text-[10px] font-mono text-muted-foreground">
-                          {r.id}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">{r.driver}</TableCell>
-                      <TableCell className="text-xs font-mono">
-                        {r.bus}
-                      </TableCell>
-                      <TableCell>{r.stops}</TableCell>
-                      <TableCell>{r.students}</TableCell>
-                      <TableCell>
-                        <span
-                          className={
-                            r.eta.includes("+") ? "text-destructive" : ""
-                          }
-                        >
-                          {r.eta}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            r.status === "Running"
-                              ? "default"
-                              : r.status === "Delayed"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                        >
-                          {r.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {routes.map((r) => {
+                    const rs = roster[r.id] ?? { students: [], faculty: [] };
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-medium">
+                          <div>{r.name}</div>
+                          <div className="text-[10px] font-mono text-muted-foreground">
+                            {r.id}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">{r.driver}</TableCell>
+                        <TableCell className="text-xs font-mono">
+                          {r.bus}
+                        </TableCell>
+                        <TableCell>{r.stops}</TableCell>
+                        <TableCell className="text-xs">
+                          <span className="font-medium">
+                            {rs.students.length}
+                          </span>{" "}
+                          S ·{" "}
+                          <span className="font-medium">
+                            {rs.faculty.length}
+                          </span>{" "}
+                          F
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={
+                              r.eta.includes("+") ? "text-destructive" : ""
+                            }
+                          >
+                            {r.eta}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              r.status === "Running"
+                                ? "default"
+                                : r.status === "Delayed"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                          >
+                            {r.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRosterFor(r)}
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Manage
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -496,6 +923,114 @@ export default function Transport() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="roster" className="mt-4 space-y-4">
+          {routes.map((r) => {
+            const rs = roster[r.id] ?? { students: [], faculty: [] };
+            return (
+              <Card key={r.id} className="border-border/60">
+                <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+                  <div>
+                    <CardTitle className="text-base">
+                      {r.name}{" "}
+                      <span className="text-xs font-mono text-muted-foreground ml-2">
+                        {r.id}
+                      </span>
+                    </CardTitle>
+                    <CardDescription>
+                      Bus {r.bus} · Driver {r.driver} · {rs.students.length}{" "}
+                      students · {rs.faculty.length} faculty
+                    </CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setRosterFor(r)}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Manage Riders
+                  </Button>
+                </CardHeader>
+                <CardContent className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs font-semibold mb-2 text-muted-foreground">
+                      Students ({rs.students.length})
+                    </div>
+                    <div className="space-y-1 max-h-60 overflow-auto">
+                      {rs.students.length === 0 && (
+                        <div className="text-xs text-muted-foreground border border-dashed rounded p-3 text-center">
+                          No students enrolled.
+                        </div>
+                      )}
+                      {rs.students.map((sid) => {
+                        const s = students.find((x) => x.id === sid);
+                        return (
+                          <div
+                            key={sid}
+                            className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1"
+                          >
+                            <span>
+                              <span className="font-medium">
+                                {studentName(sid)}
+                              </span>{" "}
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                · {sid}
+                                {s ? ` · ${s.class}-${s.section}` : ""}
+                              </span>
+                            </span>
+                            <button
+                              onClick={() => removeStudent(r.id, sid)}
+                              className="p-0.5 hover:bg-muted rounded"
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold mb-2 text-muted-foreground">
+                      Faculty ({rs.faculty.length})
+                    </div>
+                    <div className="space-y-1 max-h-60 overflow-auto">
+                      {rs.faculty.length === 0 && (
+                        <div className="text-xs text-muted-foreground border border-dashed rounded p-3 text-center">
+                          No faculty enrolled.
+                        </div>
+                      )}
+                      {rs.faculty.map((eid) => {
+                        const e = employees.find((x) => x.id === eid);
+                        return (
+                          <div
+                            key={eid}
+                            className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1"
+                          >
+                            <span>
+                              <span className="font-medium">
+                                {employeeName(eid)}
+                              </span>{" "}
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                · {eid}
+                                {e ? ` · ${e.department}` : ""}
+                              </span>
+                            </span>
+                            <button
+                              onClick={() => removeFaculty(r.id, eid)}
+                              className="p-0.5 hover:bg-muted rounded"
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </TabsContent>
 
         <TabsContent value="vehicles" className="mt-4 space-y-3">
@@ -601,7 +1136,9 @@ export default function Transport() {
                       <div className="font-semibold">{d.rating}★</div>
                     </div>
                     <div>
-                      <div className="text-xs text-muted-foreground">Trips</div>
+                      <div className="text-xs text-muted-foreground">
+                        Trips
+                      </div>
                       <div className="font-semibold">{d.trips}</div>
                     </div>
                     <div>

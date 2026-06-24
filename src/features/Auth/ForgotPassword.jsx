@@ -1,7 +1,11 @@
 import { Link } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useAuth } from "../../lib/auth";
+import {
+  forgotPassword,
+  verifyForgotPasswordOtp,
+  resetPassword as resetPasswordApi,
+} from "../../api/auth.js";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -29,27 +33,26 @@ const COOLDOWN_SECONDS = 60;
 
 const emptyOtp = () => Array.from({ length: OTP_LENGTH }, () => "");
 
-const createOtp = () =>
-  String(Math.floor(100000 + Math.random() * 900000)).slice(0, OTP_LENGTH);
+// const createOtp = () =>
+//   String(Math.floor(100000 + Math.random() * 900000)).slice(0, OTP_LENGTH);
 
-function getPasswordStrength(password) {
-  let score = 0;
-  if (password.length >= 8) score += 1;
-  if (/[A-Z]/.test(password)) score += 1;
-  if (/[a-z]/.test(password)) score += 1;
-  if (/\d/.test(password)) score += 1;
-  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+// function getPasswordStrength(password) {
+//   let score = 0;
+//   if (password.length >= 8) score += 1;
+//   if (/[A-Z]/.test(password)) score += 1;
+//   if (/[a-z]/.test(password)) score += 1;
+//   if (/\d/.test(password)) score += 1;
+//   if (/[^A-Za-z0-9]/.test(password)) score += 1;
 
-  if (!password)
-    return { score: 0, label: "Enter a new password", width: "0%" };
-  if (score <= 2) return { score, label: "Weak", width: "33%" };
-  if (score <= 4) return { score, label: "Good", width: "66%" };
-  return { score, label: "Strong", width: "100%" };
-}
+//   if (!password)
+//     return { score: 0, label: "Enter a new password", width: "0%" };
+//   if (score <= 2) return { score, label: "Weak", width: "33%" };
+//   if (score <= 4) return { score, label: "Good", width: "66%" };
+//   return { score, label: "Strong", width: "100%" };
+// }
 
 export default function ForgotPassword() {
-  const auth = useAuth();
-  const generatedOtpRef = useRef("");
+  // const generatedOtpRef = useRef("");
   const otpInputsRef = useRef([]);
 
   const [step, setStep] = useState(1);
@@ -57,17 +60,18 @@ export default function ForgotPassword() {
   const [otp, setOtp] = useState(emptyOtp);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [complete, setComplete] = useState(false);
-
-  const passwordStrength = useMemo(
-    () => getPasswordStrength(newPassword),
-    [newPassword],
-  );
+ const [resetToken, setResetToken] = useState("");
+  // const passwordStrength = useMemo(
+  //   () => getPasswordStrength(newPassword),
+  //   [newPassword],
+  // );
   const otpCode = otp.join("");
 
   useEffect(() => {
@@ -78,41 +82,77 @@ export default function ForgotPassword() {
     return () => window.clearInterval(timer);
   }, [cooldown]);
 
-  const sendOtp = async (e) => {
-    e?.preventDefault();
-    if (!email.trim()) return toast.error("Email address is required");
+  const validatePassword = (password) => {
+  if (password.length < 8) {
+    return "Password must be at least 8 characters.";
+  }
 
-    setLoading(true);
-    try {
-      await auth.forgotPassword(email.trim());
-      generatedOtpRef.current = createOtp();
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter.";
+  }
+
+  if (!/\d/.test(password)) {
+    return "Password must contain at least one number.";
+  }
+
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    return "Password must contain at least one special character.";
+  }
+
+  return "";
+};
+const sendOtp = async (e) => {
+  e.preventDefault();
+
+  if (!email.trim()) {
+    return toast.error("Email is required");
+  }
+
+  setLoading(true);
+
+  try {
+const response = await forgotPassword(email.trim());
+    if (response.success) {
       setOtp(emptyOtp());
       setStep(2);
       setCooldown(COOLDOWN_SECONDS);
-      toast.success(`OTP sent to ${email.trim()}`);
-      toast.info(`Demo OTP: ${generatedOtpRef.current}`, { duration: 6000 });
-      window.setTimeout(() => otpInputsRef.current[0]?.focus(), 80);
-    } finally {
-      setLoading(false);
+
+      toast.success(response.message);
+
+      setTimeout(() => {
+        otpInputsRef.current[0]?.focus();
+      }, 100);
     }
-  };
+  } catch (error) {
+    toast.error(error.response?.data?.message || "Failed to send OTP");
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const resendOtp = async () => {
-    if (cooldown > 0 || loading) return;
+ const resendOtp = async () => {
+  if (cooldown > 0 || loading) return;
 
-    setLoading(true);
-    try {
-      await auth.forgotPassword(email.trim());
-      generatedOtpRef.current = createOtp();
+  setLoading(true);
+
+  try {
+const response = await forgotPassword(email);
+    if (response.success) {
       setOtp(emptyOtp());
       setCooldown(COOLDOWN_SECONDS);
-      toast.success("New OTP sent");
-      toast.info(`Demo OTP: ${generatedOtpRef.current}`, { duration: 6000 });
-      window.setTimeout(() => otpInputsRef.current[0]?.focus(), 80);
-    } finally {
-      setLoading(false);
+
+      toast.success("OTP sent successfully");
+
+      setTimeout(() => {
+        otpInputsRef.current[0]?.focus();
+      }, 100);
     }
-  };
+  } catch (error) {
+    toast.error(error.response?.data?.message || "Failed to resend OTP");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const updateOtpDigit = (index, value) => {
     if (!/^\d*$/.test(value)) return;
@@ -133,41 +173,61 @@ export default function ForgotPassword() {
     }
   };
 
-  const verifyOtp = (e) => {
-    e?.preventDefault();
-    if (otpCode.length < OTP_LENGTH)
-      return toast.error("Enter the 6-digit OTP");
-    if (otpCode !== generatedOtpRef.current) {
-      setOtp(emptyOtp());
-      otpInputsRef.current[0]?.focus();
-      return toast.error("Invalid OTP");
-    }
+const verifyOtp = async (e) => {
+  e.preventDefault();
 
-    setStep(3);
-    toast.success("OTP verified");
-  };
+  if (otpCode.length !== 6) {
+    return toast.error("Enter valid OTP");
+  }
+
+  setLoading(true);
+
+  try {
+const response = await verifyForgotPasswordOtp(email, otpCode);
+    if (response.success) {
+      setResetToken(response.reset_token);
+      setStep(3);
+
+      toast.success(response.message);
+    }
+  } catch (error) {
+    toast.error(error.response?.data?.message || "Invalid OTP");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const resetPassword = async (e) => {
-    e.preventDefault();
-    const passwordsDoNotMatch = newPassword !== confirmPassword;
+  e.preventDefault();
+const passwordValidation = validatePassword(newPassword);
 
-    if (passwordStrength.score < 3) {
-      return toast.error("Choose a stronger password");
-    }
-    if (passwordsDoNotMatch) {
-      setConfirmPasswordError("Passwords do not match");
-      return;
-    }
+if (passwordValidation) {
+  setPasswordError(passwordValidation);
+  return;
+}
+  if (newPassword !== confirmPassword) {
+    return setConfirmPasswordError("Passwords do not match");
+  }
 
-    setLoading(true);
-    try {
-      await auth.changePassword(newPassword);
+  setLoading(true);
+
+  try {
+   const response = await resetPasswordApi(
+  resetToken,
+  newPassword,
+  confirmPassword
+);
+
+    if (response.success) {
       setComplete(true);
-      toast.success("Password reset successfully");
-    } finally {
-      setLoading(false);
+      toast.success(response.message);
     }
-  };
+  } catch (error) {
+    toast.error(error.response?.data?.message || "Password reset failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
@@ -403,153 +463,134 @@ export default function ForgotPassword() {
                 </form>
               )}
 
-              {step === 3 && (
-                <form onSubmit={resetPassword} className="mt-7 space-y-4">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <Label htmlFor="new-password" className="text-xs">
-                        New Password
-                      </Label>
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-foreground transition-colors"
-                              aria-label="New password requirements"
-                            >
-                              <HelpCircle className="h-3.5 w-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            align="start"
-                            className="max-w-64 leading-relaxed"
-                          >
-                            Password must be 8–128 characters and include at
-                            least one uppercase letter, one lowercase letter,
-                            one number, and one special character.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <div className="relative">
-                      <Input
-                        id="new-password"
-                        type={showNewPassword ? "text" : "password"}
-                        value={newPassword}
-                        onChange={(e) => {
-                          setNewPassword(e.target.value);
-                          if (
-                            confirmPassword &&
-                            e.target.value === confirmPassword
-                          ) {
-                            setConfirmPasswordError("");
-                          }
-                        }}
-                        placeholder="Create a strong password"
-                        autoComplete="new-password"
-                        maxLength={128}
-                        className="pr-9"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowNewPassword((current) => !current)
-                        }
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={
-                          showNewPassword
-                            ? "Hide new password"
-                            : "Show new password"
-                        }
-                      >
-                        {showNewPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="pt-1">
-                      {/* <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full gradient-primary transition-all"
-                        style={{ width: passwordStrength.width }}
-                      />
-                    </div> */}
-                      {/* <div className="mt-1 text-[10px] text-muted-foreground">
-                      {passwordStrength.label}
-                    </div> */}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="confirm-password" className="text-xs">
-                      Confirm New Password
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="confirm-password"
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => {
-                          setConfirmPassword(e.target.value);
-                          if (newPassword === e.target.value) {
-                            setConfirmPasswordError("");
-                          }
-                        }}
-                        onBlur={() =>
-                          setConfirmPasswordError(
-                            confirmPassword && newPassword !== confirmPassword
-                              ? "Passwords do not match"
-                              : "",
-                          )
-                        }
-                        placeholder="Re-enter your password"
-                        autoComplete="new-password"
-                        className="pr-9"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowConfirmPassword((current) => !current)
-                        }
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={
-                          showConfirmPassword
-                            ? "Hide confirm password"
-                            : "Show confirm password"
-                        }
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    {confirmPasswordError && (
-                      <p className="text-xs text-destructive">
-                        {confirmPasswordError}
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full gradient-primary border-0"
-                  >
-                    {loading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Reset Password"
-                    )}
-                  </Button>
-                </form>
-              )}
+            {step === 3 && (
+  <form onSubmit={resetPassword} className="mt-7 space-y-4">
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor="new-password" className="text-xs">
+          New Password
+        </Label>
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="New password requirements"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="top"
+              align="start"
+              className="max-w-64 leading-relaxed"
+            >
+              Password must be 8–128 characters and include at
+              least one uppercase letter, one lowercase letter,
+              one number, and one special character.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
 
+      <div className="relative">
+        <Input
+          id="new-password"
+          type={showNewPassword ? "text" : "password"}
+          value={newPassword}
+          onChange={(e) => {
+            const value = e.target.value;
+            setNewPassword(value);
+            setPasswordError(validatePassword(value));
+            if (confirmPassword && value === confirmPassword) {
+              setConfirmPasswordError("");
+            }
+          }}
+          placeholder="Create a strong password"
+          autoComplete="new-password"
+          maxLength={128}
+          className="pr-9"
+          required
+        />
+        <button
+          type="button"
+          onClick={() => setShowNewPassword((current) => !current)}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        >
+          {showNewPassword ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+
+      {passwordError && (
+        <p className="mt-1 text-xs text-destructive">
+          {passwordError}
+        </p>
+      )}
+    </div>{/* <-- THIS was missing: closes the New Password "space-y-1.5" wrapper */}
+
+    <div className="space-y-1.5">
+      <Label htmlFor="confirm-password" className="text-xs">
+        Confirm New Password
+      </Label>
+      <div className="relative">
+        <Input
+          id="confirm-password"
+          type={showConfirmPassword ? "text" : "password"}
+          value={confirmPassword}
+          onChange={(e) => {
+            setConfirmPassword(e.target.value);
+            if (newPassword === e.target.value) {
+              setConfirmPasswordError("");
+            }
+          }}
+          onBlur={() =>
+            setConfirmPasswordError(
+              confirmPassword && newPassword !== confirmPassword
+                ? "Passwords do not match"
+                : "",
+            )
+          }
+          placeholder="Re-enter your password"
+          autoComplete="new-password"
+          className="pr-9"
+          required
+        />
+        <button
+          type="button"
+          onClick={() => setShowConfirmPassword((current) => !current)}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={
+            showConfirmPassword ? "Hide confirm password" : "Show confirm password"
+          }
+        >
+          {showConfirmPassword ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+      {confirmPasswordError && (
+        <p className="mt-1 text-xs text-destructive">
+          {confirmPasswordError}
+        </p>
+      )}
+    </div>
+
+    <Button
+      type="submit"
+      disabled={loading}
+      className="w-full gradient-primary border-0"
+    >
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reset Password"}
+    </Button>
+  </form>
+)}
               <p className="mt-6 text-xs text-muted-foreground text-center">
                 <Link to="/login" className="text-primary hover:underline">
                   Back to sign in

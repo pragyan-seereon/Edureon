@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { useNavigate } from "react-router-dom";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
 import {
@@ -37,9 +38,10 @@ import {
   Trash2,
   Plus,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { institutesApi } from "../../../lib/store";
+// import { institutesApi } from "../../../lib/store";
+import { createInstituteDraft, updateInstituteDraftStep2,updateInstituteDraftStep3,  updateInstituteDraftStep4,uploadInstituteDocuments, getInstituteDraftReview,submitInstituteDraft, getIFSCDetails,} from "../../../api/Institute.js";
 
 const STEPS = [
   { id: 1, title: "Basic Info", desc: "Identity & branding" },
@@ -82,9 +84,46 @@ const INSTITUTE_DRAFT_STORAGE_KEY = "createInstituteDraft";
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_OPTIONS = MONTHS_SHORT.map((m, i) => ({ label: m, value: String(i + 1) }));
 
+// ─────────────────────────────────────────────────────────────────────────
+// Validation rules — mirrored 1:1 from the backend (InstituteDraftService)
+// so the user gets the same errors client-side before hitting the API.
+// ─────────────────────────────────────────────────────────────────────────
+const NAME_PATTERN = /^[A-Za-z0-9\s\-.,]+$/;
+const CITY_PATTERN = /^[A-Za-z ]+$/;
+const HEX_PATTERN = /^#[A-Fa-f0-9]{6}$/;
+const PHONE_PATTERN = /^(\+?[0-9]{1,3})?[0-9]{8,11}$/;
+const EMAIL_PATTERN = /^[\w.-]+@[\w.-]+\.\w+$/;
+const WEBSITE_PATTERN = /^https?:\/\/.+/;
+const PERSON_NAME_PATTERN = /^[A-Za-z .]+$/;
+const MOBILE_PATTERN = /^[6-9]\d{9}$/; // Indian 10-digit mobile, starts 6-9
+const GST_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+const TAN_PATTERN = /^[A-Z]{4}[0-9]{5}[A-Z]{1}$/;
+const IFSC_PATTERN = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const ACCOUNT_HOLDER_PATTERN = /^[A-Za-z ]+$/;
+const PIN_PATTERN = /^[1-9][0-9]{5}$/;
+
+const INDIAN_STATES = [
+  "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
+  "Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh",
+  "Maharashtra","Manipur","Meghalaya","Mizoram","Nagaland","Odisha","Punjab",
+  "Rajasthan","Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh",
+  "Uttarakhand","West Bengal","Delhi","Jammu and Kashmir","Ladakh","Puducherry",
+  "Chandigarh","Andaman and Nicobar Islands","Lakshadweep",
+  "Dadra and Nagar Haveli and Daman and Diu",
+];
+
+const ACCOUNT_TYPES = ["Savings", "Current", "Overdraft"];
+
 function getAcademicYearLabel(sm, sy, em, ey) {
   if (!sm || !sy || !em || !ey) return "—";
   return `${MONTHS_SHORT[parseInt(sm) - 1]} ${sy} – ${MONTHS_SHORT[parseInt(em) - 1]} ${ey}`;
+}
+
+// Backend expects "Apr-2026" style strings for academic_year_start_month / academic_year_end_month
+function formatAcademicYearMonth(month, year) {
+  if (!month || !year) return "";
+  return `${MONTHS_SHORT[parseInt(month, 10) - 1]}-${year}`;
 }
 
 function sanitizeFilename(name) {
@@ -98,9 +137,12 @@ function formatBytes(bytes) {
 }
 
 export default function CreateInstitute() {
-  
+
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [errors, setErrors] = useState({});
+  const [draftUuid, setDraftUuid] = useState(null);
+  const [isSavingStep, setIsSavingStep] = useState(false);
   const [form, setForm] = useState({
     name: "",
     type: "School",
@@ -147,7 +189,8 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
     autoGeneratePassword: true,
     manualPassword: "",
   });
-
+ // eslint-disable-next-line no-unused-vars
+ const [reviewData, setReviewData] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const passwordStrength = (() => {
     const password = form.manualPassword || "";
@@ -172,7 +215,7 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [newInstituteId, setNewInstituteId] = useState(null);
   const [dragOver, setDragOver] = useState(null); // slotId being dragged over
-
+  const [isFetchingIFSC, setIsFetchingIFSC] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const academicYearLabel = getAcademicYearLabel(
@@ -181,6 +224,242 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
     form.academicYearEndMonth,
     form.academicYearEndYear
   );
+
+  const fetchIFSCData = async (ifsc) => {
+  if (!ifsc || ifsc.length !== 11) return;
+
+  try {
+    setIsFetchingIFSC(true);
+
+    const res = await getIFSCDetails(ifsc);
+
+    if (res?.success && res?.data) {
+      setForm((prev) => ({
+        ...prev,
+        bankName: res.data.bank_name || "",
+        ifscBankName: res.data.bank_name || "",
+        ifscBranch: res.data.branch_name || "",
+      }));
+
+      toast.success("Bank details fetched successfully");
+    }
+  } catch (error) {
+    // Clear auto-filled values
+    setForm((prev) => ({
+      ...prev,
+      ifscBankName: "",
+      ifscBranch: "",
+    }));
+
+    toast.warning(
+      "Bank details not found. Please enter Bank Name and Branch manually."
+    );
+  } finally {
+    setIsFetchingIFSC(false);
+  }
+};
+  // ───────────────────────────────────────────────────────────────────────
+  // Step validators — return { fieldKey: "message" }. Empty object = valid.
+  // These mirror the exact checks performed server-side.
+  // ───────────────────────────────────────────────────────────────────────
+  const validateStep1 = () => {
+    const e = {};
+    const name = form.name.trim();
+    if (name.length < 3) e.name = "Institute Name must be minimum 3 characters.";
+    else if (name.length > 200) e.name = "Institute Name maximum 200 characters.";
+    else if (!NAME_PATTERN.test(name)) e.name = "Institute Name contains invalid characters.";
+
+    if (!INSTITUTE_TYPES.includes(form.type)) e.type = "Invalid Institute Type.";
+    if (!BOARD_OPTIONS.includes(form.board)) e.board = "Invalid Board.";
+
+    if (form.board === "Other") {
+      const cb = (form.customBoardName || "").trim();
+      if (!cb) e.customBoardName = "Custom Board Name required.";
+      else if (cb.length < 3) e.customBoardName = "Custom Board Name minimum 3 characters.";
+      else if (cb.length > 100) e.customBoardName = "Custom Board Name maximum 100 characters.";
+    }
+
+    if (!form.academicYearStartMonth || !form.academicYearStartYear) {
+      e.academicYearStart = "Academic Start Month & Year is required.";
+    }
+    if (!form.academicYearEndMonth || !form.academicYearEndYear) {
+      e.academicYearEnd = "Academic End Month & Year is required.";
+    }
+
+    if (
+      form.academicYearStartMonth &&
+      form.academicYearEndMonth &&
+      form.academicYearStartMonth === form.academicYearEndMonth &&
+      form.academicYearStartYear === form.academicYearEndYear
+    ) {
+      e.academicYearEnd = "Academic Start and End Month & Year cannot be same.";
+    } else if (
+      form.academicYearStartMonth &&
+      form.academicYearEndMonth
+    ) {
+      const startKey = parseInt(form.academicYearStartYear) * 100 + parseInt(form.academicYearStartMonth);
+      const endKey = parseInt(form.academicYearEndYear) * 100 + parseInt(form.academicYearEndMonth);
+      if (endKey <= startKey) {
+        e.academicYearEnd = "Academic End Month & Year must be after Start Month & Year.";
+      }
+    }
+
+    if (form.primaryColor && !HEX_PATTERN.test(form.primaryColor)) {
+      e.primaryColor = "Invalid Primary Color.";
+    }
+    if (form.secondaryColor && !HEX_PATTERN.test(form.secondaryColor)) {
+      e.secondaryColor = "Invalid Secondary Color.";
+    }
+
+    return e;
+  };
+
+  const validateStep2 = () => {
+    const e = {};
+    const a1 = form.addressLine1.trim();
+    if (a1.length < 5) e.addressLine1 = "Address Line 1 minimum 5 characters.";
+    else if (a1.length > 300) e.addressLine1 = "Address Line 1 maximum 300 characters.";
+
+    if (form.addressLine2 && form.addressLine2.trim().length > 300) {
+      e.addressLine2 = "Address Line 2 maximum 300 characters.";
+    }
+
+    const city = form.city.trim();
+    if (city.length < 2) e.city = "City minimum 2 characters.";
+    else if (city.length > 100) e.city = "City maximum 100 characters.";
+    else if (!CITY_PATTERN.test(city)) e.city = "City allows letters and spaces only.";
+
+    if (!INDIAN_STATES.includes(form.state)) e.state = "Invalid State.";
+    if (!PIN_PATTERN.test(form.pin)) e.pin = "PIN Code must be exactly 6 digits.";
+    if (!form.country) e.country = "Country required.";
+    if (!PHONE_PATTERN.test(form.phone)) e.phone = "Invalid Phone Number.";
+
+    if (!EMAIL_PATTERN.test(form.email)) e.email = "Invalid Email.";
+
+    if (form.website && !WEBSITE_PATTERN.test(form.website)) {
+      e.website = "Website must start with http:// or https://";
+    }
+
+    return e;
+  };
+
+  const validateStep3 = () => {
+    const e = {};
+    const pName = form.principalName.trim();
+    if (pName.length < 2) e.principalName = "Principal name minimum 2 characters.";
+    else if (pName.length > 150) e.principalName = "Principal name maximum 150 characters.";
+    else if (!PERSON_NAME_PATTERN.test(pName)) e.principalName = "Invalid Principal Name.";
+
+    if (!MOBILE_PATTERN.test(form.principalPhone)) e.principalPhone = "Invalid Principal Mobile.";
+    if (!EMAIL_PATTERN.test(form.principalEmail)) e.principalEmail = "Invalid Principal Email.";
+
+    const aName = form.adminName.trim();
+    if (aName.length < 2) e.adminName = "Admin name minimum 2 characters.";
+    else if (aName.length > 150) e.adminName = "Admin name maximum 150 characters.";
+
+    if (form.adminEmail && form.principalEmail && form.adminEmail === form.principalEmail) {
+      e.adminEmail = "Admin Email cannot match Principal Email.";
+    } else if (!EMAIL_PATTERN.test(form.adminEmail)) {
+      e.adminEmail = "Invalid Admin Email.";
+    }
+
+    if (!MOBILE_PATTERN.test(form.adminPhone)) e.adminPhone = "Invalid Admin Mobile.";
+
+    return e;
+  };
+
+  const validateStep4 = () => {
+    const e = {};
+    if (form.gst) {
+      const gst = form.gst.toUpperCase();
+      if (gst.length !== 15) e.gst = "GST Number must be 15 characters.";
+      else if (!GST_PATTERN.test(gst)) e.gst = "Invalid GST Number.";
+    }
+
+    const pan = form.pan.toUpperCase();
+    if (pan.length !== 10) e.pan = "PAN Number must be 10 characters.";
+    else if (!PAN_PATTERN.test(pan)) e.pan = "Invalid PAN Number.";
+
+    if (form.tan) {
+      const tan = form.tan.toUpperCase();
+      if (tan.length !== 10) e.tan = "TAN Number must be 10 characters.";
+      else if (!TAN_PATTERN.test(tan)) e.tan = "Invalid TAN Number.";
+    }
+
+    const bankFields = [form.accountNumber, form.ifscCode, form.accountHolderName, form.accountType];
+    const anyBankField = bankFields.some((f) => !!f);
+    const allBankFields = bankFields.every((f) => !!f);
+    if (anyBankField && !allBankFields) {
+      e.bankFields = "All bank fields are required.";
+    }
+
+    if (form.accountNumber) {
+      if (!/^\d+$/.test(form.accountNumber)) {
+        e.accountNumber = "Account Number must be numeric.";
+      } else if (form.accountNumber.length < 9) {
+        e.accountNumber = "Account Number must contain minimum 9 digits.";
+      } else if (form.accountNumber.length > 18) {
+        e.accountNumber = "Account Number cannot exceed 18 digits.";
+      }
+      if (form.accountNumber !== form.confirmAccountNumber) {
+        e.confirmAccountNumber = "Account Number and Confirm Account Number do not match.";
+      }
+    }
+
+    if (form.ifscCode) {
+      const ifsc = form.ifscCode.toUpperCase();
+      if (!IFSC_PATTERN.test(ifsc)) e.ifscCode = "Invalid IFSC Code.";
+    }
+
+    if (form.accountHolderName) {
+      if (form.accountHolderName.length > 150) {
+        e.accountHolderName = "Account Holder Name cannot exceed 150 characters.";
+      } else if (!ACCOUNT_HOLDER_PATTERN.test(form.accountHolderName)) {
+        e.accountHolderName = "Invalid Account Holder Name.";
+      }
+    }
+
+    if (form.accountType && !ACCOUNT_TYPES.includes(form.accountType)) {
+      e.accountType = "Invalid Account Type.";
+    }
+
+    return e;
+  };
+
+  const STEP_VALIDATORS = {
+    1: validateStep1,
+    2: validateStep2,
+    3: validateStep3,
+    4: validateStep4,
+    5: () => (allMandatoryUploaded ? {} : { documents: "Please upload all required documents." }),
+  };
+
+  const runValidation = (stepNum) => {
+    const validator = STEP_VALIDATORS[stepNum];
+    if (!validator) return true;
+    const e = validator();
+    setErrors(e);
+    if (Object.keys(e).length > 0) {
+      toast.error("Please fix the highlighted fields before continuing.");
+      return false;
+    }
+    return true;
+  };
+
+  const validateAllSteps = () => {
+    for (let s = 1; s <= 5; s++) {
+      const validator = STEP_VALIDATORS[s];
+      if (!validator) continue;
+      const e = validator();
+      if (Object.keys(e).length > 0) {
+        setStep(s);
+        setErrors(e);
+        toast.error(`Please fix the highlighted fields in Step ${s} (${STEPS[s - 1].title}).`);
+        return false;
+      }
+    }
+    return true;
+  };
 
   // Determine which doc slots are effectively mandatory
   const getEffectiveBadge = (slot) => {
@@ -206,7 +485,286 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
     return acc + (slot.multi ? file.length : file ? 1 : 0);
   }, 0);
 
-  const next = () => setStep((s) => Math.min(6, s + 1));
+  const next = async () => {
+    if (!runValidation(step)) return;
+    setErrors({});
+
+    // ── Step 1 → Step 2: create the draft on the backend ──
+    if (step === 1) {
+      setIsSavingStep(true);
+      try {
+        const fd = new FormData();
+        fd.append("institute_name", form.name.trim());
+        fd.append("institute_type", form.type);
+        fd.append("board_affiliation", form.board);
+        if (form.board === "Other") {
+          fd.append("custom_board_name", form.customBoardName.trim());
+        }
+        fd.append(
+          "academic_year_start_month",
+          formatAcademicYearMonth(form.academicYearStartMonth, form.academicYearStartYear)
+        );
+        fd.append(
+          "academic_year_end_month",
+          formatAcademicYearMonth(form.academicYearEndMonth, form.academicYearEndYear)
+        );
+        fd.append("brand_primary_color", form.primaryColor);
+        fd.append("brand_secondary_color", form.secondaryColor);
+        if (form.logo instanceof File) {
+          fd.append("institute_logo", form.logo);
+        }
+
+        const draft = await createInstituteDraft(fd);
+        const uuid = draft?.draft_uuid || draft?.data?.draft_uuid;
+        if (!uuid) {
+          toast.error("Draft was created but no draft ID was returned. Please retry.");
+          return;
+        }
+        setDraftUuid(uuid);
+        setStep(2);
+      } catch (err) {
+        toast.error(err?.response?.data?.message || "Failed to save basic info. Please try again.");
+      } finally {
+        setIsSavingStep(false);
+      }
+      return;
+    }
+
+    // ── Step 2 → Step 3: update contact & address on the existing draft ──
+    if (step === 2) {
+      if (!draftUuid) {
+        toast.error("Missing draft reference. Please complete Step 1 again.");
+        setStep(1);
+        return;
+      }
+      setIsSavingStep(true);
+      try {
+        const mapsPreview =
+          form.city && form.pin?.length === 6
+            ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${form.city} ${form.pin}`)}`
+            : null;
+
+        const payload = {
+          address_line_1: form.addressLine1.trim(),
+          address_line_2: form.addressLine2.trim() || null,
+          city: form.city.trim(),
+          state: form.state,
+          pin_code: form.pin,
+          country: form.country,
+          official_phone_number: form.phone,
+          official_email_address: form.email,
+          website_url: form.website || null,
+          google_maps_preview: mapsPreview,
+        };
+
+        await updateInstituteDraftStep2(draftUuid, payload);
+        setStep(3);
+      } catch (err) {
+        toast.error(err?.response?.data?.message || "Failed to save contact & address details. Please try again.");
+      } finally {
+        setIsSavingStep(false);
+      }
+      return;
+    }
+    // Step 3 → Step 4: save principal & admin details
+if (step === 3) {
+  if (!draftUuid) {
+    toast.error("Missing draft reference. Please complete Step 1 again.");
+    setStep(1);
+    return;
+  }
+
+  setIsSavingStep(true);
+
+  try {
+    const payload = {
+      principal_full_name: form.principalName.trim(),
+      principal_mobile: form.principalPhone,
+      principal_email: form.principalEmail,
+      principal_designation:
+        form.principalDesignation?.trim() || "Principal",
+
+      admin_full_name: form.adminName.trim(),
+      admin_mobile: form.adminPhone,
+      admin_email: form.adminEmail,
+      admin_designation:
+        form.adminDesignation?.trim() || "Institute Admin",
+
+      send_login_credentials_immediately: form.sendCredentials,
+      auto_generate_secure_password: form.autoGeneratePassword,
+      manual_password: form.autoGeneratePassword
+        ? null
+        : form.manualPassword,
+    };
+
+    await updateInstituteDraftStep3(draftUuid, payload);
+
+    setStep(4);
+  } catch (err) {
+    toast.error(
+      err?.response?.data?.message ||
+      "Failed to save key people details. Please try again."
+    );
+  } finally {
+    setIsSavingStep(false);
+  }
+
+  return;
+}
+// Step 4 → Step 5: save financial details
+if (step === 4) {
+  if (!draftUuid) {
+    toast.error("Missing draft reference. Please complete Step 1 again.");
+    setStep(1);
+    return;
+  }
+
+  setIsSavingStep(true);
+
+  try {
+   const payload = {
+  gst_number: form.gst || null,
+  pan_number: form.pan,
+  tan_number: form.tan || null,
+
+  bank_name: form.bankName || null,
+  bank_account_number: form.accountNumber || null,
+  confirm_account_number: form.confirmAccountNumber || null,   // <-- added
+  ifsc_code: form.ifscCode || null,
+  account_holder_name: form.accountHolderName || null,
+  account_type: form.accountType || null,
+};
+
+    await updateInstituteDraftStep4(draftUuid, payload);
+
+    setStep(5);
+  } catch (err) {
+    toast.error(
+      err?.response?.data?.message ||
+      "Failed to save financial details. Please try again."
+    );
+  } finally {
+    setIsSavingStep(false);
+  }
+
+  return;
+}
+// Step 5 → Step 6: upload documents
+if (step === 5) {
+  if (!draftUuid) {
+    toast.error("Missing draft reference.");
+    return;
+  }
+
+  setIsSavingStep(true);
+
+  try {
+    const formData = new FormData();
+
+    if (docs.registration_certificate) {
+      formData.append(
+        "registration_certificate",
+        docs.registration_certificate
+      );
+    }
+
+    if (docs.noc) {
+      formData.append(
+        "noc_from_competent_authority",
+        docs.noc
+      );
+    }
+
+    if (docs.affiliation_certificate) {
+      formData.append(
+        "affiliation_certificate",
+        docs.affiliation_certificate
+      );
+    }
+
+    if (docs.address_proof) {
+      formData.append(
+        "address_proof",
+        docs.address_proof
+      );
+    }
+
+    if (docs.gst_certificate) {
+      formData.append(
+        "gst_certificate",
+        docs.gst_certificate
+      );
+    }
+
+    if (docs.pan_card) {
+      formData.append(
+        "pan_card",
+        docs.pan_card
+      );
+    }
+
+    if (docs.fire_safety_noc) {
+      formData.append(
+        "fire_safety_noc",
+        docs.fire_safety_noc
+      );
+    }
+
+    if (docs.iso_naac_certificate) {
+      formData.append(
+        "iso_naac_certificate",
+        docs.iso_naac_certificate
+      );
+    }
+
+    if (docs.land_building_docs) {
+      formData.append(
+        "land_building_ownership_proof",
+        docs.land_building_docs
+      );
+    }
+
+    // Multiple files
+    if (docs.other_documents?.length) {
+      docs.other_documents.forEach((file) => {
+        formData.append("any_other", file);
+      });
+    }
+
+ await uploadInstituteDocuments(draftUuid, formData);
+
+const review = await getInstituteDraftReview(draftUuid);
+
+setReviewData(review.data || review);
+
+setStep(6);
+  } catch (err) {
+    toast.error(
+      err?.response?.data?.message ||
+      "Failed to upload documents."
+    );
+  } finally {
+    setIsSavingStep(false);
+  }
+
+  return;
+}
+    setStep((s) => Math.min(6, s + 1));
+  };
+  useEffect(() => {
+  const loadReview = async () => {
+    if (step === 6 && draftUuid) {
+      try {
+        const review = await getInstituteDraftReview(draftUuid);
+        setReviewData(review.data || review);
+      } catch (err) {
+        toast.error("Failed to load review data");
+      }
+    }
+  };
+
+  loadReview();
+}, [step, draftUuid]);
   const prev = () => setStep((s) => Math.max(1, s - 1));
 
   const handleFileUpload = (slotId, files) => {
@@ -332,41 +890,53 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
   };
 
   const submit = () => {
-    if (!form.name.trim()) {
-      toast.error("Institute name is required");
-      setStep(1);
+    if (!validateAllSteps()) {
       return;
     }
     if (!allMandatoryUploaded) {
       toast.error("Please upload all required documents");
+      setStep(5);
       return;
     }
     setShowSubmitModal(true);
   };
 
-  const confirmSubmit = () => {
+const confirmSubmit = async () => {
+  if (!draftUuid) {
+    toast.error("Draft ID not found");
+    return;
+  }
+
+  try {
+    setIsSavingStep(true);
+
+    const response = await submitInstituteDraft(draftUuid);
+
+    toast.success(
+      response?.message || "Institute created successfully"
+    );
+
+    setNewInstituteId(
+      response?.data?.institute_id ||
+      response?.institute_id
+    );
+
     setShowSubmitModal(false);
-    const id = `INST-${Date.now().toString(36).toUpperCase()}`;
-    const finalRecord = buildInstituteRecord("Trial");
-
-    // This is the only point the institute is written to institutesApi —
-    // so it's also the first point it appears in the Institutes table.
-    institutesApi.add(finalRecord);
-
-    try {
-      sessionStorage.removeItem(INSTITUTE_DRAFT_STORAGE_KEY);
-    } catch {
-      // safe to ignore if storage is unavailable
-    }
-
-    setNewInstituteId(id);
     setShowSuccessModal(true);
+
     setTimeout(() => {
-      setShowSuccessModal(false);
       navigate("/super/institutes");
     }, 3000);
-  };
 
+  } catch (err) {
+    toast.error(
+      err?.response?.data?.message ||
+      "Failed to submit institute"
+    );
+  } finally {
+    setIsSavingStep(false);
+  }
+};
   return (
     <PageContainer>
       <PageHeader
@@ -404,7 +974,13 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
             {STEPS.map((s) => (
               <button
                 key={s.id}
-                onClick={() => setStep(s.id)}
+                onClick={() => {
+                  if (s.id > 1 && !draftUuid) {
+                    toast.error("Please complete Step 1 first.");
+                    return;
+                  }
+                  setStep(s.id);
+                }}
                 className={`w-full text-left flex items-start gap-2.5 p-2.5 rounded-md transition-colors ${
                   step === s.id
                     ? "bg-primary/10"
@@ -448,7 +1024,7 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
             {/* ── Step 1: Basic Info ── */}
         {step === 1 && (
   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <Field label={<>Institute Name <span className="text-destructive">*</span></>} className="md:col-span-3">
+    <Field label={<>Institute Name <span className="text-destructive">*</span></>} className="md:col-span-3" error={errors.name}>
       <Input
         value={form.name}
         onChange={(e) => set("name", e.target.value)}
@@ -456,7 +1032,7 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
       />
     </Field>
 
-    <Field label={<>Institute Type <span className="text-destructive">*</span></>}>
+    <Field label={<>Institute Type <span className="text-destructive">*</span></>} error={errors.type}>
       <Select value={form.type} onValueChange={(v) => set("type", v)}>
         <SelectTrigger><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -468,7 +1044,7 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
     </Field>
 
     {/* Row 1: Board / Affiliation, Start Month & Year, End Month & Year */}
-    <Field label={<>Board / Affiliation <span className="text-destructive">*</span></>}>
+    <Field label={<>Board / Affiliation <span className="text-destructive">*</span></>} error={errors.board}>
       <Select value={form.board} onValueChange={(v) => set("board", v)}>
         <SelectTrigger><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -479,7 +1055,7 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
       </Select>
     </Field>
     {form.board === "Other" && (
-      <Field label={<>Custom Board Name <span className="text-destructive">*</span></>} className="md:col-span-3">
+      <Field label={<>Custom Board Name <span className="text-destructive">*</span></>} className="md:col-span-3" error={errors.customBoardName}>
         <Input
           value={form.customBoardName}
           onChange={(e) => set("customBoardName", e.target.value)}
@@ -488,7 +1064,7 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
       </Field>
     )}
 
-    <Field label={<>Start Month & Year <span className="text-destructive">*</span></>}>
+    <Field label={<>Start Month & Year <span className="text-destructive">*</span></>} error={errors.academicYearStart}>
       <div className="flex gap-2">
         <Select value={form.academicYearStartMonth} onValueChange={(v) => set("academicYearStartMonth", v)}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
@@ -510,7 +1086,7 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
       </div>
     </Field>
 
-    <Field label={<>End Month & Year <span className="text-destructive">*</span></>}>
+    <Field label={<>End Month & Year <span className="text-destructive">*</span></>} error={errors.academicYearEnd}>
       <div className="flex gap-2">
         <Select value={form.academicYearEndMonth} onValueChange={(v) => set("academicYearEndMonth", v)}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
@@ -539,11 +1115,11 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
       </div>
     </Field>
 
-    <Field label="Brand Primary Colour">
+    <Field label="Brand Primary Colour" error={errors.primaryColor}>
       <ColourField value={form.primaryColor} onChange={(value) => set("primaryColor", value)} />
     </Field>
 
-    <Field label="Brand Secondary Colour">
+    <Field label="Brand Secondary Colour" error={errors.secondaryColor}>
       <ColourField value={form.secondaryColor} onChange={(value) => set("secondaryColor", value)} />
     </Field>
 
@@ -559,6 +1135,15 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
                       if (!selected) return;
                       if (!selected.type.startsWith("image/")) {
                         toast.error("Upload an image file");
+                        return;
+                      }
+                      if (selected.size > 5 * 1024 * 1024) {
+                        toast.error("Logo size exceeds 5 MB.");
+                        return;
+                      }
+                      const allowedLogoTypes = ["image/jpeg", "image/png", "image/webp"];
+                      if (!allowedLogoTypes.includes(selected.type)) {
+                        toast.error("Logo must be JPG, PNG, or WEBP.");
                         return;
                       }
                       const reader = new FileReader();
@@ -630,38 +1215,38 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
             {/* ── Step 2: Contact & Address ── */}
             {step === 2 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label={<>Address Line 1 <span className="text-red-500">*</span></>} className="md:col-span-2">
+                <Field label={<>Address Line 1 <span className="text-red-500">*</span></>} className="md:col-span-2" error={errors.addressLine1}>
                   <Textarea rows={2} value={form.addressLine1} onChange={(e) => set("addressLine1", e.target.value)} placeholder="Enter address line 1" />
                 </Field>
-                <Field label={<>Address Line 2 <span className="text-red-500">*</span></>} className="md:col-span-2">
+                <Field label={<>Address Line 2</>} className="md:col-span-2" error={errors.addressLine2}>
                   <Textarea rows={2} value={form.addressLine2} onChange={(e) => set("addressLine2", e.target.value)} placeholder="Enter address line 2 (optional)" />
                 </Field>
-                <Field label={<>City <span className="text-red-500">*</span></>}>
+                <Field label={<>City <span className="text-red-500">*</span></>} error={errors.city}>
                   <Input value={form.city} onChange={(e) => set("city", e.target.value.replace(/[^A-Za-z\s]/g, ""))} placeholder="Enter city" />
                 </Field>
-                <Field label={<>State <span className="text-red-500">*</span></>}>
+                <Field label={<>State <span className="text-red-500">*</span></>} error={errors.state}>
                   <select className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.state} onChange={(e) => set("state", e.target.value)}>
                     <option value="">Select State</option>
-                    {["Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat","Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Manipur","Meghalaya","Mizoram","Nagaland","Odisha","Punjab","Rajasthan","Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh","Uttarakhand","West Bengal","Andaman and Nicobar Islands","Chandigarh","Dadra and Nagar Haveli and Daman and Diu","Delhi","Jammu and Kashmir","Ladakh","Lakshadweep","Puducherry"].map((s) => (
+                    {INDIAN_STATES.map((s) => (
                       <option key={s}>{s}</option>
                     ))}
                   </select>
                 </Field>
-                <Field label={<>PIN Code <span className="text-red-500">*</span></>}>
+                <Field label={<>PIN Code <span className="text-red-500">*</span></>} error={errors.pin}>
                   <Input value={form.pin} maxLength={6} onChange={(e) => set("pin", e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit PIN Code" />
                 </Field>
-                <Field label={<>Country <span className="text-red-500">*</span></>}>
+                <Field label={<>Country <span className="text-red-500">*</span></>} error={errors.country}>
                   <select className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.country} onChange={(e) => set("country", e.target.value)}>
                     <option value="India">India</option>
                   </select>
                 </Field>
-                <Field label={<>Official Phone Number <span className="text-red-500">*</span></>}>
+                <Field label={<>Official Phone Number <span className="text-red-500">*</span></>} error={errors.phone}>
                   <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 9876543210" />
                 </Field>
-                <Field label={<>Official Email Address <span className="text-red-500">*</span></>}>
+                <Field label={<>Official Email Address <span className="text-red-500">*</span></>} error={errors.email}>
                   <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="admin@school.edu" />
                 </Field>
-                <Field label="Website URL" className="md:col-span-2">
+                <Field label="Website URL" className="md:col-span-2" error={errors.website}>
                   <Input value={form.website} onChange={(e) => set("website", e.target.value)} placeholder="https://example.com" />
                 </Field>
                 {form.pin?.length === 6 && form.city && (
@@ -681,13 +1266,13 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Principal Section</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label={<>Principal Full Name <span className="text-red-500">*</span></>}>
+                    <Field label={<>Principal Full Name <span className="text-red-500">*</span></>} error={errors.principalName}>
                       <Input value={form.principalName} onChange={(e) => set("principalName", e.target.value)} placeholder="Enter principal full name" />
                     </Field>
-                    <Field label={<>Principal Mobile <span className="text-red-500">*</span></>}>
-                      <Input type="tel" value={form.principalPhone} onChange={(e) => set("principalPhone", e.target.value)} placeholder="9876543210" />
+                    <Field label={<>Principal Mobile <span className="text-red-500">*</span></>} error={errors.principalPhone}>
+                      <Input type="tel" value={form.principalPhone} onChange={(e) => set("principalPhone", e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="9876543210" />
                     </Field>
-                    <Field label={<>Principal Email <span className="text-red-500">*</span></>}>
+                    <Field label={<>Principal Email <span className="text-red-500">*</span></>} error={errors.principalEmail}>
                       <Input type="email" value={form.principalEmail} onChange={(e) => set("principalEmail", e.target.value)} placeholder="principal@school.edu" />
                     </Field>
                     <Field label="Principal Designation">
@@ -698,14 +1283,14 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Admin Section</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label={<>Admin Full Name <span className="text-red-500">*</span></>}>
+                    <Field label={<>Admin Full Name <span className="text-red-500">*</span></>} error={errors.adminName}>
                       <Input value={form.adminName} onChange={(e) => set("adminName", e.target.value)} placeholder="Enter admin full name" />
                     </Field>
-                    <Field label={<>Admin Email <span className="text-red-500">*</span></>}>
+                    <Field label={<>Admin Email <span className="text-red-500">*</span></>} error={errors.adminEmail}>
                       <Input type="email" value={form.adminEmail} onChange={(e) => set("adminEmail", e.target.value)} placeholder="admin@school.edu" />
                     </Field>
-                    <Field label={<>Admin Mobile <span className="text-red-500">*</span></>}>
-                      <Input type="tel" value={form.adminPhone} onChange={(e) => set("adminPhone", e.target.value)} placeholder="9876543210" />
+                    <Field label={<>Admin Mobile <span className="text-red-500">*</span></>} error={errors.adminPhone}>
+                      <Input type="tel" value={form.adminPhone} onChange={(e) => set("adminPhone", e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="9876543210" />
                     </Field>
                     <Field label="Admin Designation">
                       <Input value={form.adminDesignation} onChange={(e) => set("adminDesignation", e.target.value)} placeholder="Institute Admin" />
@@ -740,52 +1325,107 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
             {/* ── Step 4: Financial ── */}
             {step === 4 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label={<>GST Number <span className="text-red-500">*</span></>}>
+                <Field label={<>GST Number <span className="text-red-500">*</span></>} error={errors.gst}>
                   <Input value={form.gst} onChange={(e) => set("gst", e.target.value.toUpperCase())} placeholder="22AAAAA0000A1Z5" maxLength={15} />
                 </Field>
-                <Field label={<>PAN Number <span className="text-red-500">*</span></>}>
+                <Field label={<>PAN Number <span className="text-red-500">*</span></>} error={errors.pan}>
                   <Input value={form.pan} onChange={(e) => set("pan", e.target.value.toUpperCase())} placeholder="AAAPL1234C" maxLength={10} />
                 </Field>
-                <Field label="TAN Number">
+                <Field label="TAN Number" error={errors.tan}>
                   <Input value={form.tan} onChange={(e) => set("tan", e.target.value.toUpperCase())} placeholder="ABCD12345E" maxLength={10} />
                 </Field>
                 <Field label={<>Bank Name <span className="text-red-500">*</span></>}>
                   <Input value={form.bankName} onChange={(e) => set("bankName", e.target.value)} placeholder="Enter bank name" />
                 </Field>
-                <Field label={<>Bank Account Number <span className="text-red-500">*</span></>}>
-                  <Input type="password" value={form.accountNumber} onChange={(e) => set("accountNumber", e.target.value)} placeholder="Enter account number" />
-                </Field>
-                <Field label={<>Confirm Account Number <span className="text-red-500">*</span></>}>
-                  <Input type="password" value={form.confirmAccountNumber} onChange={(e) => set("confirmAccountNumber", e.target.value)} onPaste={(e) => e.preventDefault()} placeholder="Re-enter account number" />
-                </Field>
-                <Field label={<>IFSC Code <span className="text-red-500">*</span></>}>
-                  <Input value={form.ifscCode} onChange={(e) => set("ifscCode", e.target.value.toUpperCase())} placeholder="SBIN0001234" maxLength={11} />
-                </Field>
-               <Field label="Bank Name">
+                <Field label={<>Bank Account Number <span className="text-red-500">*</span></>} error={errors.accountNumber}>
+<Input
+  type="text"
+  value={form.accountNumber}
+  onChange={(e) =>
+    setForm({ ...form, accountNumber: e.target.value })
+  }
+/>                </Field>
+                <Field label={<>Confirm Account Number <span className="text-red-500">*</span></>} error={errors.confirmAccountNumber}>
+<Input
+  type="text"
+  value={form.confirmAccountNumber}
+  onChange={(e) =>
+    setForm({
+      ...form,
+      confirmAccountNumber: e.target.value,
+    })
+  }
+/>                </Field>
+                <Field
+  label={
+    <>
+      IFSC Code <span className="text-red-500">*</span>
+    </>
+  }
+  error={errors.ifscCode}
+>
+  <Input
+    value={form.ifscCode}
+    onChange={(e) => {
+      const value = e.target.value.toUpperCase();
+
+      setForm((prev) => ({
+        ...prev,
+        ifscCode: value,
+      }));
+
+      if (value.length === 11) {
+        fetchIFSCData(value);
+      }
+    }}
+    placeholder="SBIN0001234"
+    maxLength={11}
+  />
+</Field>
+<Field label="Bank Name">
   <Input
     value={form.ifscBankName || ""}
-    onChange={(e) => set("ifscBankName", e.target.value)}
-    placeholder=" enter bank name"
+    onChange={(e) =>
+      setForm((prev) => ({
+        ...prev,
+        ifscBankName: e.target.value,
+        bankName: e.target.value,
+      }))
+    }
+    placeholder="Enter bank name"
+    disabled={isFetchingIFSC}
   />
 </Field>
 <Field label="Branch">
   <Input
     value={form.ifscBranch || ""}
-    onChange={(e) => set("ifscBranch", e.target.value)}
-    placeholder=" enter branch name "
+    onChange={(e) =>
+      setForm((prev) => ({
+        ...prev,
+        ifscBranch: e.target.value,
+      }))
+    }
+    placeholder="Enter branch name"
+    disabled={isFetchingIFSC}
   />
 </Field>
-                <Field label={<>Account Holder Name <span className="text-red-500">*</span></>}>
+                <Field label={<>Account Holder Name <span className="text-red-500">*</span></>} error={errors.accountHolderName}>
                   <Input value={form.accountHolderName} onChange={(e) => set("accountHolderName", e.target.value)} placeholder="Enter account holder name" maxLength={150} />
                 </Field>
-                <Field label={<>Account Type <span className="text-red-500">*</span></>}>
+                <Field label={<>Account Type <span className="text-red-500">*</span></>} error={errors.accountType}>
                   <select value={form.accountType} onChange={(e) => set("accountType", e.target.value)} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
                     <option value="">Select Account Type</option>
-                    <option value="Savings">Savings</option>
-                    <option value="Current">Current</option>
-                    <option value="Overdraft">Overdraft</option>
+                    {ACCOUNT_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
                   </select>
                 </Field>
+                {errors.bankFields && (
+                  <div className="md:col-span-2 flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-xs">
+                    <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                    <div>{errors.bankFields}</div>
+                  </div>
+                )}
                 <div className="md:col-span-2 flex items-start gap-2 p-3 rounded-md bg-info/10 border border-info/20 text-xs">
                   <AlertCircle className="h-4 w-4 text-info shrink-0 mt-0.5" />
                   <div><span className="font-semibold">Note: </span>Tax info is used for invoicing only. You can update it later from Institute Settings.</div>
@@ -1020,12 +1660,12 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
                 <ChevronLeft className="h-4 w-4" />Back
               </Button>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={saveAsDraft}>
+                {/* <Button variant="outline" size="sm" onClick={saveAsDraft}>
                   Save as Draft
-                </Button>
+                </Button> */}
                 {step < 6 ? (
-                  <Button className="gradient-primary border-0" onClick={next}>
-                    Next<ChevronRight className="h-4 w-4" />
+                  <Button className="gradient-primary border-0" onClick={next} disabled={isSavingStep}>
+                    {isSavingStep ? "Saving…" : <>Next<ChevronRight className="h-4 w-4" /></>}
                   </Button>
                 ) : (
                   <div title={!allMandatoryUploaded ? "Please upload all required documents" : undefined}>
@@ -1062,9 +1702,14 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setShowSubmitModal(false)}>Cancel</Button>
-              <Button className="gradient-primary border-0" size="sm" onClick={confirmSubmit}>
-                <Check className="h-4 w-4" />Confirm & Create
-              </Button>
+           <Button
+  className="gradient-primary border-0"
+  size="sm"
+  onClick={confirmSubmit}
+  disabled={isSavingStep}
+>
+  {isSavingStep ? "Submitting..." : "Confirm & Create"}
+</Button>
             </div>
           </div>
         </div>
@@ -1333,11 +1978,17 @@ function CollapsibleReview({ title, items, onEdit, collapsed, onToggle }) {
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
-function Field({ label, children, className = "" }) {
+function Field({ label, children, className = "", error }) {
   return (
     <div className={`space-y-1.5 ${className}`}>
       <Label className="text-xs font-medium">{label}</Label>
       {children}
+      {error && (
+        <p className="text-[11px] text-destructive flex items-center gap-1 mt-1">
+          <AlertCircle className="h-3 w-3 shrink-0" />
+          {error}
+        </p>
+      )}
     </div>
   );
 }

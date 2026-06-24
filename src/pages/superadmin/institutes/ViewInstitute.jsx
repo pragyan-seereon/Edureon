@@ -1,18 +1,12 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+/* eslint-disable no-unused-vars */
+import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   ChevronLeft,
   Eye,
-  // eslint-disable-next-line no-unused-vars
-  FileCheck2,
   FileUp,
-  // LogIn,
   Power,
   ShieldCheck,
-  Trash2,
-  // eslint-disable-next-line no-unused-vars
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
@@ -43,169 +37,33 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { institutesApi, useInstitutes } from "../../../lib/store";
-// import { useAuth } from "../../../lib/auth";
+import { getInstituteById, updateInstituteStatus, getInstituteDocuments, } from "../../../api/Institute";
 
-const INSTITUTE_TYPES = ["School", "College", "Coaching Centre", "University", "Other"];
-const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "UGC", "AICTE", "Other"];
-const ACADEMIC_YEARS = [
-  "2022 Jan - 2023 Dec",
-  "2023 Jan - 2024 Dec",
-  "2024 Jan - 2025 Dec",
-  "2025 Jan - 2026 Dec",
-  "2026 Jan - 2027 Dec",
-];
-// const PLANS = ["Trial", "Basic", "Professional", "Enterprise"];
-// const STATUS = ["Active", "Inactive", "Trial", "Suspended"];
-const ACCOUNT_TYPES = ["Savings", "Current", "Overdraft"];
+const formatDate = (value) => {
+  if (!value) return "-";
 
-const SECTIONS = {
-  basic: {
-    title: "Basic Info",
-    fields: [
-      ["name", "Institute Name", "text", true],
-      ["type", "Institute Type", "select", true, INSTITUTE_TYPES],
-      ["board", "Board / Affiliation", "select", true, BOARD_OPTIONS],
-      ["customBoardName", "Custom Board Name", "text", false, null, (form) => form.board === "Other"],
-      ["academicYear", "Academic Year", "select", true, ACADEMIC_YEARS],
-      ["primaryColor", "Brand Primary Colour", "color", false],
-      ["secondaryColor", "Brand Secondary Colour", "color", false],
-      ["logoPreview", "Institute Logo URL", "text", false],
-    ],
-  },
-  contact: {
-    title: "Contact & Address",
-    fields: [
-      ["addressLine1", "Address Line 1", "textarea", true],
-      ["addressLine2", "Address Line 2", "textarea", true],
-      ["city", "City", "text", true],
-      ["state", "State", "text", true],
-      ["pin", "PIN Code", "text", true],
-      ["country", "Country", "text", true],
-      ["phone", "Official Phone Number", "text", true],
-      ["email", "Official Email Address", "email", true],
-      ["website", "Website URL", "text", false],
-    ],
-  },
-  people: {
-    title: "Key People",
-    fields: [
-      ["principalName", "Principal Full Name", "text", true],
-      ["principalPhone", "Principal Mobile", "text", true],
-      ["principalEmail", "Principal Email", "email", true],
-      ["principalDesignation", "Principal Designation", "text", false],
-      ["adminName", "Admin Full Name", "text", true],
-      ["adminEmail", "Admin Email", "email", true],
-      ["adminPhone", "Admin Mobile", "text", true],
-      ["adminDesignation", "Admin Designation", "text", false],
-      ["sendCredentials", "Send login credentials immediately on creation", "switch", false],
-      ["autoGeneratePassword", "Auto-generate secure password", "switch", false],
-      ["manualPassword", "Manual Password", "password", false, null, (form) => !form.autoGeneratePassword],
-    ],
-  },
-  financial: {
-    title: "Financial & Legal",
-    fields: [
-      ["gst", "GST Number", "text", true],
-      ["pan", "PAN Number", "text", true],
-      ["tan", "TAN Number", "text", false],
-      ["bankName", "Bank Name", "text", true],
-      ["accountNumber", "Bank Account Number", "password", true],
-      ["confirmAccountNumber", "Confirm Account Number", "password", true],
-      ["ifscCode", "IFSC Code", "text", true],
-      ["ifscBankName", "Auto-fetched Bank Name", "text", false],
-      ["ifscBranch", "Auto-fetched Branch", "text", false],
-      ["accountHolderName", "Account Holder Name", "text", true],
-      ["accountType", "Account Type", "select", true, ACCOUNT_TYPES],
-      // ["plan", "Plan", "select", true, PLANS],
-      // ["status", "Status", "select", true, STATUS],
-    ],
-  },
+  const date = new Date(value);
+
+  if (isNaN(date.getTime())) return "-";
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+
+  return `${day}-${month}-${year}`;
 };
-
-const DOCS = [
-  "Registration Certificate",
-  "NOC from Competent Authority",
-  "Affiliation Certificate",
-  "Address Proof",
-  "GST Certificate",
-  "PAN Card",
-  "Fire Safety NOC",
-];
-
-const normalizeInstitute = (item, index = 0) => ({
-  ...item,
-  type: item.type === "Coaching" ? "Coaching Centre" : item.type || "School",
-  board: item.board || "CBSE",
-  customBoardName: item.customBoardName || "",
-  academicYear: item.academicYear || "2026 Jan - 2027 Dec",
-  plan:
-    item.status === "Trial"
-      ? "Trial"
-      : item.plan === "Growth"
-        ? "Basic"
-        : item.plan === "Business"
-          ? "Professional"
-          : item.plan || "Basic",
-  createdAt:
-    item.createdAt?.slice(0, 10) ||
-    new Date(Date.UTC(2026, 5, 1 - index * 14)).toISOString().slice(0, 10),
-  adminName: item.adminName || "Rahul Kapoor",
-  adminEmail: item.adminEmail || item.email || "admin@example.edu",
-  adminPhone: item.adminPhone || item.phone || "-",
-  principalName: item.principalName || "Meera Iyer",
-  principalPhone: item.principalPhone || item.phone || "-",
-  principalEmail: item.principalEmail || "principal@example.edu",
-  principalDesignation: item.principalDesignation || "Principal",
-  adminDesignation: item.adminDesignation || "Institute Admin",
-  addressLine1: item.addressLine1 || item.address || "Main campus",
-  addressLine2: item.addressLine2 || "",
-  state: item.state || "-",
-  pin: item.pin || "-",
-  country: item.country || "India",
-  phone: item.phone || "-",
-  email: item.email || "-",
-  website: item.website || "-",
-  pan: item.pan || "-",
-  gst: item.gst || "",
-  tan: item.tan || "",
-  bankName: item.bankName || "",
-  accountHolderName: item.accountHolderName || "",
-  accountNumber: item.accountNumber || "",
-  confirmAccountNumber: item.confirmAccountNumber || item.accountNumber || "",
-  ifscCode: item.ifscCode || "",
-  ifscBankName: item.ifscBankName || "",
-  ifscBranch: item.ifscBranch || "",
-  accountType: item.accountType || "",
-  sendCredentials: Boolean(item.sendCredentials),
-  autoGeneratePassword: item.autoGeneratePassword ?? true,
-  manualPassword: item.manualPassword || "",
-  primaryColor: item.primaryColor || "#1e3a5f",
-  secondaryColor: item.secondaryColor || "#f59e0b",
-  logoPreview:
-    item.logoPreview ||
-    `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(item.name)}`,
-});
-
-const formatDate = (value) =>
-  value
-    ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "-";
 
 const statusVariant = (status) => {
-  if (status === "Active") return "default";
-  if (status === "Trial") return "secondary";
-  return "destructive";
-};
+  switch (status) {
+    case "ACTIVE":
+      return "default";
 
-const planVariant = (plan) => {
-  if (plan === "Enterprise") return "default";
-  if (plan === "Professional") return "secondary";
-  return "outline";
+    case "ARCHIVED":
+      return "destructive";
+
+    default:
+      return "secondary";
+  }
 };
 
 const formatBytes = (bytes) => {
@@ -216,54 +74,59 @@ const formatBytes = (bytes) => {
 
 export default function ViewInstitute() {
   const { id } = useParams();
-  const navigate = useNavigate();
-  // const auth = useAuth();
-  const institutes = useInstitutes();
-  const raw = institutes.find((item) => item.id === id);
-  const rawIndex = institutes.findIndex((item) => item.id === id);
-  const inst = useMemo(() => (raw ? normalizeInstitute(raw, rawIndex) : null), [raw, rawIndex]);
+
+  const [inst, setInst] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [rejecting, setRejecting] = useState(null);
   const [verifyDoc, setVerifyDoc] = useState(null);
   const [docs, setDocs] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [suspendDialog, setSuspendDialog] = useState(false);
 
   useEffect(() => {
-    if (!inst) return;
-    const names = inst.documents?.length ? inst.documents : DOCS;
-    setDocs(
-      names.map((doc, index) =>
-        typeof doc === "string"
-          ? {
-              id: `doc-${index}`,
-              name: doc,
-              uploadedAt: inst.createdAt,
-              size: `${(1.1 + index * 0.35).toFixed(1)} MB`,
-              status: index % 3 === 0 ? "Pending Verification" : "Verified",
-            }
-          : doc,
-      ),
+  const fetchInstitute = async () => {
+    try {
+      setLoading(true);
+
+      const [instRes, docsRes] = await Promise.all([
+        getInstituteById(id),
+        getInstituteDocuments(id),
+      ]);
+
+      setInst(instRes.data);
+
+     setDocs(
+  docsRes.data.map((doc) => ({
+    id: doc.document_uuid,
+    name: doc.document_type
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase()),
+    uploadedAt: doc.uploaded_date,
+    size: formatBytes(doc.file_size),
+    status: doc.status,
+    fileName: doc.original_file_name,
+    filePath: doc.file_path,
+    fileUrl: doc.file_url,
+  }))
+);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load institute");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchInstitute();
+}, [id]);
+
+  if (loading) {
+    return (
+      <PageContainer>
+        <div className="py-10 text-center">Loading...</div>
+      </PageContainer>
     );
-    setAudit([
-      {
-        id: "AUD-1005",
-        action: "Institute profile reviewed",
-        actor: "Super Admin",
-        at: "2026-06-07 10:15",
-      },
-      {
-        id: "AUD-1004",
-        action: `Status set to ${inst.status}`,
-        actor: "System",
-        at: `${inst.createdAt} 09:00`,
-      },
-      {
-        id: "AUD-1003",
-        action: "Admin credentials issued",
-        actor: "Onboarding",
-        at: `${inst.createdAt} 08:45`,
-      },
-    ]);
-  }, [inst]);
+  }
 
   if (!inst) {
     return (
@@ -290,29 +153,41 @@ export default function ViewInstitute() {
       ...current,
     ]);
 
-  // const switchInstitute = () => {
-  //   auth.switchRole("admin");
-  //   auth.updateProfile({
-  //     institute: inst.name,
-  //     designation: `Admin - ${inst.name}`,
-  //   });
-  //   log("Switched to institute");
-  //   toast.success(`Switched to ${inst.name}`);
-  //   navigate("/");
-  // };
+  const updateStatus = async (nextStatus, reason) => {
+    try {
+      const payload = { status: nextStatus };
+      if (nextStatus === "SUSPENDED") {
+        payload.reason  = reason;
+      }
 
-  const toggleStatus = () => {
-    const nextStatus = inst.status === "Suspended" || inst.status === "Inactive" ? "Active" : "Suspended";
-    institutesApi.update(inst.id, { status: nextStatus });
-    log(`Status changed to ${nextStatus}`);
-    toast.success(`${inst.name} marked ${nextStatus}`);
+      const res = await updateInstituteStatus(id, payload);
+
+      setInst((prev) => ({
+        ...prev,
+        header: {
+          ...prev.header,
+          status: res.data.new_status,
+        },
+      }));
+
+      log(
+        nextStatus === "SUSPENDED"
+          ? `Institute suspended: ${reason}`
+          : "Institute activated",
+      );
+      toast.success(res.message);
+    } catch (err) {
+      console.log(err.response?.data);
+      toast.error("Failed to update status");
+    }
   };
 
-  const removeInstitute = () => {
-    if (!window.confirm(`Delete ${inst.name}? This cannot be undone.`)) return;
-    institutesApi.remove(inst.id);
-    toast.success("Institute deleted");
-    navigate("/super/institutes");
+  const handleStatusClick = () => {
+    if (inst.header.status === "ACTIVE") {
+      setSuspendDialog(true);
+    } else {
+      updateStatus("ACTIVE");
+    }
   };
 
   const verify = () => {
@@ -367,20 +242,12 @@ export default function ViewInstitute() {
             All Institutes
           </Link>
         }
-        title={inst.name}
+title={inst.header.name?.toUpperCase()}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* <Button variant="outline" size="sm" onClick={switchInstitute}>
-              <LogIn className="h-4 w-4" />
-              Switch to Institute
-            </Button> */}
-            <Button variant="outline" size="sm" onClick={toggleStatus}>
+            <Button variant="outline" size="sm" onClick={handleStatusClick}>
               <Power className="h-4 w-4" />
-              {inst.status === "Suspended" || inst.status === "Inactive" ? "Activate" : "Suspend"}
-            </Button>
-            <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={removeInstitute}>
-              <Trash2 className="h-4 w-4" />
-              Delete
+              {inst.header.status === "ACTIVE" ? "Suspend" : "Activate"}
             </Button>
           </div>
         }
@@ -389,19 +256,18 @@ export default function ViewInstitute() {
       <div className="mb-6 rounded-md border bg-card p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <img src={inst.logoPreview} alt="" className="h-16 w-16 rounded-md border bg-muted object-cover" />
+            <img src={inst.header.logo} alt="logo" className="h-16 w-16 rounded-md border bg-muted object-cover" />
             <div className="min-w-0">
-              <h2 className="truncate text-xl font-semibold">{inst.name}</h2>
+              <h2 className="truncate text-xl font-semibold">{inst.header.name?.toUpperCase()}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{inst.type}</Badge>
-                <Badge variant="outline">{inst.board}</Badge>
-                <Badge variant={planVariant(inst.plan)}>{inst.plan}</Badge>
-                <Badge variant={statusVariant(inst.status)}>{inst.status}</Badge>
+                <Badge variant="outline">{inst.header.type}</Badge>
+                <Badge variant="outline">{inst.header.board}</Badge>
+                <Badge variant={statusVariant(inst.header.status)}>{inst.header.status}</Badge>
               </div>
             </div>
           </div>
           <div className="text-sm text-muted-foreground">
-            Created <span className="font-medium text-foreground">{formatDate(inst.createdAt)}</span>
+            Created <span className="font-medium text-foreground">{formatDate(inst.header.created_date)}</span>
           </div>
         </div>
       </div>
@@ -415,9 +281,10 @@ export default function ViewInstitute() {
 
         <TabsContent value="overview" className="mt-4">
           <div className="grid gap-4 lg:grid-cols-2">
-            {Object.entries(SECTIONS).map(([key, section]) => (
-              <SectionCard key={key} title={section.title} fields={section.fields} data={inst} />
-            ))}
+            <SectionCard title="Basic Information" data={inst.overview} />
+            <SectionCard title="Contact & Address" data={inst.contact_address} />
+            <SectionCard title="Key People" data={inst.key_people} />
+            <SectionCard title="Financial & Legal" data={inst.financial_legal} />
           </div>
         </TabsContent>
 
@@ -430,11 +297,11 @@ export default function ViewInstitute() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Doc name</TableHead>
-                    <TableHead>Upload date</TableHead>
-                    <TableHead>File size</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+    <TableHead className="w-1/3">Doc name</TableHead>
+    <TableHead className="w-1/3">Upload date</TableHead>
+                    {/* <TableHead>File size</TableHead> */}
+                    {/* <TableHead>Status</TableHead> */}
+    <TableHead className="w-1/3">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -442,16 +309,26 @@ export default function ViewInstitute() {
                     <TableRow key={doc.id}>
                       <TableCell className="font-medium">{doc.name}</TableCell>
                       <TableCell>{formatDate(doc.uploadedAt)}</TableCell>
-                      <TableCell>{doc.size}</TableCell>
-                      <TableCell>
+                      {/* <TableCell>{doc.size}</TableCell> */}
+                      {/* <TableCell>
                         <DocumentBadge status={doc.status} />
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell>
                         <div className="flex flex-wrap gap-1.5">
-                          <Button variant="outline" size="sm" onClick={() => toast.info(`Previewing ${doc.fileName || doc.name}`)}>
-                            <Eye className="h-3.5 w-3.5" />
-                            Preview
-                          </Button>
+  <Button
+  variant="outline"
+  size="sm"
+  onClick={() => {
+    if (doc.fileUrl) {
+      window.open(doc.fileUrl, "_blank");
+    } else {
+      toast.error("Document URL not available");
+    }
+  }}
+>
+  <Eye className="h-3.5 w-3.5" />
+  Preview
+</Button>
                           <label className="inline-flex">
                             <input
                               type="file"
@@ -467,14 +344,6 @@ export default function ViewInstitute() {
                               Replace
                             </span>
                           </label>
-                          {/* <Button variant="outline" size="sm" onClick={() => setVerifyDoc(doc)}>
-                            <FileCheck2 className="h-3.5 w-3.5" />
-                            Verify
-                          </Button>
-                          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setRejecting(doc)}>
-                            <X className="h-3.5 w-3.5" />
-                            Reject
-                          </Button> */}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -530,63 +399,64 @@ export default function ViewInstitute() {
       {rejecting && (
         <RejectDialog doc={rejecting} onClose={() => setRejecting(null)} onReject={reject} />
       )}
+
+      {suspendDialog && (
+        <SuspendDialog
+          instituteName={inst.header.name}
+          onClose={() => setSuspendDialog(false)}
+          onConfirm={(reason) => {
+            updateStatus("SUSPENDED", reason);
+            setSuspendDialog(false);
+          }}
+        />
+      )}
     </PageContainer>
   );
 }
 
-function SectionCard({ title, fields, data }) {
-  const visibleFields = fields.filter(([, , , , , visibleWhen]) => !visibleWhen || visibleWhen(data));
+function SectionCard({ title, data }) {
   return (
-    <Card className="border-border/60">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-2 sm:grid-cols-2">
-        {visibleFields.map(([key, label]) => (
-          <KV key={key} fieldKey={key} label={label} value={data[key]} />
-        ))}
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+       {Object.entries(data)
+  .filter(([key]) => key !== "google_maps_preview")
+  .map(([key, value]) => (
+    <div key={key} className="rounded border p-3">
+      <div className="text-xs text-muted-foreground uppercase">
+        {key.replace(/_/g, " ")}
+      </div>
+<div className="font-medium">
+  {key === "institute_name" && value
+    ? String(value).toUpperCase()
+    : value || "-"}
+</div>    </div>
+))}
       </CardContent>
     </Card>
   );
 }
 
-function KV({ label, value, fieldKey }) {
-  if (fieldKey === "logoPreview") {
-    return (
-      <div className="rounded-md border bg-muted/10 px-3 py-2 sm:col-span-2">
-        <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
-        <div className="mt-2">
-          {value ? (
-            <img
-              src={value}
-              alt="Institute logo"
-              className="h-16 w-16 rounded-md border bg-white object-contain p-1"
-            />
-          ) : (
-            <span className="text-sm font-medium text-muted-foreground">-</span>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const displayValue = typeof value === "boolean" ? (value ? "Yes" : "No") : value;
-  return (
-    <div className="rounded-md border bg-muted/10 px-3 py-2">
-      <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
-      <div className="mt-1 break-words text-sm font-medium">{displayValue || "-"}</div>
-    </div>
-  );
-}
-
 function DocumentBadge({ status }) {
-  if (status === "Verified") {
-    return <Badge className="bg-success/15 text-success border-success/20">Verified</Badge>;
+  switch (status) {
+    case "VERIFIED":
+      return (
+        <Badge className="bg-success/15 text-success border-success/20">
+          Verified
+        </Badge>
+      );
+
+    case "REJECTED":
+      return <Badge variant="destructive">Rejected</Badge>;
+
+    case "PENDING_VERIFICATION":
+      return <Badge variant="secondary">Pending Verification</Badge>;
+
+    default:
+      return <Badge variant="outline">{status}</Badge>;
   }
-  if (status === "Rejected") {
-    return <Badge variant="destructive">Rejected</Badge>;
-  }
-  return <Badge variant="secondary">Pending Verification</Badge>;
 }
 
 function ConfirmDialog({ title, description, confirmLabel, onCancel, onConfirm }) {
@@ -653,6 +523,60 @@ function RejectDialog({ doc, onClose, onReject }) {
           </Button>
           <Button variant="destructive" onClick={submit}>
             Reject
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SuspendDialog({ instituteName, onClose, onConfirm }) {
+  const [reason, setReason] = useState("");
+  const [touched, setTouched] = useState(false);
+  const error =
+    touched && reason.trim().length < 10
+      ? "Suspension reason must be at least 10 characters."
+      : touched && reason.length > 500
+        ? "Suspension reason must be 500 characters or less."
+        : "";
+
+  const submit = () => {
+    setTouched(true);
+    if (reason.trim().length < 10 || reason.length > 500) return;
+    onConfirm(reason.trim());
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Suspend {instituteName}?</DialogTitle>
+          <DialogDescription>
+            This institute will be suspended immediately. Please provide a reason.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label>Suspension Reason</Label>
+          <Textarea
+            value={reason}
+            maxLength={500}
+            onBlur={() => setTouched(true)}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Describe why this institute is being suspended."
+          />
+          <div className="flex justify-between text-xs">
+            <span className={error ? "text-destructive" : "text-muted-foreground"}>
+              {error || "Required, 10-500 characters."}
+            </span>
+            <span className="text-muted-foreground">{reason.length}/500</span>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={submit}>
+            Suspend
           </Button>
         </DialogFooter>
       </DialogContent>

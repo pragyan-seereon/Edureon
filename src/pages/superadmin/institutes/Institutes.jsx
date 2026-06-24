@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -10,6 +10,8 @@ import {
   Plus,
   Search,
   Trash2,
+  RotateCcw,
+
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
@@ -35,44 +37,47 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { useAuth } from "../../../lib/auth";
-import { appUsersApi, institutesApi, useInstitutes } from "../../../lib/store";
-
-const STATUS_OPTIONS = ["All", "Active", "Inactive", "Trial", "Suspended"];
-const TYPE_OPTIONS = ["All", "School", "College", "Coaching", "University"];
-const PLAN_OPTIONS = ["All", "Trial", "Basic", "Professional", "Enterprise"];
+import { getInstitutes,  deleteInstitute,   restoreInstitute,} from "../../../api/Institute";
+const STATUS_OPTIONS = ["All", "Active", "Archived",  "Suspended"];
+const TYPE_OPTIONS = ["All", "SCHOOL", "COLLEGE", "COACHING", "UNIVERSITY"];
+// const PLAN_OPTIONS = ["All", "Trial", "Basic", "Professional", "Enterprise"];
 const PAGE_SIZES = [10, 25, 50, 100];
 
 // Key used to persist the super admin session so the dashboard can restore it
 const SUPER_ADMIN_SESSION_KEY = "superAdminSession";
 
-const normalizeType = (type) => {
-  if (type === "Coaching Centre") return "Coaching";
-  return type || "School";
+// const normalizeType = (type) => {
+//   if (type === "Coaching Centre") return "Coaching";
+//   return type || "School";
+// };
+
+// const normalizePlan = (plan, status) => {
+//   if (status === "Trial") return "Trial";
+//   if (plan === "Growth") return "Basic";
+//   if (plan === "Business") return "Professional";
+//   return plan || "Basic";
+// };
+
+// const createdDate = (item, index) => {
+//   if (item.createdAt) return item.createdAt.slice(0, 10);
+//   const date = new Date("2026-06-01T00:00:00.000Z");
+//   date.setDate(date.getDate() - index * 14);
+//   return date.toISOString().slice(0, 10);
+// };
+
+const formatDate = (value) => {
+  if (!value) return "-";
+
+  const date = new Date(value);
+
+  if (isNaN(date.getTime())) return "-";
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+
+  return `${day}-${month}-${year}`;
 };
-
-const normalizePlan = (plan, status) => {
-  if (status === "Trial") return "Trial";
-  if (plan === "Growth") return "Basic";
-  if (plan === "Business") return "Professional";
-  return plan || "Basic";
-};
-
-const createdDate = (item, index) => {
-  if (item.createdAt) return item.createdAt.slice(0, 10);
-  const date = new Date("2026-06-01T00:00:00.000Z");
-  date.setDate(date.getDate() - index * 14);
-  return date.toISOString().slice(0, 10);
-};
-
-const formatDate = (value) =>
-  value
-    ? new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "-";
-
 const statusVariant = (status) => {
   if (status === "Active") return "default";
   if (status === "Trial") return "secondary";
@@ -131,13 +136,16 @@ const exportRows = (rows) => {
 };
 
 export default function Institutes() {
-  const rawInstitutes = useInstitutes();
+const [institutes, setInstitutes] = useState([]);
+const [loading, setLoading] = useState(false);
+const [total, setTotal] = useState(0);
   const navigate = useNavigate();
   const auth = useAuth();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [type, setType] = useState("All");
+  // eslint-disable-next-line no-unused-vars
   const [plan, setPlan] = useState("All");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -152,66 +160,85 @@ export default function Institutes() {
   }, [search]);
 
   useEffect(() => {
+  const fetchInstitutes = async () => {
+    try {
+      setLoading(true);
+
+      const response = await getInstitutes({
+        search: debouncedSearch || undefined,
+        status: status !== "All" ? status.toUpperCase() : undefined,
+        type: type !== "All" ? type : undefined,
+        plan: plan !== "All" ? plan.toUpperCase() : undefined,
+        from_date: from || undefined,
+        to_date: to || undefined,
+        page,
+        limit: Number(rowsPerPage),
+        sort: "created_date",
+        order: sort.dir,
+      });
+
+      setInstitutes(
+        response.data.map((item) => ({
+          id: item.uuid,
+          code: item.code,
+          logo: item.logo
+            ? `http://127.0.0.1:8000/${item.logo.replace(/\\/g, "/")}`
+            : `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(
+                item.name
+              )}`,
+          name: item.name,
+          type: item.type,
+          board: item.board,
+          city: item.city,
+          plan: item.plan,
+          status: item.status,
+          adminName: item.admin_name,
+          createdAt: item.created_date,
+          students: 0,
+        }))
+      );
+
+      setTotal(response.total);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load institutes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchInstitutes();
+}, [
+  debouncedSearch,
+  status,
+  type,
+  plan,
+  from,
+  to,
+  page,
+  rowsPerPage,
+  sort,
+]);
+  useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
     setSelected([]);
   }, [debouncedSearch, status, type, plan, from, to, rowsPerPage]);
 
-  const institutes = useMemo(
-    () =>
-      rawInstitutes.map((item, index) => ({
-        ...item,
-        type: normalizeType(item.type),
-        board: item.board || "CBSE",
-        plan: normalizePlan(item.plan, item.status),
-        createdAt: createdDate(item, index),
-        adminName: item.adminName || ["Rahul Kapoor", "Arjun Reddy", "Meera Iyer"][index % 3],
-        logo:
-          item.logoPreview ||
-          `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(item.name)}`,
-      })),
-    [rawInstitutes],
-  );
+  
 
   const dateError = from && to && from > to;
-  const filtered = useMemo(() => {
-    if (dateError) return [];
-    const q = debouncedSearch.toLowerCase();
-    return institutes.filter((item) => {
-      const matchesSearch =
-        q.length < 2 ||
-        [item.name, item.city, item.adminName].some((value) =>
-          String(value || "").toLowerCase().includes(q),
-        );
-      return (
-        matchesSearch &&
-        (status === "All" || item.status === status) &&
-        (type === "All" || item.type === type) &&
-        (plan === "All" || item.plan === plan) &&
-        (!from || item.createdAt >= from) &&
-        (!to || item.createdAt <= to)
-      );
-    });
-  }, [dateError, debouncedSearch, from, institutes, plan, status, to, type]);
+ 
 
-  const sorted = useMemo(() => {
-    const next = [...filtered];
-    next.sort((a, b) => {
-      const av = a[sort.key] ?? "";
-      const bv = b[sort.key] ?? "";
-      const result =
-        typeof av === "number" && typeof bv === "number"
-          ? av - bv
-          : String(av).localeCompare(String(bv));
-      return sort.dir === "asc" ? result : -result;
-    });
-    return next;
-  }, [filtered, sort]);
+
 
   const pageSize = Number(rowsPerPage);
-  const maxPage = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const currentPage = Math.min(page, maxPage);
-  const pageRows = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const sorted = institutes;
+const maxPage = Math.max(
+  1,
+  Math.ceil(total / Number(rowsPerPage))
+);  const currentPage = Math.min(page, maxPage);
+const pageRows = institutes;
   const pageIds = pageRows.map((item) => item.id);
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
   const somePageSelected = pageIds.some((id) => selected.includes(id));
@@ -237,45 +264,97 @@ export default function Institutes() {
     );
   };
 
-  const remove = (item) => {
-    if (!window.confirm(`Delete ${item.name}? This cannot be undone.`)) return;
-    institutesApi.remove(item.id);
-    setSelected((current) => current.filter((id) => id !== item.id));
-    toast.success("Institute deleted");
-  };
+ const remove = async (item) => {
+  const confirmed = window.confirm(
+    `Delete ${item.name}? This action cannot be undone.`
+  );
 
-  const openInstitute = async (item) => {
-    // ── Save current super admin session so the dashboard can restore it ──
-    const currentUser = auth.user;
-    if (currentUser) {
-      sessionStorage.setItem(SUPER_ADMIN_SESSION_KEY, JSON.stringify(currentUser));
-    }
+  if (!confirmed) return;
 
-    const assignedAdmin = appUsersApi
-      .list()
-      .find(
-        (user) =>
-          user.instituteId === item.id &&
-          ["admin", "Institute Admin"].includes(user.role) &&
-          (user.status ?? "Active") === "Active",
-      );
+  try {
+    await deleteInstitute(
+      item.id,          // uuid
+      item.name,        // confirmation_name
+      "Deleted by Super Admin"
+    );
 
-    await auth.completeLogin({
-      id: assignedAdmin?.id ?? `inst-admin-${item.id}`,
-      name: assignedAdmin?.name ?? item.adminName ?? `${item.name} Admin`,
-      email: assignedAdmin?.email ?? item.adminEmail ?? item.email ?? "admin@example.edu",
-      phone: assignedAdmin?.phone ?? item.adminPhone ?? item.phone ?? "",
-      role: "admin",
-      designation: "Institute Admin",
-      institute: item.name,
-      instituteId: item.id,
-      joinedAt: assignedAdmin?.createdAt ?? item.createdAt,
-      switchedFrom: "super_admin",
-    });
-    toast.success(`Opened ${item.name} as institute admin`);
-    navigate("/");
-  };
+    setInstitutes((prev) =>
+      prev.filter((inst) => inst.id !== item.id)
+    );
 
+    setSelected((prev) =>
+      prev.filter((id) => id !== item.id)
+    );
+
+    setTotal((prev) => prev - 1);
+
+    toast.success("Institute deleted successfully");
+  } catch (error) {
+    console.error(error);
+
+    toast.error(
+      error?.response?.data?.message ||
+      "Failed to delete institute"
+    );
+  }
+};
+const restore = async (item) => {
+  const confirmed = window.confirm(
+    `Restore ${item.name}?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await restoreInstitute(
+      item.id,
+      item.name // confirmation_name
+    );
+
+    toast.success("Institute restored successfully");
+
+    // refresh list
+    setInstitutes((prev) =>
+      prev.map((inst) =>
+        inst.id === item.id
+          ? { ...inst, status: "ACTIVE" }
+          : inst
+      )
+    );
+  } catch (error) {
+    console.error(error);
+
+    toast.error(
+      error?.response?.data?.message ||
+      "Failed to restore institute"
+    );
+  }
+};
+const openInstitute = async (item) => {
+  const currentUser = auth.user;
+
+  if (currentUser) {
+    sessionStorage.setItem(
+      SUPER_ADMIN_SESSION_KEY,
+      JSON.stringify(currentUser)
+    );
+  }
+
+  await auth.completeLogin({
+    id: item.id,
+    name: item.adminName,
+    email: "",
+    role: "admin",
+    designation: "Institute Admin",
+    institute: item.name,
+    instituteId: item.id,
+    joinedAt: item.createdAt,
+    switchedFrom: "super_admin",
+  });
+
+  toast.success(`Opened ${item.name} as institute admin`);
+  navigate("/");
+};
   return (
     <PageContainer>
       <PageHeader
@@ -292,8 +371,8 @@ export default function Institutes() {
 
       <Card className="max-w-full overflow-hidden border-border/60">
         <CardContent className="p-4 space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.4fr)_repeat(4,minmax(130px,1fr))]">
-            <Field label="Search">
+<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <Field label="Search">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -310,9 +389,9 @@ export default function Institutes() {
             <Field label="Type">
               <FilterSelect value={type} onValueChange={setType} values={TYPE_OPTIONS} />
             </Field>
-            <Field label="Plan">
+            {/* <Field label="Plan">
               <FilterSelect value={plan} onValueChange={setPlan} values={PLAN_OPTIONS} />
-            </Field>
+            </Field> */}
             <Field label=" pagination">
               <FilterSelect
                 value={rowsPerPage}
@@ -371,15 +450,21 @@ export default function Institutes() {
                   <SortableHead className="w-28" label="City" sortKey="city" sort={sort} onSort={setSortKey} />
                   {/* <SortableHead className="w-28" label="Plan" sortKey="plan" sort={sort} onSort={setSortKey} /> */}
                   <SortableHead className="w-28" label="Status" sortKey="status" sort={sort} onSort={setSortKey} />
-                  <SortableHead className="w-28" label="Students" sortKey="students" sort={sort} onSort={setSortKey} />
+                  {/* <SortableHead className="w-28" label="Students" sortKey="students" sort={sort} onSort={setSortKey} /> */}
                   <SortableHead className="w-36" label="Admin Name" sortKey="adminName" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-32" label="Created Date" sortKey="createdAt" sort={sort} onSort={setSortKey} />
                   <TableHead className="w-40 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pageRows.length === 0 ? (
-                  <TableRow>
+{loading ? (
+  <TableRow>
+    <TableCell colSpan={12} className="text-center py-8">
+      Loading institutes...
+    </TableCell>
+  </TableRow>
+) : pageRows.length === 0 ? (
+                    <TableRow>
                     <TableCell colSpan={12} className="h-28 text-center text-sm text-muted-foreground">
                       No institutes match the current filters.
                     </TableCell>
@@ -406,9 +491,9 @@ export default function Institutes() {
                           className="max-w-full truncate text-left font-medium hover:text-primary"
                           onClick={() => navigate(`/super/institutes/${item.id}`)}
                         >
-                          {item.name}
+                        {item.name?.toUpperCase()}
                         </button>
-                        <div className="text-[10px] font-mono text-muted-foreground">{item.id}</div>
+                        {/* <div className="text-[10px] font-mono text-muted-foreground">{item.id}</div> */}
                       </TableCell>
                       <TableCell className="truncate">{item.type}</TableCell>
                       <TableCell className="truncate">{item.board}</TableCell>
@@ -419,7 +504,7 @@ export default function Institutes() {
                       <TableCell>
                         <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
                       </TableCell>
-                      <TableCell className="tabular-nums">{item.students.toLocaleString("en-IN")}</TableCell>
+                      {/* <TableCell className="tabular-nums">{item.students.toLocaleString("en-IN")}</TableCell> */}
                       <TableCell className="truncate">{item.adminName}</TableCell>
                       <TableCell>{formatDate(item.createdAt)}</TableCell>
                       <TableCell>
@@ -433,9 +518,22 @@ export default function Institutes() {
                           <IconButton label="Edit" onClick={() => navigate(`/super/institutes/${item.id}/edit`)}>
                             <FilePenLine className="h-4 w-4" />
                           </IconButton>
-                          <IconButton label="Delete" danger onClick={() => remove(item)}>
-                            <Trash2 className="h-4 w-4" />
-                          </IconButton>
+                         {item.status?.toUpperCase() === "ARCHIVED" ? (
+  <IconButton
+    label="Restore"
+    onClick={() => restore(item)}
+  >
+    <RotateCcw className="h-4 w-4" />
+  </IconButton>
+) : (
+  <IconButton
+    label="Delete"
+    danger
+    onClick={() => remove(item)}
+  >
+    <Trash2 className="h-4 w-4" />
+  </IconButton>
+)}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -448,7 +546,7 @@ export default function Institutes() {
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
             <span>
               Showing {pageRows.length ? (currentPage - 1) * pageSize + 1 : 0}-
-              {(currentPage - 1) * pageSize + pageRows.length} of {sorted.length}
+              {(currentPage - 1) * pageSize + pageRows.length} of {total}
             </span>
             <div className="flex items-center gap-2">
               <Button
