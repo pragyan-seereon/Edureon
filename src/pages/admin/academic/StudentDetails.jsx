@@ -1,7 +1,13 @@
-/* eslint-disable no-unused-vars */
+import {
+  getStudentByUuid,
+  deleteStudent,
+  restoreStudent,
+  getStudentActivity
+} from "../../../api/students";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
-import { Card, CardContent } from "../../../components/ui/card";
+import { Card, CardContent,CardHeader,CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Input } from "../../../components/ui/input";
@@ -33,23 +39,24 @@ import {
   IdCard,
   Printer,
   FileText,
-  Trash2,
+  
   Phone,
   Mail,
   Pencil,
   FileCheck2,
   Eye,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import {
-  useStudents,
-  studentsApi,
+
   activityApi,
   notesApi,
   useActivity,
   useNotes,
   useFeeTxns,
 } from "../../../lib/store";
-import { useState } from "react";
+
 import { toast } from "sonner";
 import { StudentDialog } from "../../../components/student-dialog";
 
@@ -67,17 +74,110 @@ const DOC_SLOTS = [
 export default function StudentDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const students = useStudents();
+ 
   const txns = useFeeTxns();
   useActivity();
   useNotes();
-  const s = students.find((x) => x.id === id);
+ 
   const [editOpen, setEditOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
+  const [s, setS] = useState(null);
+const [loading, setLoading] = useState(true);
+const [activityLogs, setActivityLogs] = useState([]);
+ const [viewingDoc, setViewingDoc] = useState(null); // { label }
 
-  // ── document viewer state (view-only, no upload) ──
-  const [viewingDoc, setViewingDoc] = useState(null); // { label }
 
+useEffect(() => {
+  loadStudent();
+}, [id]);
+
+
+const handleDelete = async () => {
+  try {
+    await deleteStudent(
+      s.student_uuid,
+      {
+        reason: "Deleted by admin"
+      }
+    );
+
+    toast.success("Student archived successfully");
+
+    loadStudent();
+  } catch (err) {
+    console.error(err);
+
+    toast.error(
+      err?.response?.data?.detail ||
+      "Failed to delete student"
+    );
+  }
+};
+
+const handleRestore = async () => {
+  try {
+    await restoreStudent(
+      s.student_uuid
+    );
+
+    toast.success("Student restored successfully");
+
+    loadStudent();
+  } catch (err) {
+    console.error(err);
+
+    toast.error(
+      err?.response?.data?.detail ||
+      "Failed to restore student"
+    );
+  }
+};
+
+const loadStudent = async () => {
+  try {
+    setLoading(true);
+
+    const res = await getStudentByUuid(id);
+
+    setS(res.data.student);
+
+if (
+  res.data.student?.student_uuid
+) {
+  const activityRes =
+    await getStudentActivity(
+      res.data.student.student_uuid
+    );
+
+  console.log(
+    "Activity Response",
+    activityRes.data
+  );
+
+  setActivityLogs(
+    activityRes.data || []
+  );
+}
+  } catch (error) {
+    console.error(error);
+
+    toast.error(
+      "Failed to load student"
+    );
+
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  if (loading) {
+  return (
+    <PageContainer>
+      <PageHeader title="Loading..." />
+    </PageContainer>
+  );
+}
   if (!s)
     return (
       <PageContainer>
@@ -138,35 +238,58 @@ export default function StudentDetails() {
             Students
           </Link>
         }
-        title={s.name}
-        description={`${s.admissionNo} · Class ${s.class}-${s.section} · Roll #${s.rollNo}`}
+        title={s.full_name}
+        description={`${s.admission_no} · Class ${s.class_name}-${s.section} · Roll #${s.roll_no}`}
         actions={
-          <>
-            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-              <Pencil className="h-4 w-4" />
-              Edit
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => print("Profile")}>
-              <Printer className="h-4 w-4" />
-              Print
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => print("ID Card")}>
-              <IdCard className="h-4 w-4" />
-              ID Card
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-destructive"
-              onClick={() => {
-                studentsApi.remove(id);
-                navigate("/students");
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
-          </>
+  <>
+  <Button
+    size="sm"
+    variant="outline"
+    onClick={() => setEditOpen(true)}
+  >
+    <Pencil className="h-4 w-4" />
+    Edit
+  </Button>
+
+  <Button
+    size="sm"
+    variant="outline"
+    onClick={() => print("Profile")}
+  >
+    <Printer className="h-4 w-4" />
+    Print
+  </Button>
+
+  <Button
+    size="sm"
+    variant="outline"
+    onClick={() => print("ID Card")}
+  >
+    <IdCard className="h-4 w-4" />
+    ID Card
+  </Button>
+
+  {s.status === "ARCHIVED" ? (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handleRestore}
+    >
+      <RotateCcw className="h-4 w-4" />
+      Restore
+    </Button>
+  ) : (
+    <Button
+      size="sm"
+      variant="outline"
+      className="text-destructive"
+      onClick={handleDelete}
+    >
+      <Trash2 className="h-4 w-4" />
+      Delete
+    </Button>
+  )}
+</>
         }
       />
 
@@ -176,15 +299,20 @@ export default function StudentDetails() {
           <CardContent className="p-5 flex items-center gap-5">
             <Avatar className="h-20 w-20">
               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-2xl">
-                {s.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                {s.full_name
+                ?.split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)}
+                            
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <div className="flex flex-wrap gap-2 mb-2">
-                <Badge>{s.feeStatus}</Badge>
+                <Badge>{s.fee_status}</Badge>
                 <Badge variant="outline">{s.gender}</Badge>
                 <Badge variant="outline">Attendance {s.attendance}%</Badge>
-                {s.blood && <Badge variant="outline">{s.blood}</Badge>}
+                {s.blood && <Badge variant="outline">{s.blood_group}</Badge>}
                 {s.category && s.category !== "General" && (
                   <Badge variant="outline">{s.category}</Badge>
                 )}
@@ -192,14 +320,14 @@ export default function StudentDetails() {
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                 <div className="flex items-center gap-2">
                   <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                  {s.phone}
+                  {s.primary_phone}
                 </div>
                 <div className="flex items-center gap-2">
                   <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                   {s.email || s.parent.toLowerCase().replace(/\s+/g, ".") + "@gmail.com"}
                 </div>
                 <div className="text-muted-foreground">
-                  Parent: <span className="text-foreground">{s.parent}</span>
+                  Parent: <span className="text-foreground">{s.father_name}</span>
                 </div>
                 <div className="text-muted-foreground">
                   DOB: <span className="text-foreground">{s.dob || "—"}</span>
@@ -292,14 +420,14 @@ export default function StudentDetails() {
                 Personal Information
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
-                <VF label="Full Name" value={s.name} />
-                <VF label="Admission No" value={s.admissionNo} mono />
-                <VF label="Date of Birth" value={s.dob} />
-                <VF label="Gender" value={s.gender} />
-                <VF label="Blood Group" value={s.blood} />
-                <VF label="Student Aadhar" value={s.aadhar} />
-                <VF label="Nationality" value={s.nationality} />
-                <VF label="Category" value={s.category} />
+              <VF label="Full Name" value={s.full_name} />
+              <VF label="Admission No" value={s.admission_no} mono />
+              <VF label="Date of Birth" value={s.dob} />
+              <VF label="Gender" value={s.gender} />
+              <VF label="Blood Group" value={s.blood_group} />
+              <VF label="Student Aadhar" value={s.aadhaar_no} />
+              <VF label="Nationality" value={s.nationality} />
+              <VF label="Category" value={s.category} />
               </div>
             </CardContent>
           </Card>
@@ -311,14 +439,20 @@ export default function StudentDetails() {
                 Academic Details
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
-                <VF label="Class" value={s.class ? `Class ${s.class}` : "—"} />
+                <VF label="Class" value={s.class_name} />
                 <VF label="Section" value={s.section} />
-                <VF label="Roll No" value={String(s.rollNo)} />
+                <VF label="Roll No" value={s.roll_no} />
                 <VF label="Board" value={s.board} />
-                <VF label="Previous School" value={s.previousSchool} />
-                <VF label="Previous Class" value={s.previousClass} />
-                <VF label="Last Aggregate %" value={s.lastPercent ? `${s.lastPercent}%` : null} />
-                <VF label="Attendance %" value={`${s.attendance}%`} />
+                <VF label="Previous School" value={s.previous_school} />
+                <VF label="Previous Class" value={s.previous_class} />
+                <VF
+                  label="Last Aggregate %"
+                  value={s.last_aggregate_percentage}
+                />
+                <VF
+                  label="Attendance %"
+                  value={s.attendance_percentage}
+                />
               </div>
             </CardContent>
           </Card>
@@ -330,17 +464,17 @@ export default function StudentDetails() {
                 Guardian / Family
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
-                <VF label="Father / Guardian" value={s.parent} />
-                <VF label="Mother's Name" value={s.motherName} />
-                <VF label="Primary Phone" value={s.phone} />
-                <VF label="Email" value={s.email} />
-                <VF label="Occupation" value={s.parentOccupation} />
-                <VF label="Annual Income" value={s.parentIncome ? `₹${Number(s.parentIncome).toLocaleString("en-IN")}` : null} />
-                <VF label="Emergency Contact" value={s.emergencyContact} />
-                <VF label="Birth Certificate No." value={s.birthCertificateNo} />
-                <VF label="City" value={s.city} />
-                <VF label="State" value={s.state} />
-                <VF label="PIN" value={s.pin} />
+              <VF label="Father Name" value={s.father_name} />
+              <VF label="Mother Name" value={s.mother_name} />
+              <VF label="Primary Phone" value={s.primary_phone} />
+              <VF label="Email" value={s.email} />
+              <VF label="Occupation" value={s.occupation} />
+              <VF label="Annual Income" value={s.annual_income} />
+              <VF label="Emergency Contact" value={s.emergency_contact} />
+              <VF label="Birth Certificate No" value={s.birth_certificate_no} />
+              <VF label="City" value={s.city} />
+              <VF label="State" value={s.state} />
+              <VF label="PIN Code" value={s.pin_code} />
               </div>
               {s.address && (
                 <div className="mt-4 pt-4 border-t space-y-0.5">
@@ -358,9 +492,15 @@ export default function StudentDetails() {
                 Services
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
-                <VF label="Fee Status" value={s.feeStatus} />
-                <VF label="Transport Required" value={s.transportRequired ?? "No"} />
-                <VF label="Hostel Required" value={s.hostelRequired ?? "No"} />
+                <VF label="Fee Status" value={s.fee_status} />
+                <VF
+                  label="Transport Required"
+                  value={s.transport_required ? "Yes" : "No"}
+                />
+                <VF
+                  label="Hostel Required"
+                  value={s.hostel_required ? "Yes" : "No"}
+                />
               </div>
             </CardContent>
           </Card>
@@ -371,10 +511,10 @@ export default function StudentDetails() {
               <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-4 pb-2 border-b">
                 Medical
               </p>
-              {s.medicalNotes ? (
+              {s.medical_notes ? (
                 <div className="space-y-0.5">
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Medical Notes / Allergies / Special Care</p>
-                  <p className="text-sm font-medium whitespace-pre-wrap">{s.medicalNotes}</p>
+                  <p className="text-sm font-medium whitespace-pre-wrap">{s.medical_notes}</p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No medical notes recorded.</p>
@@ -478,7 +618,7 @@ export default function StudentDetails() {
             <CardContent className="p-5">
               <div className="flex justify-between text-sm mb-2">
                 <span>Overall</span>
-                <span className="font-semibold">{s.attendance}%</span>
+                <span className="font-semibold">{s.attendance_percentage}%</span>
               </div>
               <Progress value={s.attendance} />
               <div className="grid grid-cols-7 gap-1 mt-4">
@@ -629,55 +769,159 @@ export default function StudentDetails() {
         </TabsContent>
 
         {/* ── ACTIVITY ── */}
-        <TabsContent value="activity" className="mt-4">
-          <Card>
-            <CardContent className="p-5 space-y-3">
-              <div className="flex gap-2">
-                <Textarea
-                  placeholder="Add a note…"
-                  rows={2}
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                />
-                <Button
-                  onClick={() => {
-                    if (noteText.trim()) {
-                      notesApi.add("student", id, noteText);
-                      setNoteText("");
-                    }
-                  }}
-                >
-                  Save
-                </Button>
-              </div>
-              {notes.map((n) => (
-                <div key={n.id} className="p-3 border rounded-md text-sm">
-                  {n.text}
-                  <div className="text-[11px] text-muted-foreground mt-1">
-                    {n.by} · {new Date(n.at).toLocaleString()}
-                  </div>
-                </div>
-              ))}
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground pt-3 border-t">
-                Activity
-              </div>
-              {activity.length === 0 && (
-                <div className="text-xs text-muted-foreground">No activity yet.</div>
-              )}
-              {activity.map((a) => (
-                <div key={a.id} className="flex items-start gap-3 text-xs">
-                  <div className="h-2 w-2 rounded-full bg-primary mt-1.5" />
-                  <div className="flex-1">
-                    <div className="text-sm">{a.action}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {a.by} · {new Date(a.at).toLocaleString()}
+<TabsContent
+  value="activity"
+  className="mt-4"
+>
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+    {/* LEFT */}
+    <Card className="lg:col-span-1">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">
+          Notes
+        </CardTitle>
+      </CardHeader>
+
+      <CardContent className="p-5 pt-2">
+        <Textarea
+          placeholder="Add a note..."
+          rows={6}
+          value={noteText}
+          onChange={(e) =>
+            setNoteText(e.target.value)
+          }
+        />
+
+        <Button
+          className="mt-3 w-full"
+          onClick={() => {
+            if (!noteText.trim()) return;
+
+            notesApi.add(
+              "student",
+              id,
+              noteText
+            );
+
+            setNoteText("");
+
+            toast.success(
+              "Note added"
+            );
+          }}
+        >
+          Save Note
+        </Button>
+      </CardContent>
+    </Card>
+
+    {/* RIGHT */}
+    <div className="space-y-5 lg:col-span-2">
+
+      {/* Activity Log */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            Activity Log
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="p-5 pt-2">
+
+          {activityLogs.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-8">
+              No activity yet.
+            </div>
+          ) : (
+            <div className="relative">
+
+              {activityLogs.map(
+                (item, index) => (
+                  <div
+                    key={item.id}
+                    className="flex gap-3 relative"
+                  >
+
+                    {index !==
+                      activityLogs.length - 1 && (
+                      <div className="absolute left-[11px] top-7 w-0.5 h-[calc(100%-4px)] bg-border" />
+                    )}
+
+                    <div className="shrink-0 z-10 mt-0.5">
+                      <div className="h-6 w-6 rounded-full border-2 border-primary flex items-center justify-center">
+                        <div className="h-2 w-2 rounded-full bg-primary" />
+                      </div>
                     </div>
+
+                    <div className="pb-5 flex-1">
+                      <div className="text-sm font-medium">
+                        {item.activity}
+                      </div>
+
+                      <div className="text-[11px] text-muted-foreground mt-1">
+                        You ·{" "}
+                        {new Date(
+                          item.created_at
+                        ).toLocaleString()}
+                      </div>
+                    </div>
+
+                  </div>
+                )
+              )}
+
+            </div>
+          )}
+
+        </CardContent>
+      </Card>
+
+      {/* Notes History */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            Notes History
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="p-5 pt-2">
+
+          {notes.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-4">
+              No notes yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+
+              {notes.map((n) => (
+                <div
+                  key={n.id}
+                  className="border rounded-md p-3"
+                >
+                  <div className="text-sm">
+                    {n.text}
+                  </div>
+
+                  <div className="text-[11px] text-muted-foreground mt-2">
+                    {n.by} ·{" "}
+                    {new Date(
+                      n.at
+                    ).toLocaleString()}
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
+
+            </div>
+          )}
+
+        </CardContent>
+      </Card>
+
+    </div>
+
+  </div>
+</TabsContent>
       </Tabs>
 
       <StudentDialog open={editOpen} onOpenChange={setEditOpen} student={s} />

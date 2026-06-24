@@ -1,4 +1,12 @@
-﻿import { useState } from "react";
+﻿import {
+  createAdmission,
+  getAdmissionSources
+} from "../api/admissions";
+
+import {
+  useState,
+  useEffect
+} from "react";
 import {
   Dialog,
   DialogContent,
@@ -46,22 +54,20 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function generateAdmissionNo() {
-  const year = new Date().getFullYear();
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `ADM-${year}-${rand}`;
-}
+
 
 const initialState = {
   // personal
   name: "",
+  source_id: "",
+  counselors: "",
   dob: "",
   gender: "Male",
   blood: "",
   nationality: "Indian",
   category: "General",
   aadhar: "",
-  admissionNo: generateAdmissionNo(),
+
   // academic
   class: "X",
   section: "A",
@@ -98,8 +104,30 @@ export function NewInquiryDialog({ trigger, onCreate }) {
   const [uploaded, setUploaded] = useState(emptyDocs);
   const [dragOver, setDragOver] = useState(null);
   const [viewingDoc, setViewingDoc] = useState(null);
+  const [sources, setSources] = useState([]);
   const [d, setD] = useState(initialState);
+  useEffect(() => {
 
+  const fetchSources = async () => {
+
+    try {
+
+      const response =
+        await getAdmissionSources();
+
+      setSources(response.data);
+
+    } catch (error) {
+
+      console.log(error);
+
+    }
+
+  };
+
+  fetchSources();
+
+}, []);
   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
   const handleFileUpload = (slotId, files) => {
@@ -114,25 +142,137 @@ export function NewInquiryDialog({ trigger, onCreate }) {
     toast.success(`${slot.label} uploaded`);
   };
 
-  const save = () => {
-    onCreate?.({
-      ...d,
-      documents: DOC_SLOTS.map((slot) => ({
-        name: slot.label,
-        ok: Boolean(uploaded[slot.id]),
-      })),
+  // const save = () => {
+  //   onCreate?.({
+  //     ...d,
+  //     documents: DOC_SLOTS.map((slot) => ({
+  //       name: slot.label,
+  //       ok: Boolean(uploaded[slot.id]),
+  //     })),
+  //   });
+
+  const save = async () => {
+
+  try {
+
+    const fieldMap = {
+      source_id: "source_id",
+      counselors: "counselor_name",
+      name: "full_name",
+      blood: "blood_group",
+      aadhar: "aadhaar_no",
+
+      class: "class_name",
+      rollNo: "roll_no",
+      previousSchool: "previous_school",
+      previousClass: "previous_class",
+      lastPercent: "last_aggregate_percentage",
+      attendance: "attendance_percentage",
+
+      parent: "father_name",
+      motherName: "mother_name",
+      phone: "primary_phone",
+      parentOccupation: "occupation",
+      parentIncome: "annual_income",
+      emergencyContact: "emergency_contact",
+      birthCertificateNo: "birth_certificate_no",
+      address: "residential_address",
+      pin: "pin_code",
+
+      feeStatus: "fee_status",
+      transportRequired: "transport_required",
+      hostelRequired: "hostel_required",
+
+      medicalNotes: "medical_notes"
+
+    };
+
+    const formData = new FormData();
+
+    // Hardcoded institute values
+    formData.append(
+      "institute_id",
+      12
+    );
+
+    formData.append(
+      "institute_uuid",
+      "fbad5628-a9c4-4377-8c2a-cf84eeb4f024"
+    );
+
+    // Dynamic form fields
+    Object.entries(d).forEach(([key, value]) => {
+
+      if (
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+      ) {
+
+        formData.append(
+          fieldMap[key] || key,
+          value
+        );
+
+      }
+
     });
 
-    const uploadedCount = Object.values(uploaded).filter(Boolean).length;
-    toast.success(`Inquiry created for ${d.name}`, {
-      description: `Stage: Inquiry · ${uploadedCount}/${DOC_SLOTS.length} documents on file`,
-    });
+
+  const documentFieldMap = {
+    aadhar: "student_aadhaar_file",
+    birth_certificate: "birth_certificate_file",
+    transfer_certificate: "transfer_certificate_file",
+    last_marksheet: "previous_marksheet_file",
+    passport_photo: "passport_photo_file",
+    parent_id: "parent_id_file",
+    address_proof: "address_proof_file",
+    caste_certificate: "caste_certificate_file"
+};
+
+    // Dynamic documents
+  Object.entries(uploaded).forEach(([key, file]) => {
+
+    if (file) {
+
+      formData.append(
+        documentFieldMap[key] || key,
+        file
+      );
+
+    }
+
+  });
+
+    await createAdmission(formData);
+
+    toast.success(
+      "Admission created successfully"
+    );
 
     setOpen(false);
+
     setTab("personal");
-    setUploaded(emptyDocs());
-    setD({ ...initialState, admissionNo: generateAdmissionNo() });
-  };
+
+    setUploaded(
+      emptyDocs()
+    );
+
+   setD(initialState);
+
+  }
+  catch (error) {
+
+    console.log(error);
+
+    toast.error(
+      error?.response?.data?.detail ||
+      "Failed to create admission"
+    );
+
+  }
+
+};
 
   const TAB_ORDER = ["personal", "academic", "guardian", "services", "medical", "docs"];
 
@@ -164,13 +304,37 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 placeholder="Riya Mehra"
               />
             </F>
-            <F label="Admission No">
-              <Input
-                value={d.admissionNo}
-                onChange={(e) => set("admissionNo", e.target.value)}
-                className="font-mono"
-              />
-            </F>
+
+            <F label="Admission Source">
+            <Select
+              value={String(d.source_id)}
+              onValueChange={(v) => set("source_id", v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select Source" />
+              </SelectTrigger>
+
+              <SelectContent>
+                {sources.map((item) => (
+                  <SelectItem
+                    key={item.id}
+                    value={String(item.id)}
+                  >
+                    {item.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </F>
+
+          <F label="Counselor">
+            <Input
+              value={d.counselors}
+              onChange={(e) => set("counselors", e.target.value)}
+              placeholder="Enter counselor name"
+            />
+          </F>
+          
             <F label="Date of birth">
               <Input
                 type="date"
