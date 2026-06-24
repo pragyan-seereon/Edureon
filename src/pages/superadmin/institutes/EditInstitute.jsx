@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Textarea } from "../../../components/ui/textarea";
-import { getInstituteById, updateInstitute } from "../../../api/Institute";
+import { getInstituteById, updateInstitute, getInstituteDocuments } from "../../../api/Institute";
 
 const INSTITUTE_TYPES = ["School", "College", "Coaching Centre", "University", "Other"];
 const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "UGC", "AICTE", "Other"];
@@ -106,53 +106,51 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-// FIX: extracted so the same institute -> form mapping can be reused both
-// when loading data initially AND when re-deriving the "original" form to
-// diff against for change-detection (hasChanges).
 function mapInstituteToForm(institute) {
   const academicData = parseAcademicYear(institute.academic_year);
   return {
-    name: institute.institute_name,
-    type: institute.institute_type,
-    board: institute.board_affiliation,
+    name: (institute.institute_name || "").toUpperCase(),
+    type: institute.institute_type || "",
+    board: institute.board_affiliation || "",
     customBoardName: institute.custom_board_name || "",
-  academicYearStartMonth: academicData.academicYearStartMonth,
-  academicYearStartYear: academicData.academicYearStartYear,
-  academicYearEndMonth: academicData.academicYearEndMonth,
-  academicYearEndYear: academicData.academicYearEndYear,
-    addressLine1: institute.address_line_1,
-    addressLine2: institute.address_line_2,
-    city: institute.city,
-    state: institute.state,
-    pin: institute.pin_code,
-    country: institute.country,
-    phone: institute.official_phone_number,
-    email: institute.official_email_address,
-    website: institute.website_url,
+    academicYearStartMonth: academicData.academicYearStartMonth,
+    academicYearStartYear: academicData.academicYearStartYear,
+    academicYearEndMonth: academicData.academicYearEndMonth,
+    academicYearEndYear: academicData.academicYearEndYear,
+    addressLine1: institute.address_line_1 || "",
+    addressLine2: institute.address_line_2 || "",
+    city: institute.city || "",
+    state: institute.state || "",
+    pin: institute.pin_code || "",
+    country: institute.country || "India",
+    phone: institute.official_phone_number || "",
+    email: institute.official_email_address || "",
+    website: institute.website_url || "",
 
-    principalName: institute.principal_name,
-    principalPhone: institute.principal_mobile_number,
-    principalEmail: institute.principal_email_address,
-    principalDesignation: institute.principal_designation,
+    principalName: institute.principal_name || "",
+    principalPhone: institute.principal_mobile_number || "",
+    principalEmail: institute.principal_email_address || "",
+    principalDesignation: institute.principal_designation || "",
 
-    adminName: institute.admin_name,
-    adminPhone: institute.admin_mobile_number,
-    adminEmail: institute.admin_email_address,
-    adminDesignation: institute.admin_designation,
+    adminName: institute.admin_name || "",
+    adminPhone: institute.admin_mobile_number || "",
+    adminEmail: institute.admin_email_address || "",
+    adminDesignation: institute.admin_designation || "",
 
-    gst: institute.gst_number,
-    pan: institute.pan_number,
-    tan: institute.tan_number,
+    gst: institute.gst_number || "",
+    pan: institute.pan_number || "",
+    tan: institute.tan_number || "",
 
-    bankName: institute.bank_name,
-    accountNumber: institute.bank_account_number,
-    confirmAccountNumber: institute.bank_account_number,
-    ifscCode: institute.ifsc_code,
-    accountHolderName: institute.account_holder_name,
-    accountType: institute.account_type,
+    bankName: institute.bank_name || "",
+    ifscBranch: institute.branch_name || "",   
+    accountNumber: institute.bank_account_number || "",
+    confirmAccountNumber: institute.bank_account_number || "",
+    ifscCode: institute.ifsc_code || "",
+    accountHolderName: institute.account_holder_name || "",
+    accountType: institute.account_type || "",
 
-    primaryColor: institute.primary_color,
-    secondaryColor: institute.secondary_color,
+    primaryColor: institute.primary_color || "#000000",
+    secondaryColor: institute.secondary_color || "#000000",
   };
 }
 
@@ -160,22 +158,18 @@ export default function EditInstitute() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // ── Core state ──
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [inst, setInst] = useState(null);         // original data (for change-detection)
-  const [form, setForm] = useState({});            // editable copy
+  const [inst, setInst] = useState(null);
+  const [form, setForm] = useState({});
   const [errors, setErrors] = useState({});
+  const [existingDocs, setExistingDocs] = useState({});
 
-  // ── Logo state ──
-  // `logo`       = new File the user just picked (null if not replaced)
-  // `logoPreview`= data-URL of the new file OR existing URL from server
   const [logo, setLogo] = useState(null);
   const [logoPreview, setLogoPreview] = useState("");
   const [logoCrop, setLogoCrop] = useState({ zoom: 1, x: 50, y: 50 });
   const [viewingLogo, setViewingLogo] = useState(false);
 
-  // ── Documents state ──
   const [docs, setDocs] = useState(
     Object.fromEntries(DOC_SLOTS.map((d) => [d.id, d.multi ? [] : null]))
   );
@@ -183,69 +177,77 @@ export default function EditInstitute() {
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [dragOver, setDragOver] = useState(null);
 
-  // ── Load institute by ID ──
   useEffect(() => {
     const loadInstitute = async () => {
       setLoading(true);
-
       try {
-       const response = await getInstituteById(id);
+        const response = await getInstituteById(id);
+        const apiData = response.data;
 
-const apiData = response.data;
+        const institute = {
+          name: apiData.header?.name,
+          institute_name: apiData.overview?.institute_name,
+          institute_type: apiData.overview?.institute_type,
+          board_affiliation: apiData.overview?.board_affiliation,
+          custom_board_name: apiData.overview?.custom_board_name,
+          academic_year: apiData.overview?.academic_year,
+          academic_year_start_month: apiData.overview?.academic_year_start_month,
+          academic_year_end_month: apiData.overview?.academic_year_end_month,
+          address_line_1: apiData.contact_address?.address_line_1,
+          address_line_2: apiData.contact_address?.address_line_2,
+          city: apiData.contact_address?.city,
+          state: apiData.contact_address?.state,
+          pin_code: apiData.contact_address?.pin_code,
+          country: apiData.contact_address?.country,
+          official_phone_number: apiData.contact_address?.official_phone_number,
+          official_email_address: apiData.contact_address?.official_email_address,
+          website_url: apiData.contact_address?.website_url,
 
-const institute = {
-  name: apiData.header?.name,
+          principal_name: apiData.key_people?.principal_full_name,
+          principal_mobile_number: apiData.key_people?.principal_mobile,
+          principal_email_address: apiData.key_people?.principal_email,
+          principal_designation: apiData.key_people?.principal_designation,
 
-  institute_name: apiData.overview?.institute_name,
-  institute_type: apiData.overview?.institute_type,
-  board_affiliation: apiData.overview?.board_affiliation,
-  custom_board_name: apiData.overview?.custom_board_name,
+          admin_name: apiData.key_people?.admin_full_name,
+          admin_mobile_number: apiData.key_people?.admin_mobile,
+          admin_email_address: apiData.key_people?.admin_email,
+          admin_designation: apiData.key_people?.admin_designation,
 
-    // ADD THESE
-  academic_year: apiData.overview?.academic_year,
-  academic_year_start_month: apiData.overview?.academic_year_start_month,
-  academic_year_end_month: apiData.overview?.academic_year_end_month,
-  address_line_1: apiData.contact_address?.address_line_1,
-  address_line_2: apiData.contact_address?.address_line_2,
-  city: apiData.contact_address?.city,
-  state: apiData.contact_address?.state,
-  pin_code: apiData.contact_address?.pin_code,
-  country: apiData.contact_address?.country,
-  official_phone_number: apiData.contact_address?.official_phone_number,
-  official_email_address: apiData.contact_address?.official_email_address,
-  website_url: apiData.contact_address?.website_url,
+          gst_number: apiData.financial_legal?.gst_number,
+          pan_number: apiData.financial_legal?.pan_number,
+          tan_number: apiData.financial_legal?.tan_number,
 
-  principal_name: apiData.key_people?.principal_full_name,
-  principal_mobile_number: apiData.key_people?.principal_mobile,
-  principal_email_address: apiData.key_people?.principal_email,
-  principal_designation: apiData.key_people?.principal_designation,
+          bank_name: apiData.financial_legal?.bank_name,
+          branch_name: apiData.financial_legal?.branch_name, 
+          bank_account_number: apiData.financial_legal?.bank_account_number,
+          ifsc_code: apiData.financial_legal?.ifsc_code,
+          account_holder_name: apiData.financial_legal?.account_holder_name,
+          account_type: apiData.financial_legal?.account_type,
 
-  admin_name: apiData.key_people?.admin_full_name,
-  admin_mobile_number: apiData.key_people?.admin_mobile,
-  admin_email_address: apiData.key_people?.admin_email,
-  admin_designation: apiData.key_people?.admin_designation,
+          primary_color: apiData.overview?.brand_primary_color,
+          secondary_color: apiData.overview?.brand_secondary_color,
+          logo_url: apiData.overview?.logo_url || apiData.header?.logo_url || "",
+        };
 
-  gst_number: apiData.financial_legal?.gst_number,
-  pan_number: apiData.financial_legal?.pan_number,
-  tan_number: apiData.financial_legal?.tan_number,
+        setInst(institute);
+        setForm(mapInstituteToForm(institute));
 
-  bank_name: apiData.financial_legal?.bank_name,
-  bank_account_number: apiData.financial_legal?.bank_account_number,
-  ifsc_code: apiData.financial_legal?.ifsc_code,
-  account_holder_name: apiData.financial_legal?.account_holder_name,
-  account_type: apiData.financial_legal?.account_type,
-
-  primary_color: apiData.overview?.brand_primary_color,
-  secondary_color: apiData.overview?.brand_secondary_color,
-};
-
-setInst(institute);
-setForm(mapInstituteToForm(institute));
         if (institute.logo_url) {
           setLogoPreview(institute.logo_url);
         }
-      // eslint-disable-next-line no-unused-vars
+
+        // FIX: Map docs by document_type — check both possible field names from API
+        const docsResponse = await getInstituteDocuments(id);
+        const mappedDocs = {};
+        (docsResponse.data || []).forEach((doc) => {
+          // Support either 'document_type' or 'doc_type' from API
+          const key = doc.document_type || doc.doc_type || doc.type;
+          if (key) mappedDocs[key] = doc;
+        });
+        setExistingDocs(mappedDocs);
+
       } catch (error) {
+        console.error("Load error:", error);
         toast.error("Failed to load institute");
       } finally {
         setLoading(false);
@@ -253,9 +255,8 @@ setForm(mapInstituteToForm(institute));
     };
 
     loadInstitute();
-  }, [id, navigate]); // FIX: navigate added to deps
+  }, [id]);
 
-  // ── Loading skeleton ──
   if (loading) {
     return (
       <PageContainer>
@@ -267,7 +268,6 @@ setForm(mapInstituteToForm(institute));
     );
   }
 
-  // ── Not found (after load) ──
   if (!inst) {
     return (
       <PageContainer>
@@ -282,7 +282,6 @@ setForm(mapInstituteToForm(institute));
     );
   }
 
-  // ── Helpers ──
   const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const academicYearLabel = getAcademicYearLabel(
@@ -292,10 +291,6 @@ setForm(mapInstituteToForm(institute));
     form.academicYearEndYear
   );
 
-  // FIX: `changed` was previously referenced but never defined, which crashed
-  // the component. We re-derive the original form shape from `inst` and diff
-  // it against the current `form` state. We also treat any newly added
-  // document file as a change, in addition to a replaced logo.
   const originalForm = mapInstituteToForm(inst);
   const changed = Object.keys(form).reduce((acc, key) => {
     if (form[key] !== originalForm[key]) acc[key] = true;
@@ -313,7 +308,6 @@ setForm(mapInstituteToForm(institute));
     navigate("/super/institutes");
   };
 
-  // ── Document helpers ──
   const getEffectiveBadge = (slot) => {
     if (slot.gstConditional) return form.gst?.trim() ? "Mandatory" : "Optional";
     return slot.badge;
@@ -365,7 +359,7 @@ setForm(mapInstituteToForm(institute));
     return acc + (slot.multi ? file.length : file ? 1 : 0);
   }, 0);
 
-  // ── Validation ──
+  // ── Validation (FIX: removed password check — not applicable in edit form) ──
   const validate = () => {
     const nextErrors = {};
     const requiredChecks = [
@@ -373,7 +367,6 @@ setForm(mapInstituteToForm(institute));
       ["type", "Institute Type"],
       ["board", "Board / Affiliation"],
       ["addressLine1", "Address Line 1"],
-      // ["addressLine2", "Address Line 2"],
       ["city", "City"],
       ["state", "State"],
       ["pin", "PIN Code"],
@@ -386,7 +379,6 @@ setForm(mapInstituteToForm(institute));
       ["adminName", "Admin Full Name"],
       ["adminEmail", "Admin Email"],
       ["adminPhone", "Admin Mobile"],
-      ["gst", "GST Number"],
       ["pan", "PAN Number"],
       ["bankName", "Bank Name"],
       ["accountNumber", "Bank Account Number"],
@@ -395,6 +387,7 @@ setForm(mapInstituteToForm(institute));
       ["accountHolderName", "Account Holder Name"],
       ["accountType", "Account Type"],
     ];
+
     requiredChecks.forEach(([key, label]) => {
       if (!String(form[key] || "").trim()) nextErrors[key] = `${label} is required`;
     });
@@ -416,8 +409,6 @@ setForm(mapInstituteToForm(institute));
       }
     );
 
-    // FIX: removed undefined `duplicate` variable — name uniqueness should be
-    // validated server-side; the API will return an error if it's a duplicate.
     if (form.pin && !/^\d{6}$/.test(String(form.pin))) nextErrors.pin = "PIN must be 6 digits";
     if (form.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(String(form.pan))) nextErrors.pan = "Enter a valid PAN";
     if (form.accountNumber !== form.confirmAccountNumber) {
@@ -426,14 +417,14 @@ setForm(mapInstituteToForm(institute));
     if (form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(String(form.ifscCode))) {
       nextErrors.ifscCode = "Enter a valid IFSC code";
     }
-    if (
-      !form.autoGeneratePassword &&
-      !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/.test(String(form.manualPassword || ""))
-    ) {
-      nextErrors.manualPassword = "Use 8-128 characters with uppercase, lowercase, number, and special character.";
-    }
 
     setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      console.warn("Validation errors:", nextErrors);
+      toast.error("Please fix the errors before saving");
+    }
+
     return Object.keys(nextErrors).length === 0;
   };
 
@@ -449,9 +440,26 @@ setForm(mapInstituteToForm(institute));
       formData.append("institute_name", form.name);
       formData.append("institute_type", form.type);
       formData.append("board_affiliation", form.board);
+      formData.append("custom_board_name", form.customBoardName || "");
+
+    // Academic Year
+formData.append(
+  "academic_year",
+  `${MONTHS_SHORT[parseInt(form.academicYearStartMonth) - 1]} ${form.academicYearStartYear} - ${MONTHS_SHORT[parseInt(form.academicYearEndMonth) - 1]} ${form.academicYearEndYear}`
+);
+
+formData.append(
+  "academic_year_start_month",
+  `${MONTHS_SHORT[parseInt(form.academicYearStartMonth) - 1]}-${form.academicYearStartYear}`
+);
+
+formData.append(
+  "academic_year_end_month",
+  `${MONTHS_SHORT[parseInt(form.academicYearEndMonth) - 1]}-${form.academicYearEndYear}`
+);
 
       formData.append("address_line_1", form.addressLine1);
-      formData.append("address_line_2", form.addressLine2);
+      formData.append("address_line_2", form.addressLine2 || "");
       formData.append("city", form.city);
       formData.append("state", form.state);
       formData.append("pin_code", form.pin);
@@ -464,34 +472,37 @@ setForm(mapInstituteToForm(institute));
       formData.append("principal_name", form.principalName);
       formData.append("principal_mobile_number", form.principalPhone);
       formData.append("principal_email_address", form.principalEmail);
+      formData.append("principal_designation", form.principalDesignation || "");
 
       formData.append("admin_name", form.adminName);
       formData.append("admin_mobile_number", form.adminPhone);
       formData.append("admin_email_address", form.adminEmail);
+      formData.append("admin_designation", form.adminDesignation || "");
 
-      formData.append("gst_number", form.gst);
+      // FIX: gst is no longer in requiredChecks but still sent if present
+      formData.append("gst_number", form.gst || "");
       formData.append("pan_number", form.pan);
       formData.append("tan_number", form.tan || "");
 
-      formData.append("bank_account_number", form.accountNumber);
-      formData.append("confirm_account_number", form.confirmAccountNumber);
+      formData.append("bank_name", form.bankName);
+      formData.append("bank_account_number", form.accountNumber?.trim());
+      formData.append("confirm_account_number", form.confirmAccountNumber?.trim());
       formData.append("ifsc_code", form.ifscCode);
       formData.append("account_holder_name", form.accountHolderName);
       formData.append("account_type", form.accountType);
 
-      if (logo) {
+      formData.append("primary_color", form.primaryColor || "");
+      formData.append("secondary_color", form.secondaryColor || "");
+
+      if (logo instanceof File) {
         formData.append("logo", logo);
       }
 
       DOC_SLOTS.forEach((slot) => {
         const value = docs[slot.id];
-
         if (!value) return;
-
         if (slot.multi) {
-          value.forEach((file) => {
-            formData.append(slot.id, file);
-          });
+          value.forEach((file) => formData.append(slot.id, file));
         } else {
           formData.append(slot.id, value);
         }
@@ -500,11 +511,8 @@ setForm(mapInstituteToForm(institute));
       await updateInstitute(id, formData);
 
       toast.success("Institute updated successfully");
-
-      navigate(`/super/institutes/${id}`);
     } catch (error) {
-      console.error(error);
-
+      console.error("Save error:", error);
       toast.error(
         error?.response?.data?.detail ||
         error?.response?.data?.message ||
@@ -524,7 +532,7 @@ setForm(mapInstituteToForm(institute));
             All Institutes
           </Link>
         }
-       title={`Edit — ${inst?.name || ""}`}
+title={`Edit — ${(inst?.name || "").toUpperCase()}`}
         actions={null}
       />
 
@@ -536,8 +544,11 @@ setForm(mapInstituteToForm(institute));
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="Institute Name" required error={errors.name} className="md:col-span-3">
-              <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} placeholder="Delhi Public School — South" />
-            </Field>
+<Input
+  value={form.name || ""}
+  onChange={(e) => set("name", e.target.value.toUpperCase())}
+  placeholder="DELHI PUBLIC SCHOOL — SOUTH"
+/>          </Field>
 
             <Field label="Institute Type" required error={errors.type}>
               <Select value={form.type || ""} onValueChange={(v) => set("type", v)}>
@@ -627,7 +638,6 @@ setForm(mapInstituteToForm(institute));
                 }}
               />
 
-              {/* New file just picked */}
               {logo instanceof File ? (
                 <div className="border rounded-md overflow-hidden">
                   <div className="flex items-center justify-between p-2">
@@ -642,7 +652,7 @@ setForm(mapInstituteToForm(institute));
                         Replace
                       </Button>
                       <Button size="sm" variant="ghost" className="h-6 text-[10px] text-destructive/70 hover:text-destructive px-1"
-                        onClick={() => { setLogo(null); setLogoPreview(inst.logoUrl || ""); }}>
+                        onClick={() => { setLogo(null); setLogoPreview(inst.logo_url || ""); }}>
                         Discard
                       </Button>
                     </div>
@@ -655,7 +665,6 @@ setForm(mapInstituteToForm(institute));
                       {logo.name} · {(logo.size / 1024).toFixed(1)} KB
                     </div>
                   </div>
-                  {/* Crop controls */}
                   <div className="border-t grid gap-4 p-3 md:grid-cols-[180px_1fr]">
                     <div className="space-y-2">
                       <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border bg-white">
@@ -673,7 +682,6 @@ setForm(mapInstituteToForm(institute));
                 </div>
 
               ) : logoPreview ? (
-                /* Existing logo from server */
                 <div className="border rounded-md overflow-hidden">
                   <div className="flex items-center justify-between p-2">
                     <Badge className="bg-muted text-muted-foreground border-border text-[10px]">Current logo</Badge>
@@ -689,7 +697,6 @@ setForm(mapInstituteToForm(institute));
                 </div>
 
               ) : (
-                /* No logo yet */
                 <Button variant="outline" className="w-full justify-start" onClick={() => document.getElementById("logo-upload-edit").click()}>
                   <FileUp className="h-4 w-4 mr-2" />Upload logo (PNG / SVG)
                 </Button>
@@ -707,7 +714,7 @@ setForm(mapInstituteToForm(institute));
             <Field label="Address Line 1" required error={errors.addressLine1} className="md:col-span-2">
               <Textarea rows={2} value={form.addressLine1 || ""} onChange={(e) => set("addressLine1", e.target.value)} placeholder="Enter address line 1" />
             </Field>
-            <Field label="Address Line 2"  error={errors.addressLine2} className="md:col-span-2">
+            <Field label="Address Line 2" error={errors.addressLine2} className="md:col-span-2">
               <Textarea rows={2} value={form.addressLine2 || ""} onChange={(e) => set("addressLine2", e.target.value)} placeholder="Enter address line 2" />
             </Field>
             <Field label="City" required error={errors.city}>
@@ -799,7 +806,7 @@ setForm(mapInstituteToForm(institute));
             <CardTitle className="text-base">Financial & Legal</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="GST Number" required error={errors.gst}>
+            <Field label="GST Number" error={errors.gst}>
               <Input value={form.gst || ""} onChange={(e) => set("gst", e.target.value.toUpperCase())} placeholder="22AAAAA0000A1Z5" maxLength={15} />
             </Field>
             <Field label="PAN Number" required error={errors.pan}>
@@ -812,24 +819,25 @@ setForm(mapInstituteToForm(institute));
               <Input value={form.bankName || ""} onChange={(e) => set("bankName", e.target.value)} placeholder="Enter bank name" />
             </Field>
             <Field label="Bank Account Number" required error={errors.accountNumber}>
-<Input
-  type="text"
-  value={form.accountNumber || ""}
-  onChange={(e) => set("accountNumber", e.target.value)}
-/>            </Field>
+              <Input
+                type="text"
+                value={form.accountNumber || ""}
+                onChange={(e) => set("accountNumber", e.target.value)}
+              />
+            </Field>
             <Field label="Confirm Account Number" required error={errors.confirmAccountNumber}>
-             <Input
-  type="text"
-  value={form.confirmAccountNumber || ""}
-  onChange={(e) => set("confirmAccountNumber", e.target.value)}
-/>
+              <Input
+                type="text"
+                value={form.confirmAccountNumber || ""}
+                onChange={(e) => set("confirmAccountNumber", e.target.value)}
+              />
             </Field>
             <Field label="IFSC Code" required error={errors.ifscCode}>
               <Input value={form.ifscCode || ""} onChange={(e) => set("ifscCode", e.target.value.toUpperCase())} placeholder="SBIN0001234" maxLength={11} />
             </Field>
-            <Field label="Bank (from IFSC)">
+            {/* <Field label="Bank (from IFSC)">
               <Input value={form.ifscBankName || ""} onChange={(e) => set("ifscBankName", e.target.value)} placeholder="Auto-filled or enter bank name" />
-            </Field>
+            </Field> */}
             <Field label="Branch">
               <Input value={form.ifscBranch || ""} onChange={(e) => set("ifscBranch", e.target.value)} placeholder="Enter branch name" />
             </Field>
@@ -868,8 +876,16 @@ setForm(mapInstituteToForm(institute));
                 const file = docs[slot.id];
                 const files = slot.multi ? (file || []) : [];
                 const hasFile = slot.multi ? files.length > 0 : !!file;
+                const existingDoc = existingDocs[slot.id];
                 return (
-                  <DocSlot key={slot.id} slot={slot} effectiveBadge={effectiveBadge} file={file} files={files} hasFile={hasFile}
+                  <DocSlot
+                    key={slot.id}
+                    slot={slot}
+                    effectiveBadge={effectiveBadge}
+                    file={file}
+                    files={files}
+                    hasFile={hasFile}
+                    existingDoc={existingDoc}
                     onUpload={(f) => handleFileUpload(slot.id, f)}
                     onView={(f) => setViewingDoc({ name: slot.label, file: f, isImage: f.type.startsWith("image/"), isPDF: f.type === "application/pdf", url: URL.createObjectURL(f) })}
                     onRemove={(idx) => {
@@ -949,7 +965,7 @@ setForm(mapInstituteToForm(institute));
   );
 }
 
-// ── Sub-components (unchanged except minor cleanup) ────────────────────────────
+// ── Sub-components ─────────────────────────────────────────────────────────────
 
 function Field({ label, required, error, children, className = "" }) {
   return (
@@ -972,8 +988,9 @@ function ColourField({ value, onChange }) {
   );
 }
 
-function DocSlot({ slot, effectiveBadge, file, files, hasFile, onUpload, onView, onRemove, dragOver, onDragOver, onDragLeave, onDrop }) {
+function DocSlot({ slot, effectiveBadge, file, files, hasFile, existingDoc, onUpload, onView, onRemove, dragOver, onDragOver, onDragLeave, onDrop }) {
   const inputId = `file-${slot.id}`;
+
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${dragOver ? "border-primary bg-primary/5" : "hover:bg-muted/20"}`}>
       <div className="flex items-start gap-2 p-3">
@@ -986,38 +1003,102 @@ function DocSlot({ slot, effectiveBadge, file, files, hasFile, onUpload, onView,
             {slot.acceptLabel} · max 10 MB{slot.multi ? " · up to 5 files" : ""}
           </div>
         </div>
-        <input type="file" id={inputId} accept={slot.accept} multiple={slot.multi} className="hidden"
-          onChange={(e) => { if (e.target.files?.length) { onUpload(e.target.files); e.target.value = ""; } }} />
-        {!slot.multi && !hasFile && (
-          <Button size="sm" variant="outline" className="shrink-0" onClick={() => document.getElementById(inputId).click()}>
-            <FileUp className="h-3.5 w-3.5" />Upload
-          </Button>
-        )}
-        {slot.multi && (
-          <Button size="sm" variant="outline" className="shrink-0" disabled={files.length >= 5}
-            onClick={() => document.getElementById(inputId).click()}>
-            <Plus className="h-3.5 w-3.5" />Add
-          </Button>
-        )}
+
+        <div className="flex items-center gap-1 shrink-0">
+          <input
+            type="file"
+            id={inputId}
+            accept={slot.accept}
+            multiple={slot.multi}
+            className="hidden"
+            onChange={(e) => { if (e.target.files?.length) { onUpload(e.target.files); e.target.value = ""; } }}
+          />
+
+          {!slot.multi && !hasFile && (
+            <Button size="sm" variant="outline" onClick={() => document.getElementById(inputId).click()}>
+              <FileUp className="h-3.5 w-3.5 mr-1" />{existingDoc ? "Replace" : "Upload"}
+            </Button>
+          )}
+          {slot.multi && (
+            <Button size="sm" variant="outline" disabled={files.length >= 5}
+              onClick={() => document.getElementById(inputId).click()}>
+              <Plus className="h-3.5 w-3.5 mr-1" />Add
+            </Button>
+          )}
+        </div>
       </div>
-      {!hasFile && (
-        <div className={`mx-3 mb-3 border-2 border-dashed rounded-md p-4 text-center text-xs text-muted-foreground cursor-pointer transition-colors ${dragOver ? "border-primary text-primary" : "border-border hover:border-muted-foreground/40"}`}
-          onDragOver={(e) => { e.preventDefault(); onDragOver(); }} onDragLeave={onDragLeave} onDrop={onDrop}
-          onClick={() => document.getElementById(inputId).click()}>
+
+      {/* Already-on-file document — shown instead of the drag & drop zone */}
+      {!hasFile && existingDoc && (
+        <div className="mx-3 mb-3 rounded-md border bg-muted/10">
+          <div className="flex items-center gap-2.5 px-3 py-2.5">
+            <div className="h-8 w-8 rounded bg-muted flex items-center justify-center shrink-0">
+              <FileCheck2 className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium truncate" title={existingDoc.original_file_name}>
+                {existingDoc.original_file_name}
+              </div>
+              <div className="text-[10px] text-muted-foreground">On file</div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0"
+                onClick={() => window.open(existingDoc.file_url, "_blank")}
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0"
+                onClick={() => {
+                  const a = document.createElement("a");
+                  a.href = existingDoc.file_url;
+                  a.download = existingDoc.original_file_name || slot.label;
+                  a.target = "_blank";
+                  a.click();
+                }}
+              >
+                <Download className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drag & drop zone — only when there's no new file AND nothing already on file */}
+      {!hasFile && !existingDoc && (
+        <div
+          className={`mx-3 mb-3 border-2 border-dashed rounded-md p-4 text-center text-xs text-muted-foreground cursor-pointer transition-colors ${dragOver ? "border-primary text-primary" : "border-border hover:border-muted-foreground/40"}`}
+          onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => document.getElementById(inputId).click()}
+        >
           <FileUp className="h-5 w-5 mx-auto mb-1 opacity-50" />
           Drag & drop or click to upload
         </div>
       )}
-      {!slot.multi && hasFile && <SingleFilePreview file={file} onView={() => onView(file)} onRemove={() => onRemove(null)} />}
+
+      {!slot.multi && hasFile && (
+        <SingleFilePreview file={file} onView={() => onView(file)} onRemove={() => onRemove(null)} />
+      )}
       {slot.multi && files.length > 0 && (
         <div className="border-t divide-y">
           {files.map((f, idx) => (
             <SingleFilePreview key={idx} file={f} onView={() => onView(f, idx)} onRemove={() => onRemove(idx)} compact />
           ))}
           {files.length < 5 && (
-            <div className="px-3 py-2.5 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:bg-muted/30 transition-colors"
-              onDragOver={(e) => { e.preventDefault(); onDragOver(); }} onDragLeave={onDragLeave} onDrop={onDrop}
-              onClick={() => document.getElementById(inputId).click()}>
+            <div
+              className="px-3 py-2.5 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:bg-muted/30 transition-colors"
+              onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onClick={() => document.getElementById(inputId).click()}
+            >
               <Plus className="h-3.5 w-3.5" />Add more ({5 - files.length} remaining)
             </div>
           )}

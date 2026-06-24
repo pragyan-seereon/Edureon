@@ -40,7 +40,7 @@ import { useAuth } from "../../../lib/auth";
 import { getInstitutes,  deleteInstitute,   restoreInstitute,} from "../../../api/Institute";
 const STATUS_OPTIONS = ["All", "Active", "Archived",  "Suspended"];
 const TYPE_OPTIONS = ["All", "SCHOOL", "COLLEGE", "COACHING", "UNIVERSITY"];
-const PLAN_OPTIONS = ["All", "Trial", "Basic", "Professional", "Enterprise"];
+// const PLAN_OPTIONS = ["All", "Trial", "Basic", "Professional", "Enterprise"];
 const PAGE_SIZES = [10, 25, 50, 100];
 
 // Key used to persist the super admin session so the dashboard can restore it
@@ -145,6 +145,7 @@ const [total, setTotal] = useState(0);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [type, setType] = useState("All");
+  // eslint-disable-next-line no-unused-vars
   const [plan, setPlan] = useState("All");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -370,8 +371,8 @@ const openInstitute = async (item) => {
 
       <Card className="max-w-full overflow-hidden border-border/60">
         <CardContent className="p-4 space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.4fr)_repeat(4,minmax(130px,1fr))]">
-            <Field label="Search">
+<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <Field label="Search">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -388,9 +389,9 @@ const openInstitute = async (item) => {
             <Field label="Type">
               <FilterSelect value={type} onValueChange={setType} values={TYPE_OPTIONS} />
             </Field>
-            <Field label="Plan">
+            {/* <Field label="Plan">
               <FilterSelect value={plan} onValueChange={setPlan} values={PLAN_OPTIONS} />
-            </Field>
+            </Field> */}
             <Field label=" pagination">
               <FilterSelect
                 value={rowsPerPage}
@@ -490,7 +491,7 @@ const openInstitute = async (item) => {
                           className="max-w-full truncate text-left font-medium hover:text-primary"
                           onClick={() => navigate(`/super/institutes/${item.id}`)}
                         >
-                          {item.name}
+                        {item.name?.toUpperCase()}
                         </button>
                         {/* <div className="text-[10px] font-mono text-muted-foreground">{item.id}</div> */}
                       </TableCell>

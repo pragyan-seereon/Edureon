@@ -95,19 +95,20 @@ export default function ViewInstitute() {
 
       setInst(instRes.data);
 
-      setDocs(
-        docsRes.data.map((doc) => ({
-          id: doc.document_uuid,
-          name: doc.document_type
-            .replace(/_/g, " ")
-            .replace(/\b\w/g, (c) => c.toUpperCase()),
-          uploadedAt: doc.uploaded_date,
-          size: formatBytes(doc.file_size),
-          status: doc.status,
-          fileName: doc.original_file_name,
-          filePath: doc.file_path,
-        }))
-      );
+     setDocs(
+  docsRes.data.map((doc) => ({
+    id: doc.document_uuid,
+    name: doc.document_type
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase()),
+    uploadedAt: doc.uploaded_date,
+    size: formatBytes(doc.file_size),
+    status: doc.status,
+    fileName: doc.original_file_name,
+    filePath: doc.file_path,
+    fileUrl: doc.file_url,
+  }))
+);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load institute");
@@ -241,7 +242,7 @@ export default function ViewInstitute() {
             All Institutes
           </Link>
         }
-        title={inst.header.name}
+title={inst.header.name?.toUpperCase()}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleStatusClick}>
@@ -257,7 +258,7 @@ export default function ViewInstitute() {
           <div className="flex items-center gap-4">
             <img src={inst.header.logo} alt="logo" className="h-16 w-16 rounded-md border bg-muted object-cover" />
             <div className="min-w-0">
-              <h2 className="truncate text-xl font-semibold">{inst.header.name}</h2>
+              <h2 className="truncate text-xl font-semibold">{inst.header.name?.toUpperCase()}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{inst.header.type}</Badge>
                 <Badge variant="outline">{inst.header.board}</Badge>
@@ -314,15 +315,16 @@ export default function ViewInstitute() {
                       </TableCell> */}
                       <TableCell>
                         <div className="flex flex-wrap gap-1.5">
-                        <Button
+  <Button
   variant="outline"
   size="sm"
-  onClick={() =>
-    window.open(
-      `${import.meta.env.VITE_API_BASE_URL}/${doc.filePath.replace(/\\/g, "/")}`,
-      "_blank"
-    )
-  }
+  onClick={() => {
+    if (doc.fileUrl) {
+      window.open(doc.fileUrl, "_blank");
+    } else {
+      toast.error("Document URL not available");
+    }
+  }}
 >
   <Eye className="h-3.5 w-3.5" />
   Preview
@@ -426,8 +428,11 @@ function SectionCard({ title, data }) {
       <div className="text-xs text-muted-foreground uppercase">
         {key.replace(/_/g, " ")}
       </div>
-      <div className="font-medium">{value || "-"}</div>
-    </div>
+<div className="font-medium">
+  {key === "institute_name" && value
+    ? String(value).toUpperCase()
+    : value || "-"}
+</div>    </div>
 ))}
       </CardContent>
     </Card>

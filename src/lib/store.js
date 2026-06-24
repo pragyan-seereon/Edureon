@@ -156,6 +156,128 @@ export const feeApi = {
     ),
   remove: (id) => txStore.set((arr) => arr.filter((x) => x.id !== id)),
 };
+
+// ============ Fee Structures & Late Fee ============
+const initStructures = [
+  {
+    id: "FS001",
+    name: "Class 6 — Standard 2025-26",
+    class: "VI",
+    course: "CBSE",
+    components: [
+      { id: "c1", label: "Base Fee", amount: 5000, frequency: "Monthly" },
+      { id: "c2", label: "Tuition Fee", amount: 4000, frequency: "Monthly" },
+      { id: "c3", label: "Transport Fee", amount: 1500, frequency: "Monthly" },
+      { id: "c4", label: "Annual Charges", amount: 12000, frequency: "Annual" },
+    ],
+    dueDay: 10,
+    lateFeePerMonth: 500,
+    graceDays: 0,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "FS002",
+    name: "Class 7 — Standard 2025-26",
+    class: "VII",
+    course: "CBSE",
+    components: [
+      { id: "c1", label: "Base Fee", amount: 5500, frequency: "Monthly" },
+      { id: "c2", label: "Tuition Fee", amount: 4500, frequency: "Monthly" },
+      { id: "c3", label: "Hostel Fee", amount: 8000, frequency: "Monthly" },
+    ],
+    dueDay: 10,
+    lateFeePerMonth: 600,
+    graceDays: 2,
+    createdAt: new Date().toISOString(),
+  },
+];
+const structureStore = createStore(initStructures);
+export const useFeeStructures = () => useStore(structureStore);
+
+let _fsn = 100;
+export const feeStructureApi = {
+  add: (s) =>
+    structureStore.set((arr) => [
+      {
+        ...s,
+        id: "FS" + String(++_fsn).padStart(3, "0"),
+        createdAt: new Date().toISOString(),
+      },
+      ...arr,
+    ]),
+  update: (id, patch) =>
+    structureStore.set((arr) =>
+      arr.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    ),
+  remove: (id) => structureStore.set((arr) => arr.filter((x) => x.id !== id)),
+};
+
+// Track which months have been paid per student (keyed by `${studentId}:${YYYY-MM}`)
+const paidStore = createStore({});
+export const usePaidMonths = () => useStore(paidStore);
+export const paidApi = {
+  markPaid: (studentId, ym) =>
+    paidStore.set((m) => ({ ...m, [`${studentId}:${ym}`]: true })),
+  markUnpaid: (studentId, ym) =>
+    paidStore.set((m) => {
+      const c = { ...m };
+      delete c[`${studentId}:${ym}`];
+      return c;
+    }),
+};
+
+export function monthlyTotal(s) {
+  return s.components
+    .filter((c) => c.frequency === "Monthly")
+    .reduce((a, c) => a + c.amount, 0);
+}
+
+export function annualTotal(s) {
+  return s.components.reduce((a, c) => {
+    const mult =
+      c.frequency === "Monthly" ? 12 : c.frequency === "Quarterly" ? 4 : 1;
+    return a + c.amount * mult;
+  }, 0);
+}
+
+export function computeStudentDues(
+  studentClass,
+  studentId,
+  structures,
+  paid,
+  monthsBack = 6,
+) {
+  const structure = structures.find((s) => s.class === studentClass);
+  if (!structure) return { lines: [], totalDue: 0, totalLate: 0 };
+  const monthly = monthlyTotal(structure);
+  const today = new Date();
+  const lines = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("en-IN", {
+      month: "short",
+      year: "numeric",
+    });
+    const isPaid = !!paid[`${studentId}:${ym}`];
+    let lateFee = 0;
+    if (!isPaid) {
+      const dueDate = new Date(d.getFullYear(), d.getMonth(), structure.dueDay);
+      const cutoff = new Date(dueDate);
+      cutoff.setDate(cutoff.getDate() + structure.graceDays);
+      if (today > cutoff) lateFee = structure.lateFeePerMonth;
+    }
+    lines.push({ ym, label, monthly, lateFee, paid: isPaid });
+  }
+  const totalDue = lines
+    .filter((l) => !l.paid)
+    .reduce((a, l) => a + l.monthly + l.lateFee, 0);
+  const totalLate = lines
+    .filter((l) => !l.paid)
+    .reduce((a, l) => a + l.lateFee, 0);
+  return { structure, lines, totalDue, totalLate };
+}
+
 export const payrollApi = {
   add: (p) =>
     payStore.set((arr) => [
