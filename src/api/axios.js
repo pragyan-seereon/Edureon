@@ -1,5 +1,6 @@
 import axios from "axios";
  
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: {
@@ -8,6 +9,7 @@ const api = axios.create({
   },
 });
  
+
 // Add access token to requests
 api.interceptors.request.use(
   (config) => {
@@ -22,12 +24,14 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
  
+
 // Refresh token on 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
  
+
     if (
       error.response?.status === 401 &&
       !originalRequest._retry
@@ -41,6 +45,14 @@ api.interceptors.response.use(
           throw new Error("Refresh token not found");
         }
  
+
+      try {
+        const refreshToken = localStorage.getItem("refresh_token");
+
+        if (!refreshToken) {
+          throw new Error("Refresh token not found");
+        }
+
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/auth/refresh`,
           {
@@ -50,6 +62,9 @@ api.interceptors.response.use(
  
         const newAccessToken = response.data.access_token;
  
+
+        const newAccessToken = response.data.access_token;
+
         localStorage.setItem(
           "access_token",
           newAccessToken
@@ -59,6 +74,11 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization =
           `Bearer ${newAccessToken}`;
  
+
+        // Update header for failed request
+        originalRequest.headers.Authorization =
+          `Bearer ${newAccessToken}`;
+
         return api(originalRequest);
       } catch (refreshError) {
         localStorage.removeItem("access_token");
@@ -74,4 +94,15 @@ api.interceptors.response.use(
   }
 );
  
+
+        window.location.href = "/login";
+
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default api;

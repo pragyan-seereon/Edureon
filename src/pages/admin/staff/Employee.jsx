@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog";
+import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import {
   Search,
   Plus,
@@ -37,22 +38,29 @@ import {
   Users,
   UserCheck,
   Briefcase,
-  Award,
   Pencil,
   Trash2,
   Eye,
+  GraduationCap,
 } from "lucide-react";
 import { KpiCard } from "../../../components/kpi-card";
 import { useEmployees, employeesApi } from "../../../lib/store";
 import { useMemo, useState } from "react";
 import { EmployeeDialog } from "../../../components/employee-dialog";
+import { ExcelUpload } from "../../../components/excel-upload";
 import { toast } from "sonner";
+
 export default function EmployeesPage() {
   const employees = useEmployees();
   const [q, setQ] = useState("");
   const [dept, setDept] = useState(null);
+  const [category, setCategory] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+
+  const academicRoles = ["Teacher", "Principal", "Vice Principal", "Academic Coordinator"];
+  const resolveType = (e) => e.type ?? (academicRoles.includes(e.role) ? "Academic" : "Non-Academic");
+
   const filtered = useMemo(
     () =>
       employees.filter(
@@ -60,11 +68,16 @@ export default function EmployeesPage() {
           (!q ||
             e.name.toLowerCase().includes(q.toLowerCase()) ||
             e.email.toLowerCase().includes(q.toLowerCase())) &&
-          (!dept || e.department === dept),
+          (!dept || e.department === dept) &&
+          (category === "all" || resolveType(e) === category),
       ),
-    [employees, q, dept],
+    [employees, q, dept, category],
   );
+
   const depts = Array.from(new Set(employees.map((e) => e.department)));
+  const academicCount = employees.filter((e) => resolveType(e) === "Academic").length;
+  const nonAcademicCount = employees.length - academicCount;
+
   return (
     <PageContainer>
       <PageHeader
@@ -73,6 +86,30 @@ export default function EmployeesPage() {
         description="Teaching and non-teaching staff, payroll, attendance, performance and roles."
         actions={
           <>
+            <ExcelUpload
+              label="Import Excel"
+              templateHeaders={["name", "email", "phone", "role", "department", "type"]}
+              templateName="employees-template.xlsx"
+              onRows={(rows) => {
+                let n = 0;
+                rows.forEach((r) => {
+                  if (!r.name) return;
+                  employeesApi.add({
+                    name: r.name,
+                    email: r.email || "",
+                    phone: r.phone || "",
+                    role: r.role || "Teacher",
+                    department: r.department || "Academics",
+                    type: r.type || "Academic",
+                    status: "Active",
+                    joinDate: new Date().toISOString().slice(0, 10),
+                    assignments: [],
+                  });
+                  n++;
+                });
+                if (n) toast.success(`${n} employees onboarded from Excel`);
+              }}
+            />
             <Button
               variant="outline"
               size="sm"
@@ -105,6 +142,18 @@ export default function EmployeesPage() {
           delta={1.1}
         />
         <KpiCard
+          label="Academic Staff"
+          value={academicCount.toString()}
+          icon={<GraduationCap className="h-5 w-5" />}
+          tone="info"
+        />
+        <KpiCard
+          label="Non-Academic Staff"
+          value={nonAcademicCount.toString()}
+          icon={<Briefcase className="h-5 w-5" />}
+          tone="warning"
+        />
+        <KpiCard
           label="On Duty Today"
           value={employees
             .filter((e) => e.status === "Active")
@@ -113,23 +162,21 @@ export default function EmployeesPage() {
           tone="success"
           delta={0.4}
         />
-        <KpiCard
-          label="Teaching Faculty"
-          value={employees
-            .filter(
-              (e) => e.role.includes("Teacher") || e.role.includes("Principal"),
-            )
-            .length.toString()}
-          icon={<Award className="h-5 w-5" />}
-          tone="info"
-        />
-        <KpiCard
-          label="Open Positions"
-          value="6"
-          icon={<Briefcase className="h-5 w-5" />}
-          tone="warning"
-        />
       </div>
+
+      <Tabs value={category} onValueChange={setCategory} className="mb-4">
+        <TabsList>
+          <TabsTrigger value="all">
+            All <span className="ml-1.5 text-[10px] opacity-70">({employees.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="Academic">
+            Academic <span className="ml-1.5 text-[10px] opacity-70">({academicCount})</span>
+          </TabsTrigger>
+          <TabsTrigger value="Non-Academic">
+            Non-Academic <span className="ml-1.5 text-[10px] opacity-70">({nonAcademicCount})</span>
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       <Card className="border-border/60">
         <CardContent className="p-0">
@@ -167,9 +214,10 @@ export default function EmployeesPage() {
               <TableHeader>
                 <TableRow className="border-border/60 hover:bg-transparent">
                   <TableHead>Employee</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Department</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead>Assignments</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead>Status</TableHead>
@@ -180,141 +228,180 @@ export default function EmployeesPage() {
                 {filtered.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="text-center text-sm text-muted-foreground py-10"
                     >
                       No employees match your filters.
                     </TableCell>
                   </TableRow>
                 )}
-                {filtered.map((e) => (
-                  <TableRow
-                    key={e.id}
-                    className="border-border/60 hover:bg-muted/40"
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-info/80 to-primary/80 flex items-center justify-center text-[11px] font-semibold text-primary-foreground">
-                          {e.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .slice(0, 2)}
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">{e.name}</div>
-                          <div className="text-[11px] text-muted-foreground font-mono">
-                            {e.id}
+                {filtered.map((e) => {
+                  const empType = resolveType(e);
+                  const assigns = e.assignments ?? [];
+                  return (
+                    <TableRow
+                      key={e.id}
+                      className="border-border/60 hover:bg-muted/40"
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-info/80 to-primary/80 flex items-center justify-center text-[11px] font-semibold text-primary-foreground">
+                            {e.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2)}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium">{e.name}</div>
+                            <div className="text-[11px] text-muted-foreground font-mono">
+                              {e.id}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{e.role}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{e.department}</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {e.email}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {e.phone}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {e.joinDate}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          e.status === "Active"
-                            ? "bg-success/10 text-success border-success/20"
-                            : "bg-warning/15 text-warning border-warning/30"
-                        }
-                      >
-                        {e.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditing(e);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                            View / Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditing(e);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                            Edit details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              employeesApi.update(e.id, {
-                                status:
-                                  e.status === "Active" ? "On Leave" : "Active",
-                              });
-                              toast.success("Status updated");
-                            }}
-                          >
-                            Toggle status
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem
-                                onSelect={(ev) => ev.preventDefault()}
-                                className="text-destructive focus:text-destructive"
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            empType === "Academic"
+                              ? "bg-info/10 text-info border-info/20"
+                              : "bg-muted text-muted-foreground"
+                          }
+                        >
+                          {empType}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{e.role}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{e.department}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {empType === "Non-Academic" ? (
+                          <span className="text-[11px] text-muted-foreground">—</span>
+                        ) : assigns.length === 0 ? (
+                          <span className="text-[11px] text-muted-foreground italic">
+                            Not linked
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1 max-w-[260px]">
+                            {assigns.slice(0, 3).map((a) => (
+                              <Badge
+                                key={a.id}
+                                variant="outline"
+                                className="text-[10px] font-normal"
                               >
-                                <Trash2 className="h-4 w-4" />
-                                Offboard
-                              </DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Offboard {e.name}?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Their access will be revoked. Past payroll and
-                                  attendance records are preserved.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => {
-                                    employeesApi.remove(e.id);
-                                    toast.success(`${e.name} offboarded`);
-                                  }}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                {a.class}-{a.section} · {a.subject}
+                              </Badge>
+                            ))}
+                            {assigns.length > 3 && (
+                              <Badge variant="outline" className="text-[10px] font-normal">
+                                +{assigns.length - 3} more
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.phone}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {e.joinDate}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            e.status === "Active"
+                              ? "bg-success/10 text-success border-success/20"
+                              : "bg-warning/15 text-warning border-warning/30"
+                          }
+                        >
+                          {e.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditing(e);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                              View / Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditing(e);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Edit details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                employeesApi.update(e.id, {
+                                  status:
+                                    e.status === "Active" ? "On Leave" : "Active",
+                                });
+                                toast.success("Status updated");
+                              }}
+                            >
+                              Toggle status
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <DropdownMenuItem
+                                  onSelect={(ev) => ev.preventDefault()}
+                                  className="text-destructive focus:text-destructive"
                                 >
+                                  <Trash2 className="h-4 w-4" />
                                   Offboard
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                                </DropdownMenuItem>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Offboard {e.name}?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Their access will be revoked. Past payroll and
+                                    attendance records are preserved.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => {
+                                      employeesApi.remove(e.id);
+                                      toast.success(`${e.name} offboarded`);
+                                    }}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Offboard
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

@@ -122,11 +122,19 @@ const superGroups = [
       { title: "Timetable", url: "/timetable", icon: CalendarDays },
     ],
   },
+   {
+    label: "HR & Staff",
+    items: [
+      { title: "Employees", url: "/employees", icon: UserCog },
+      { title: "Payroll", url: "/payroll", icon: Briefcase },
+    ],
+  },
 
   {
     label: "Operations",
     items: [
       { title: "Fees & Finance", url: "/fees", icon: IndianRupee },
+      { title: "Fee Collection", url: "/fee-collection", icon: IndianRupee },
       { title: "Expenses", url: "/admin/expenses", icon: Receipt },
       { title: "Assets", url: "/admin/assets", icon: Boxes },
       { title: "Infrastructure", url: "/admin/infrastructure", icon: Network },

@@ -66,7 +66,7 @@ import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 import NotificationsPage from "./pages/superadmin/NotificationsPage";
 import SendNotificationPage from "./pages/superadmin/send-notification";
 import TransactionsPage from "./pages/superadmin/TransactionsPage";
-
+import FeeCollection from "./pages/admin/modules/FeeCollection";
 // const defaultPrivatePath = "/super/institutes";
 
 const router = createBrowserRouter([
@@ -152,6 +152,7 @@ const router = createBrowserRouter([
       { path: "/hostel", element: <Hostel /> },
       { path: "/library", element: <LibraryPage /> },
       { path: "/communication", element: <Communication /> },
+      { path: "/fee-collection", element: <FeeCollection /> },
        //admin staff routes
       { path: "/employees", element: <EmployeesPage /> },
       { path: "/payroll", element: <PayrollPage /> },

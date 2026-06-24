@@ -20,9 +20,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
-import { FileCheck2, Upload } from "lucide-react";
-import { employeesApi } from "../lib/store";
+import { FileCheck2, Upload, Plus, Trash2, GraduationCap } from "lucide-react";
+import { employeesApi, useSections, useSubjects } from "../lib/store";
 import { toast } from "sonner";
+
 const roles = [
   "Teacher",
   "Principal",
@@ -81,6 +82,7 @@ const empty = {
   pan: "",
   medicalNotes: "",
   docs: [],
+  assignments: [],
 };
 const docList = [
   "Aadhar",
@@ -92,10 +94,15 @@ const docList = [
   "Medical Fitness",
   "Bank Proof",
 ];
+
 export function EmployeeDialog({ open, onOpenChange, employee }) {
   const [f, setF] = useState(empty);
   const [tab, setTab] = useState("personal");
   const [uploaded, setUploaded] = useState({});
+  const sections = useSections();
+  const subjects = useSubjects();
+  const classOptions = Array.from(new Set(sections.map((s) => s.class)));
+
   useEffect(() => {
     if (employee) {
       const { id: _id, ...rest } = employee;
@@ -110,11 +117,16 @@ export function EmployeeDialog({ open, onOpenChange, employee }) {
     }
     if (open) setTab("personal");
   }, [employee, open]);
+
   const save = () => {
     if (!f.name || !f.email || !f.phone)
       return toast.error("Name, email and phone are required");
+    const cleanAssignments = (f.assignments ?? []).filter(
+      (a) => a.class && a.section && a.subject,
+    );
     const payload = {
       ...f,
+      assignments: f.type === "Non-Academic" ? [] : cleanAssignments,
       docs: Object.entries(uploaded)
         .filter(([, ok]) => ok)
         .map(([name]) => name),
@@ -128,6 +140,33 @@ export function EmployeeDialog({ open, onOpenChange, employee }) {
     }
     onOpenChange(false);
   };
+
+  const addAssignment = () =>
+    setF((p) => ({
+      ...p,
+      assignments: [
+        ...(p.assignments ?? []),
+        {
+          id: `A${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          class: "",
+          section: "",
+          subject: "",
+        },
+      ],
+    }));
+  const updateAssignment = (id, patch) =>
+    setF((p) => ({
+      ...p,
+      assignments: (p.assignments ?? []).map((a) =>
+        a.id === id ? { ...a, ...patch } : a,
+      ),
+    }));
+  const removeAssignment = (id) =>
+    setF((p) => ({
+      ...p,
+      assignments: (p.assignments ?? []).filter((a) => a.id !== id),
+    }));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -143,9 +182,10 @@ export function EmployeeDialog({ open, onOpenChange, employee }) {
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7">
             <TabsTrigger value="personal">Personal</TabsTrigger>
             <TabsTrigger value="job">Job</TabsTrigger>
+            <TabsTrigger value="assignments">Assignments</TabsTrigger>
             <TabsTrigger value="salary">Salary</TabsTrigger>
             <TabsTrigger value="legal">Legal</TabsTrigger>
             <TabsTrigger value="bank">Bank</TabsTrigger>
@@ -351,6 +391,131 @@ export function EmployeeDialog({ open, onOpenChange, employee }) {
                 }
               />
             </Field>
+          </TabsContent>
+          <TabsContent value="assignments" className="space-y-3 py-2">
+            {f.type === "Non-Academic" ? (
+              <div className="rounded-md border border-dashed border-border/60 p-6 text-center text-sm text-muted-foreground">
+                <GraduationCap className="h-5 w-5 mx-auto mb-2 opacity-60" />
+                Class / Section / Subject assignments are optional and apply to
+                Academic staff only. Switch{" "}
+                <span className="font-medium text-foreground">Staff type</span>{" "}
+                in the Job tab to Academic to enable assignments.
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">
+                      Teaching assignments
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      A faculty can teach multiple subjects across different
+                      classes & sections. Optional.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={addAssignment}
+                  >
+                    <Plus className="h-4 w-4" /> Add assignment
+                  </Button>
+                </div>
+                {(f.assignments ?? []).length === 0 && (
+                  <div className="rounded-md border border-dashed border-border/60 p-6 text-center text-xs text-muted-foreground">
+                    No class / subject linked yet. Click{" "}
+                    <span className="font-medium text-foreground">
+                      Add assignment
+                    </span>{" "}
+                    to link this faculty to a class, section and subject.
+                  </div>
+                )}
+                {(f.assignments ?? []).map((a) => {
+                  const sectionsForClass = sections.filter(
+                    (s) => s.class === a.class,
+                  );
+                  return (
+                    <div
+                      key={a.id}
+                      className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end rounded-md border border-border/60 p-3"
+                    >
+                      <Field label="Class">
+                        <Select
+                          value={a.class}
+                          onValueChange={(v) =>
+                            updateAssignment(a.id, { class: v, section: "" })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select class" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {classOptions.map((c) => (
+                              <SelectItem key={c} value={c}>
+                                Class {c}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label="Section">
+                        <Select
+                          value={a.section}
+                          onValueChange={(v) =>
+                            updateAssignment(a.id, { section: v })
+                          }
+                          disabled={!a.class}
+                        >
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={
+                                a.class ? "Select section" : "Choose class first"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {sectionsForClass.map((s) => (
+                              <SelectItem key={s.id} value={s.name}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label="Subject">
+                        <Select
+                          value={a.subject}
+                          onValueChange={(v) =>
+                            updateAssignment(a.id, { subject: v })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select subject" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {subjects.map((s) => (
+                              <SelectItem key={s.id} value={s.name}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeAssignment(a.id)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </TabsContent>
           <TabsContent
             value="salary"
