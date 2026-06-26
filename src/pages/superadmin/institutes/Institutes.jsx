@@ -177,26 +177,26 @@ const [total, setTotal] = useState(0);
         order: sort.dir,
       });
 
-      setInstitutes(
-        response.data.map((item) => ({
-          id: item.uuid,
-          code: item.code,
-          logo: item.logo
-            ? `http://127.0.0.1:8000/${item.logo.replace(/\\/g, "/")}`
-            : `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(
-                item.name
-              )}`,
-          name: item.name,
-          type: item.type,
-          board: item.board,
-          city: item.city,
-          plan: item.plan,
-          status: item.status,
-          adminName: item.admin_name,
-          createdAt: item.created_date,
-          students: 0,
-        }))
-      );
+     setInstitutes(
+  response.data.map((item) => ({
+    id: item.uuid,
+    code: item.code,
+    logo: item.logo_url
+      ? item.logo_url
+      : `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(
+          item.name
+        )}`,
+    name: item.name,
+    type: item.type,
+    board: item.board,
+    city: item.city,
+    plan: item.plan,
+    status: item.status,
+    adminName: item.admin_name,
+    createdAt: item.created_date,
+    students: 0,
+  }))
+);
 
       setTotal(response.total);
     } catch (error) {

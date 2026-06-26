@@ -85,15 +85,15 @@ function parseAcademicYear(label) {
 
 const DOC_SLOTS = [
   { id: "registration_certificate", label: "Registration Certificate", accept: ".pdf", acceptLabel: "PDF", badge: "Mandatory", gstConditional: false, multi: false },
-  { id: "noc", label: "NOC from Competent Authority", accept: ".pdf", acceptLabel: "PDF", badge: "Mandatory", gstConditional: false, multi: false },
+  {  id: "noc_from_competent_authority",label: "NOC from Competent Authority", accept: ".pdf", acceptLabel: "PDF", badge: "Mandatory", gstConditional: false, multi: false },
   { id: "affiliation_certificate", label: "Affiliation Certificate", accept: ".pdf", acceptLabel: "PDF", badge: "Mandatory", gstConditional: false, multi: false },
   { id: "address_proof", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Mandatory", gstConditional: false, multi: false },
   { id: "gst_certificate", label: "GST Certificate", accept: ".pdf", acceptLabel: "PDF", badge: "Mandatory", gstConditional: true, multi: false },
   { id: "pan_card", label: "PAN Card", accept: ".pdf,.jpg,.jpeg", acceptLabel: "PDF / JPG", badge: "Mandatory", gstConditional: false, multi: false },
   { id: "fire_safety_noc", label: "Fire Safety NOC", accept: ".pdf", acceptLabel: "PDF", badge: "Mandatory", gstConditional: false, multi: false },
   { id: "iso_naac_certificate", label: "ISO / NAAC Certificate", accept: ".pdf", acceptLabel: "PDF", badge: "Optional", gstConditional: false, multi: false },
-  { id: "land_building_docs", label: "Land / Building Ownership Proof", accept: ".pdf", acceptLabel: "PDF", badge: "Recommended", gstConditional: false, multi: false },
-  { id: "other_documents", label: "Any Other Documents", accept: ".pdf,.jpg,.jpeg,.png,.docx", acceptLabel: "PDF / JPG / PNG / DOCX", badge: "Optional", gstConditional: false, multi: true },
+  { id: "land_building_ownership_proof", label: "Land / Building Ownership Proof", accept: ".pdf", acceptLabel: "PDF", badge: "Recommended", gstConditional: false, multi: false },
+  { id: "any_other", label: "Any Other Documents", accept: ".pdf,.jpg,.jpeg,.png,.docx", acceptLabel: "PDF / JPG / PNG / DOCX", badge: "Optional", gstConditional: false, multi: true },
 ];
 
 function sanitizeFilename(name) {
@@ -134,7 +134,7 @@ function mapInstituteToForm(institute) {
 
     adminName: institute.admin_name || "",
     adminPhone: institute.admin_mobile_number || "",
-    adminEmail: institute.admin_email_address || "",
+    adminEmail: institute.admin_email || "",
     adminDesignation: institute.admin_designation || "",
 
     gst: institute.gst_number || "",
@@ -209,6 +209,7 @@ export default function EditInstitute() {
           principal_designation: apiData.key_people?.principal_designation,
 
           admin_name: apiData.key_people?.admin_full_name,
+          admin_email: apiData.key_people?.admin_email,
           admin_mobile_number: apiData.key_people?.admin_mobile,
           admin_email_address: apiData.key_people?.admin_email,
           admin_designation: apiData.key_people?.admin_designation,
@@ -245,6 +246,7 @@ export default function EditInstitute() {
           if (key) mappedDocs[key] = doc;
         });
         setExistingDocs(mappedDocs);
+        console.log("mappedDocs", mappedDocs);
 
       } catch (error) {
         console.error("Load error:", error);
@@ -469,14 +471,14 @@ formData.append(
       formData.append("official_email_address", form.email);
       formData.append("website_url", form.website || "");
 
-      formData.append("principal_name", form.principalName);
-      formData.append("principal_mobile_number", form.principalPhone);
-      formData.append("principal_email_address", form.principalEmail);
+      formData.append("principal_full_name", form.principalName);
+      formData.append("principal_mobile", form.principalPhone);
+      formData.append("principal_email", form.principalEmail);
       formData.append("principal_designation", form.principalDesignation || "");
 
-      formData.append("admin_name", form.adminName);
-      formData.append("admin_mobile_number", form.adminPhone);
-      formData.append("admin_email_address", form.adminEmail);
+      formData.append("admin_full_name", form.adminName);
+      formData.append("admin_mobile", form.adminPhone);
+      formData.append("admin_email", form.adminEmail);
       formData.append("admin_designation", form.adminDesignation || "");
 
       // FIX: gst is no longer in requiredChecks but still sent if present
@@ -491,11 +493,11 @@ formData.append(
       formData.append("account_holder_name", form.accountHolderName);
       formData.append("account_type", form.accountType);
 
-      formData.append("primary_color", form.primaryColor || "");
-      formData.append("secondary_color", form.secondaryColor || "");
+      formData.append("brand_primary_color", form.primaryColor || "");
+      formData.append("brand_secondary_color", form.secondaryColor || "");
 
       if (logo instanceof File) {
-        formData.append("logo", logo);
+  formData.append("institute_logo", logo);
       }
 
       DOC_SLOTS.forEach((slot) => {
@@ -510,7 +512,24 @@ formData.append(
 
       await updateInstitute(id, formData);
 
-      toast.success("Institute updated successfully");
+const docsResponse = await getInstituteDocuments(id);
+
+const mappedDocs = {};
+(docsResponse.data || []).forEach((doc) => {
+  const key = doc.document_type || doc.doc_type || doc.type;
+  if (key) mappedDocs[key] = doc;
+});
+
+setExistingDocs(mappedDocs);
+
+// Clear uploaded files
+setDocs(
+  Object.fromEntries(
+    DOC_SLOTS.map((d) => [d.id, d.multi ? [] : null])
+  )
+);
+
+toast.success("Institute updated successfully");
     } catch (error) {
       console.error("Save error:", error);
       toast.error(
@@ -877,6 +896,12 @@ title={`Edit — ${(inst?.name || "").toUpperCase()}`}
                 const files = slot.multi ? (file || []) : [];
                 const hasFile = slot.multi ? files.length > 0 : !!file;
                 const existingDoc = existingDocs[slot.id];
+                 console.log(
+                        "slot:",
+                        slot.id,
+                        "existingDoc:",
+                        existingDoc
+                      );
                 return (
                   <DocSlot
                     key={slot.id}

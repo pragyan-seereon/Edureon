@@ -1,7 +1,8 @@
 import { SidebarTrigger } from "./ui/sidebar";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
+// import { Badge } from "./ui/badge";
+import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue,} from "./ui/select";
 // eslint-disable-next-line no-unused-vars
 import { Bell, Search, Moon, Sun, HelpCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -9,6 +10,7 @@ import { UserMenu } from "./user-menu";
 
 export function Topbar() {
   const [dark, setDark] = useState(false);
+  const [academicYear, setAcademicYear] = useState("2026-2027");
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -29,12 +31,19 @@ export function Topbar() {
       </div>
       <div className="flex-1 md:hidden" />
       <div className="flex items-center gap-1.5 ml-auto ">
-        <Badge
-          variant="secondary"
-          className="hidden lg:inline-flex h-6 text-[10px] font-medium uppercase tracking-wider"
-        >
-          Academic Yr 2025-26
-        </Badge>
+       <Select value={academicYear} onValueChange={setAcademicYear}>
+  <SelectTrigger className="w-[170px] h-9 hidden md:flex">
+    <SelectValue />
+  </SelectTrigger>
+
+  <SelectContent>
+    <SelectItem value="2026-2027">AY 2026-2027</SelectItem>
+    <SelectItem value="2025-2026">AY 2025-2026</SelectItem>
+    <SelectItem value="2024-2025">AY 2024-2025</SelectItem>
+    <SelectItem value="2023-2024">AY 2023-2024</SelectItem>
+    <SelectItem value="2022-2023">AY 2022-2023</SelectItem>
+  </SelectContent>
+</Select>
         <Button
           variant="ghost"
           size="icon"

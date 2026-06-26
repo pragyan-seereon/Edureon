@@ -120,6 +120,9 @@ export default function ViewInstitute() {
   fetchInstitute();
 }, [id]);
 
+const getInitials = (name = "") => {
+  return name.trim().substring(0, 2).toUpperCase();
+};
   if (loading) {
     return (
       <PageContainer>
@@ -256,8 +259,17 @@ title={inst.header.name?.toUpperCase()}
       <div className="mb-6 rounded-md border bg-card p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <img src={inst.header.logo} alt="logo" className="h-16 w-16 rounded-md border bg-muted object-cover" />
-            <div className="min-w-0">
+{inst.header.logo_url ? (
+  <img
+    src={inst.header.logo_url}
+    alt="logo"
+    className="h-16 w-16 rounded-md border bg-muted object-cover"
+  />
+) : (
+  <div className="h-16 w-16 rounded-md bg-blue-700 text-white flex items-center justify-center font-bold text-xl">
+    {getInitials(inst.header.name)}
+  </div>
+)}          <div className="min-w-0">
               <h2 className="truncate text-xl font-semibold">{inst.header.name?.toUpperCase()}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{inst.header.type}</Badge>

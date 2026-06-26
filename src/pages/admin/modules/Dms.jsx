@@ -22,6 +22,10 @@ import {
   Download,
 } from "lucide-react";
 import { useState } from "react";
+// eslint-disable-next-line no-unused-vars
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,} from "../../../components/ui/dialog";
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "../../../components/ui/select";
 const FOLDERS = [
   {
     name: "Institute Documents",
@@ -129,6 +133,9 @@ const statusColor = {
 };
 export default function Dms() {
   const [active, setActive] = useState("All");
+  const [open, setOpen] = useState(false);
+ const [folder, setFolder] = useState("Institute Documents");
+ const [files, setFiles] = useState(null);
   const [q, setQ] = useState("");
   const filtered = seed.filter(
     (d) =>
@@ -142,10 +149,14 @@ export default function Dms() {
         title="Document Management"
         description="Centralized DMS with versioned uploads, verification workflow and inline previews."
         actions={
-          <Button size="sm" className="gradient-primary border-0">
-            <Upload className="h-4 w-4" />
-            Upload Document
-          </Button>
+          <Button
+  size="sm"
+  className="gradient-primary border-0"
+  onClick={() => setOpen(true)}
+>
+  <Upload className="h-4 w-4 mr-2" />
+  Upload Document
+</Button>
         }
       />
 
@@ -227,6 +238,71 @@ export default function Dms() {
           ))}
         </CardContent>
       </Card>
+      <Dialog open={open} onOpenChange={setOpen}>
+  <DialogContent className="sm:max-w-[520px]">
+    <DialogHeader>
+      <DialogTitle>Upload documents</DialogTitle>
+      <DialogDescription>
+        Pick a folder and one or more files. PDFs, images and docs supported.
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="space-y-4 py-2">
+      <div>
+        <label className="text-sm font-medium mb-2 block">
+          Folder
+        </label>
+
+        <Select value={folder} onValueChange={setFolder}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+
+          <SelectContent>
+            {FOLDERS.map((item) => (
+              <SelectItem key={item.name} value={item.name}>
+                {item.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <label className="text-sm font-medium mb-2 block">
+          Files
+        </label>
+
+        <Input
+          type="file"
+          multiple
+          onChange={(e) => setFiles(e.target.files)}
+        />
+      </div>
+    </div>
+
+    <DialogFooter>
+      <Button
+        variant="outline"
+        onClick={() => setOpen(false)}
+      >
+        Cancel
+      </Button>
+
+      <Button
+        className="gradient-primary"
+        onClick={() => {
+          console.log(folder);
+          console.log(files);
+          setOpen(false);
+        }}
+      >
+        <Upload className="h-4 w-4 mr-2" />
+        Upload
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
     </PageContainer>
   );
 }
