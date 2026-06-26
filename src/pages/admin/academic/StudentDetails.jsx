@@ -19,7 +19,11 @@ import {
   TabsTrigger,
   TabsContent,
 } from "../../../components/ui/tabs";
-import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "../../../components/ui/avatar";
 import { Progress } from "../../../components/ui/progress";
 import {
   Table,
@@ -211,23 +215,65 @@ if (
   };
 
   /* ── documents on file (from saved student record) ── */
-  const savedDocs = s.documents ?? [];
+const DOC_SLOTS = [
+  {
+    id: "aadhar",
+    field: "student_aadhaar_file",
+    label: "Aadhar Card",
+    badge: "Optional",
+  },
+  {
+    id: "birth_certificate",
+    field: "birth_certificate_file",
+    label: "Birth Certificate",
+    badge: "Optional",
+  },
+  {
+    id: "transfer_certificate",
+    field: "transfer_certificate_file",
+    label: "Previous School TC",
+    badge: "Recommended",
+  },
+  {
+    id: "last_marksheet",
+    field: "previous_marksheet_file",
+    label: "Last Marksheet",
+    badge: "Recommended",
+  },
+  {
+    id: "passport_photo",
+    field: "passport_photo_file",
+    label: "Passport Photo",
+    badge: "Optional",
+  },
+  {
+    id: "parent_id",
+    field: "parent_id_file",
+    label: "Parent ID",
+    badge: "Optional",
+  },
+  {
+    id: "address_proof",
+    field: "address_proof_file",
+    label: "Address Proof",
+    badge: "Optional",
+  }
+];
 
-  const isOnFile = (slot) => savedDocs.includes(slot.label);
+const isOnFile = (slot) => !!s?.[slot.field];
 
   /* ── open inline viewer for a slot ── */
-  const openViewer = (slot) => {
-    setViewingDoc({ label: slot.label });
-  };
+const openViewer = (slot) => {
 
-  /* ── helper: field row for view mode ── */
-  const ViewRow = ({ label, value }) =>
-    value ? (
-      <div className="space-y-0.5">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium">{value}</p>
-      </div>
-    ) : null;
+    const url = s?.[slot.field];
+
+    if (!url) {
+        toast.error("Document not found");
+        return;
+    }
+
+    window.open(url, "_blank");
+};
 
   return (
     <PageContainer>
@@ -297,15 +343,22 @@ if (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         <Card className="lg:col-span-2 border-border/60">
           <CardContent className="p-5 flex items-center gap-5">
-            <Avatar className="h-20 w-20">
-              <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-2xl">
-                {s.full_name
-                ?.split(" ")
-                .map((n) => n[0])
-                .join("")
-                .slice(0, 2)}
-                            
-              </AvatarFallback>
+            <Avatar className="h-24 w-24">
+              {s.passport_photo_file ? (
+                <AvatarImage
+                  src={s.passport_photo_file}
+                  alt={s.full_name}
+                  className="object-cover"
+                />
+              ) : (
+                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-2xl">
+                  {s.full_name
+                    ?.split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)}
+                </AvatarFallback>
+              )}
             </Avatar>
             <div className="flex-1">
               <div className="flex flex-wrap gap-2 mb-2">
