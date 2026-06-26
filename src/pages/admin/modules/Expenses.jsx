@@ -49,6 +49,10 @@ import {
 } from "recharts";
 import { KpiCard } from "../../../components/kpi-card";
 import { toast } from "sonner";
+const TYPES = [
+  "OpEx",
+  "CapEx",
+];
 const CATS = [
   "Utilities",
   "Office Supplies",
@@ -62,6 +66,7 @@ const MODES = ["NEFT", "UPI", "Cash", "Cheque", "Card"];
 const seed = [
   {
     id: "EXP-2451",
+    type: "OpEx",
     date: "20 Nov 2025",
     category: "Utilities",
     description: "November electricity bill",
@@ -98,6 +103,7 @@ const seed = [
   },
   {
     id: "EXP-2448",
+    type: "CapEx",
     date: "17 Nov 2025",
     category: "Software",
     description: "Microsoft 365 — Q4 renewal",
@@ -162,10 +168,12 @@ const statusColor = {
 export default function Expenses() {
   const [items, setItems] = useState(seed);
   const [filter, setFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("All");
   const [status, setStatus] = useState("All");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
+    type: "OpEx",
     category: "Utilities",
     description: "",
     amount: "",
@@ -173,15 +181,16 @@ export default function Expenses() {
     mode: "NEFT",
     vendor: "",
   });
-  const filtered = items.filter(
-    (e) =>
-      (filter === "All" || e.category === filter) &&
-      (status === "All" || e.status === status) &&
-      (!q ||
-        (e.description + e.vendor + e.id)
-          .toLowerCase()
-          .includes(q.toLowerCase())),
-  );
+ const filtered = items.filter(
+  (e) =>
+    (typeFilter === "All" || e.type === typeFilter) &&
+    (filter === "All" || e.category === filter) &&
+    (status === "All" || e.status === status) &&
+    (!q ||
+      (e.description + e.vendor + e.id)
+        .toLowerCase()
+        .includes(q.toLowerCase()))
+);
   const total = items.reduce((s, e) => s + e.total, 0);
   const pending = items
     .filter((e) => e.status === "Pending")
@@ -193,6 +202,7 @@ export default function Expenses() {
     setItems((p) => [
       {
         id,
+        type: form.type,
         date: new Date().toLocaleDateString("en-IN", {
           day: "2-digit",
           month: "short",
@@ -212,6 +222,7 @@ export default function Expenses() {
     toast.success("Expense recorded · " + id);
     setOpen(false);
     setForm({
+      type: "OpEx",
       category: "Utilities",
       description: "",
       amount: "",
@@ -249,6 +260,28 @@ export default function Expenses() {
                 </DialogHeader>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
+                    <div className="space-y-1.5">
+  <Label>Type *</Label>
+
+  <Select
+    value={form.type}
+    onValueChange={(v) =>
+      setForm((f) => ({ ...f, type: v }))
+    }
+  >
+    <SelectTrigger>
+      <SelectValue />
+    </SelectTrigger>
+
+    <SelectContent>
+      {TYPES.map((t) => (
+        <SelectItem key={t} value={t}>
+          {t}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
                     <Label>Category *</Label>
                     <Select
                       value={form.category}
@@ -439,6 +472,17 @@ export default function Expenses() {
                 className="pl-8 h-9 w-48"
               />
             </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+  <SelectTrigger className="h-9 w-36">
+    <SelectValue />
+  </SelectTrigger>
+
+  <SelectContent>
+    <SelectItem value="All">All types</SelectItem>
+    <SelectItem value="OpEx">OpEx</SelectItem>
+    <SelectItem value="CapEx">CapEx</SelectItem>
+  </SelectContent>
+</Select>
             <Select value={filter} onValueChange={setFilter}>
               <SelectTrigger className="h-9 w-40">
                 <SelectValue />
@@ -472,6 +516,7 @@ export default function Expenses() {
               <TableRow>
                 <TableHead>Voucher</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Vendor</TableHead>
@@ -487,6 +532,7 @@ export default function Expenses() {
                 <TableRow key={e.id}>
                   <TableCell className="font-mono text-xs">{e.id}</TableCell>
                   <TableCell className="text-xs">{e.date}</TableCell>
+                  <TableCell><Badge variant="secondary">{e.type}</Badge></TableCell>
                   <TableCell className="text-xs">
                     <Badge variant="secondary" className="text-[10px]">
                       {e.category}

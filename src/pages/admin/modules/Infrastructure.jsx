@@ -27,7 +27,7 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
+  // DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -203,7 +203,6 @@ export default function Infrastructure() {
       <PageHeader
         eyebrow="Admin · Operations"
         title="Infrastructure"
-        description="Buildings, blocks, floors, and rooms. Build out your campus tree with unlimited depth."
         actions={
           <Button size="sm" className="gradient-primary border-0" onClick={() => setAddBuilding(true)}>
             <Plus className="h-4 w-4" />
@@ -431,7 +430,7 @@ export default function Infrastructure() {
           <Card className="border-border/60">
             <CardHeader className="pb-3">
               <CardTitle className="font-display text-base">Buildings → Blocks → Floors → Rooms</CardTitle>
-              <CardDescription>Add unlimited blocks, floors and rooms in each building. Hover for actions.</CardDescription>
+              {/* <CardDescription>Add unlimited blocks, floors and rooms in each building. Hover for actions.</CardDescription> */}
             </CardHeader>
             <CardContent className="space-y-1">
               {tree.map((b) => {
@@ -704,9 +703,9 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display">Add Building</DialogTitle>
-          <DialogDescription>
+          {/* <DialogDescription>
             Set up everything in one go — blocks, floors and rooms. Add as many as you need.
-          </DialogDescription>
+          </DialogDescription> */}
         </DialogHeader>
 
         <div className="grid md:grid-cols-3 gap-3 py-2">
@@ -884,7 +883,7 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
         <DialogFooter>
           <Button variant="outline" onClick={() => close(false)}>Cancel</Button>
           <Button className="gradient-primary border-0" onClick={submit}>
-            Create Building ({b.blocks.length} blocks · {totalRooms} rooms)
+            Create Building 
           </Button>
         </DialogFooter>
       </DialogContent>

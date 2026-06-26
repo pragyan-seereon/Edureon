@@ -43,6 +43,22 @@ import { toast } from "sonner";
 // import { institutesApi } from "../../../lib/store";
 import { createInstituteDraft, updateInstituteDraftStep2,updateInstituteDraftStep3,  updateInstituteDraftStep4,uploadInstituteDocuments, getInstituteDraftReview,submitInstituteDraft, getIFSCDetails,} from "../../../api/Institute.js";
 
+// All field patterns, dropdown options, and per-step validation logic now
+// live in instituteValidation.js — this component only calls into it.
+import {
+  INSTITUTE_TYPES,
+  BOARD_OPTIONS,
+  INDIAN_STATES,
+  ACCOUNT_TYPES,
+  validateStep1 as validateStep1Fields,
+  validateStep2 as validateStep2Fields,
+  validateStep3 as validateStep3Fields,
+  validateStep4 as validateStep4Fields,
+  validateStep5 as validateStep5Docs,
+  getEffectiveDocBadge,
+  getMissingMandatoryDocs,
+} from "../../../lib/instituteValidation";
+
 const STEPS = [
   { id: 1, title: "Basic Info", desc: "Identity & branding" },
   { id: 2, title: "Contact & Address", desc: "Location details" },
@@ -66,15 +82,6 @@ const DOC_SLOTS = [
   { id: "other_documents", label: "Any Other Documents", accept: ".pdf,.jpg,.jpeg,.png,.docx", acceptLabel: "PDF / JPG / PNG / DOCX", badge: "Optional", gstConditional: false, multi: true },
 ];
 
-const INSTITUTE_TYPES = [
-  "School",
-  "College",
-  "Coaching Centre",
-  "University",
-  "Other",
-];
-
-const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "UGC", "AICTE", "Other"];
 const currentYear = new Date().getFullYear();
 
 // Drafts are kept locally only — they should never appear in the
@@ -83,37 +90,6 @@ const INSTITUTE_DRAFT_STORAGE_KEY = "createInstituteDraft";
 
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_OPTIONS = MONTHS_SHORT.map((m, i) => ({ label: m, value: String(i + 1) }));
-
-// ─────────────────────────────────────────────────────────────────────────
-// Validation rules — mirrored 1:1 from the backend (InstituteDraftService)
-// so the user gets the same errors client-side before hitting the API.
-// ─────────────────────────────────────────────────────────────────────────
-const NAME_PATTERN = /^[A-Za-z0-9\s\-.,]+$/;
-const CITY_PATTERN = /^[A-Za-z ]+$/;
-const HEX_PATTERN = /^#[A-Fa-f0-9]{6}$/;
-const PHONE_PATTERN = /^(\+?[0-9]{1,3})?[0-9]{8,11}$/;
-const EMAIL_PATTERN = /^[\w.-]+@[\w.-]+\.\w+$/;
-const WEBSITE_PATTERN = /^https?:\/\/.+/;
-const PERSON_NAME_PATTERN = /^[A-Za-z .]+$/;
-const MOBILE_PATTERN = /^[6-9]\d{9}$/; // Indian 10-digit mobile, starts 6-9
-const GST_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-const TAN_PATTERN = /^[A-Z]{4}[0-9]{5}[A-Z]{1}$/;
-const IFSC_PATTERN = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-const ACCOUNT_HOLDER_PATTERN = /^[A-Za-z ]+$/;
-const PIN_PATTERN = /^[1-9][0-9]{5}$/;
-
-const INDIAN_STATES = [
-  "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
-  "Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh",
-  "Maharashtra","Manipur","Meghalaya","Mizoram","Nagaland","Odisha","Punjab",
-  "Rajasthan","Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh",
-  "Uttarakhand","West Bengal","Delhi","Jammu and Kashmir","Ladakh","Puducherry",
-  "Chandigarh","Andaman and Nicobar Islands","Lakshadweep",
-  "Dadra and Nagar Haveli and Daman and Diu",
-];
-
-const ACCOUNT_TYPES = ["Savings", "Current", "Overdraft"];
 
 function getAcademicYearLabel(sm, sy, em, ey) {
   if (!sm || !sy || !em || !ey) return "—";
@@ -259,179 +235,22 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
   }
 };
   // ───────────────────────────────────────────────────────────────────────
-  // Step validators — return { fieldKey: "message" }. Empty object = valid.
-  // These mirror the exact checks performed server-side.
+  // Step validators — these now just delegate to instituteValidation.js,
+  // which mirrors the exact checks performed server-side. Keeping thin
+  // wrappers here means the rest of the component (STEP_VALIDATORS,
+  // runValidation, validateAllSteps) doesn't need to change at all.
   // ───────────────────────────────────────────────────────────────────────
-  const validateStep1 = () => {
-    const e = {};
-    const name = form.name.trim();
-    if (name.length < 3) e.name = "Institute Name must be minimum 3 characters.";
-    else if (name.length > 200) e.name = "Institute Name maximum 200 characters.";
-    else if (!NAME_PATTERN.test(name)) e.name = "Institute Name contains invalid characters.";
-
-    if (!INSTITUTE_TYPES.includes(form.type)) e.type = "Invalid Institute Type.";
-    if (!BOARD_OPTIONS.includes(form.board)) e.board = "Invalid Board.";
-
-    if (form.board === "Other") {
-      const cb = (form.customBoardName || "").trim();
-      if (!cb) e.customBoardName = "Custom Board Name required.";
-      else if (cb.length < 3) e.customBoardName = "Custom Board Name minimum 3 characters.";
-      else if (cb.length > 100) e.customBoardName = "Custom Board Name maximum 100 characters.";
-    }
-
-    if (!form.academicYearStartMonth || !form.academicYearStartYear) {
-      e.academicYearStart = "Academic Start Month & Year is required.";
-    }
-    if (!form.academicYearEndMonth || !form.academicYearEndYear) {
-      e.academicYearEnd = "Academic End Month & Year is required.";
-    }
-
-    if (
-      form.academicYearStartMonth &&
-      form.academicYearEndMonth &&
-      form.academicYearStartMonth === form.academicYearEndMonth &&
-      form.academicYearStartYear === form.academicYearEndYear
-    ) {
-      e.academicYearEnd = "Academic Start and End Month & Year cannot be same.";
-    } else if (
-      form.academicYearStartMonth &&
-      form.academicYearEndMonth
-    ) {
-      const startKey = parseInt(form.academicYearStartYear) * 100 + parseInt(form.academicYearStartMonth);
-      const endKey = parseInt(form.academicYearEndYear) * 100 + parseInt(form.academicYearEndMonth);
-      if (endKey <= startKey) {
-        e.academicYearEnd = "Academic End Month & Year must be after Start Month & Year.";
-      }
-    }
-
-    if (form.primaryColor && !HEX_PATTERN.test(form.primaryColor)) {
-      e.primaryColor = "Invalid Primary Color.";
-    }
-    if (form.secondaryColor && !HEX_PATTERN.test(form.secondaryColor)) {
-      e.secondaryColor = "Invalid Secondary Color.";
-    }
-
-    return e;
-  };
-
-  const validateStep2 = () => {
-    const e = {};
-    const a1 = form.addressLine1.trim();
-    if (a1.length < 5) e.addressLine1 = "Address Line 1 minimum 5 characters.";
-    else if (a1.length > 300) e.addressLine1 = "Address Line 1 maximum 300 characters.";
-
-    if (form.addressLine2 && form.addressLine2.trim().length > 300) {
-      e.addressLine2 = "Address Line 2 maximum 300 characters.";
-    }
-
-    const city = form.city.trim();
-    if (city.length < 2) e.city = "City minimum 2 characters.";
-    else if (city.length > 100) e.city = "City maximum 100 characters.";
-    else if (!CITY_PATTERN.test(city)) e.city = "City allows letters and spaces only.";
-
-    if (!INDIAN_STATES.includes(form.state)) e.state = "Invalid State.";
-    if (!PIN_PATTERN.test(form.pin)) e.pin = "PIN Code must be exactly 6 digits.";
-    if (!form.country) e.country = "Country required.";
-    if (!PHONE_PATTERN.test(form.phone)) e.phone = "Invalid Phone Number.";
-
-    if (!EMAIL_PATTERN.test(form.email)) e.email = "Invalid Email.";
-
-    if (form.website && !WEBSITE_PATTERN.test(form.website)) {
-      e.website = "Website must start with http:// or https://";
-    }
-
-    return e;
-  };
-
-  const validateStep3 = () => {
-    const e = {};
-    const pName = form.principalName.trim();
-    if (pName.length < 2) e.principalName = "Principal name minimum 2 characters.";
-    else if (pName.length > 150) e.principalName = "Principal name maximum 150 characters.";
-    else if (!PERSON_NAME_PATTERN.test(pName)) e.principalName = "Invalid Principal Name.";
-
-    if (!MOBILE_PATTERN.test(form.principalPhone)) e.principalPhone = "Invalid Principal Mobile.";
-    if (!EMAIL_PATTERN.test(form.principalEmail)) e.principalEmail = "Invalid Principal Email.";
-
-    const aName = form.adminName.trim();
-    if (aName.length < 2) e.adminName = "Admin name minimum 2 characters.";
-    else if (aName.length > 150) e.adminName = "Admin name maximum 150 characters.";
-
-    if (form.adminEmail && form.principalEmail && form.adminEmail === form.principalEmail) {
-      e.adminEmail = "Admin Email cannot match Principal Email.";
-    } else if (!EMAIL_PATTERN.test(form.adminEmail)) {
-      e.adminEmail = "Invalid Admin Email.";
-    }
-
-    if (!MOBILE_PATTERN.test(form.adminPhone)) e.adminPhone = "Invalid Admin Mobile.";
-
-    return e;
-  };
-
-  const validateStep4 = () => {
-    const e = {};
-    if (form.gst) {
-      const gst = form.gst.toUpperCase();
-      if (gst.length !== 15) e.gst = "GST Number must be 15 characters.";
-      else if (!GST_PATTERN.test(gst)) e.gst = "Invalid GST Number.";
-    }
-
-    const pan = form.pan.toUpperCase();
-    if (pan.length !== 10) e.pan = "PAN Number must be 10 characters.";
-    else if (!PAN_PATTERN.test(pan)) e.pan = "Invalid PAN Number.";
-
-    if (form.tan) {
-      const tan = form.tan.toUpperCase();
-      if (tan.length !== 10) e.tan = "TAN Number must be 10 characters.";
-      else if (!TAN_PATTERN.test(tan)) e.tan = "Invalid TAN Number.";
-    }
-
-    const bankFields = [form.accountNumber, form.ifscCode, form.accountHolderName, form.accountType];
-    const anyBankField = bankFields.some((f) => !!f);
-    const allBankFields = bankFields.every((f) => !!f);
-    if (anyBankField && !allBankFields) {
-      e.bankFields = "All bank fields are required.";
-    }
-
-    if (form.accountNumber) {
-      if (!/^\d+$/.test(form.accountNumber)) {
-        e.accountNumber = "Account Number must be numeric.";
-      } else if (form.accountNumber.length < 9) {
-        e.accountNumber = "Account Number must contain minimum 9 digits.";
-      } else if (form.accountNumber.length > 18) {
-        e.accountNumber = "Account Number cannot exceed 18 digits.";
-      }
-      if (form.accountNumber !== form.confirmAccountNumber) {
-        e.confirmAccountNumber = "Account Number and Confirm Account Number do not match.";
-      }
-    }
-
-    if (form.ifscCode) {
-      const ifsc = form.ifscCode.toUpperCase();
-      if (!IFSC_PATTERN.test(ifsc)) e.ifscCode = "Invalid IFSC Code.";
-    }
-
-    if (form.accountHolderName) {
-      if (form.accountHolderName.length > 150) {
-        e.accountHolderName = "Account Holder Name cannot exceed 150 characters.";
-      } else if (!ACCOUNT_HOLDER_PATTERN.test(form.accountHolderName)) {
-        e.accountHolderName = "Invalid Account Holder Name.";
-      }
-    }
-
-    if (form.accountType && !ACCOUNT_TYPES.includes(form.accountType)) {
-      e.accountType = "Invalid Account Type.";
-    }
-
-    return e;
-  };
+  const validateStep1 = () => validateStep1Fields(form);
+  const validateStep2 = () => validateStep2Fields(form);
+  const validateStep3 = () => validateStep3Fields(form);
+  const validateStep4 = () => validateStep4Fields(form);
 
   const STEP_VALIDATORS = {
     1: validateStep1,
     2: validateStep2,
     3: validateStep3,
     4: validateStep4,
-    5: () => (allMandatoryUploaded ? {} : { documents: "Please upload all required documents." }),
+    5: () => validateStep5Docs(DOC_SLOTS, docs, form.gst),
   };
 
   const runValidation = (stepNum) => {
@@ -462,21 +281,11 @@ academicYearEndYear: String(currentYear + 1),    primaryColor: "#1e3a5f",
   };
 
   // Determine which doc slots are effectively mandatory
-  const getEffectiveBadge = (slot) => {
-    if (slot.gstConditional) {
-      return form.gst?.trim() ? "Mandatory" : "Optional";
-    }
-    return slot.badge;
-  };
+  const getEffectiveBadge = (slot) => getEffectiveDocBadge(slot, form.gst);
 
   const isMandatory = (slot) => getEffectiveBadge(slot) === "Mandatory";
 
-  const getMissingMandatory = () =>
-    DOC_SLOTS.filter((slot) => {
-      if (!isMandatory(slot)) return false;
-      const file = docs[slot.id];
-      return slot.multi ? file.length === 0 : !file;
-    });
+  const getMissingMandatory = () => getMissingMandatoryDocs(DOC_SLOTS, docs, form.gst);
 
   const allMandatoryUploaded = getMissingMandatory().length === 0;
 
@@ -928,11 +737,9 @@ const confirmSubmit = async () => {
       navigate("/super/institutes");
     }, 3000);
 
-  } catch (err) {
-    toast.error(
-      err?.response?.data?.message ||
-      "Failed to submit institute"
-    );
+  }catch (err) {
+    console.error("Submit error full:", err?.response); // 👈 add this
+    toast.error(err?.response?.data?.message || "Failed to submit institute");
   } finally {
     setIsSavingStep(false);
   }
@@ -1240,9 +1047,25 @@ const confirmSubmit = async () => {
                     <option value="India">India</option>
                   </select>
                 </Field>
-                <Field label={<>Official Phone Number <span className="text-red-500">*</span></>} error={errors.phone}>
-                  <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 9876543210" />
-                </Field>
+                <Field
+  label={
+    <>
+      Official Phone Number <span className="text-red-500">*</span>
+    </>
+  }
+  error={errors.phone}
+>
+  <Input
+    type="tel"
+    value={form.phone}
+    maxLength={10}
+    onChange={(e) => {
+      const value = e.target.value.replace(/\D/g, ""); // digits only
+      set("phone", value);
+    }}
+    placeholder="9876543210"
+  />
+</Field>
                 <Field label={<>Official Email Address <span className="text-red-500">*</span></>} error={errors.email}>
                   <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="admin@school.edu" />
                 </Field>
@@ -1270,7 +1093,15 @@ const confirmSubmit = async () => {
                       <Input value={form.principalName} onChange={(e) => set("principalName", e.target.value)} placeholder="Enter principal full name" />
                     </Field>
                     <Field label={<>Principal Mobile <span className="text-red-500">*</span></>} error={errors.principalPhone}>
-                      <Input type="tel" value={form.principalPhone} onChange={(e) => set("principalPhone", e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="9876543210" />
+<Input
+  type="tel"
+  maxLength={10}
+  value={form.principalPhone}
+  placeholder="9876543210"
+  onChange={(e) =>
+    set("principalPhone", e.target.value.replace(/\D/g, ""))
+  }
+/>
                     </Field>
                     <Field label={<>Principal Email <span className="text-red-500">*</span></>} error={errors.principalEmail}>
                       <Input type="email" value={form.principalEmail} onChange={(e) => set("principalEmail", e.target.value)} placeholder="principal@school.edu" />
@@ -1290,8 +1121,16 @@ const confirmSubmit = async () => {
                       <Input type="email" value={form.adminEmail} onChange={(e) => set("adminEmail", e.target.value)} placeholder="admin@school.edu" />
                     </Field>
                     <Field label={<>Admin Mobile <span className="text-red-500">*</span></>} error={errors.adminPhone}>
-                      <Input type="tel" value={form.adminPhone} onChange={(e) => set("adminPhone", e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="9876543210" />
-                    </Field>
+<Input
+  type="tel"
+  maxLength={10}
+  value={form.adminPhone}
+  placeholder="9876543210"
+
+  onChange={(e) =>
+    set("adminPhone", e.target.value.replace(/\D/g, ""))
+  }
+/>                    </Field>
                     <Field label="Admin Designation">
                       <Input value={form.adminDesignation} onChange={(e) => set("adminDesignation", e.target.value)} placeholder="Institute Admin" />
                     </Field>
@@ -1665,7 +1504,7 @@ const confirmSubmit = async () => {
                 </Button> */}
                 {step < 6 ? (
                   <Button className="gradient-primary border-0" onClick={next} disabled={isSavingStep}>
-                    {isSavingStep ? "Saving…" : <>Next<ChevronRight className="h-4 w-4" /></>}
+                    {isSavingStep ? "Saving…" : <>Save & Next<ChevronRight className="h-4 w-4" /></>}
                   </Button>
                 ) : (
                   <div title={!allMandatoryUploaded ? "Please upload all required documents" : undefined}>
