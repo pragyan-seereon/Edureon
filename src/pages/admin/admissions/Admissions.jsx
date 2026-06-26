@@ -482,7 +482,11 @@ import {
   SelectItem,
 } from "../../../components/ui/select";
 import { Checkbox } from "../../../components/ui/checkbox";
-import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "../../../components/ui/avatar";
 import {
   Tabs,
   TabsList,
@@ -908,14 +912,22 @@ const bySource = analytics.by_source || [];
                                 onCheckedChange={() => toggleSel(c.id)}
                               />
                             </div>
-                            <Avatar className="h-8 w-8 shrink-0">
+                           <Avatar className="h-8 w-8 shrink-0">
+                              {c.passport_photo_file ? (
+                                <AvatarImage
+                                  src={c.passport_photo_file}
+                                  alt={c.full_name}
+                                  className="object-cover"
+                                />
+                              ) : (
                               <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
                                 {c.full_name
-                                  .split(" ")
+                                  ?.split(" ")
                                   .map((n) => n[0])
                                   .join("")}
                               </AvatarFallback>
-                            </Avatar>
+                            )}
+                          </Avatar>
                             <div className="min-w-0 flex-1">
                               <div className="text-sm font-medium truncate">
                                 {c.full_name}
