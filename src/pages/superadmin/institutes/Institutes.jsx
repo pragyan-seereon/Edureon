@@ -37,7 +37,9 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import { useAuth } from "../../../lib/auth";
+import { Switch } from "../../../components/ui/switch";
 import { getInstitutes,  deleteInstitute,   restoreInstitute,} from "../../../api/Institute";
+import useAuthStore from "../../../store/authStore";
 const STATUS_OPTIONS = ["All", "Active", "Archived",  "Suspended"];
 const TYPE_OPTIONS = ["All", "SCHOOL", "COLLEGE", "COACHING", "UNIVERSITY"];
 // const PLAN_OPTIONS = ["All", "Trial", "Basic", "Professional", "Enterprise"];
@@ -153,6 +155,10 @@ const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState([]);
   const [sort, setSort] = useState({ key: "createdAt", dir: "desc" });
+  const [activeInstitute, setActiveInstitute] = useState(
+  localStorage.getItem("active_institute_uuid") || ""
+);
+const { setInstituteUUID, clearInstituteUUID } = useAuthStore.getState();
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -227,6 +233,15 @@ const [total, setTotal] = useState(0);
 
   
 
+const handleInstituteToggle = (item, checked) => {
+  if (checked) {
+    setInstituteUUID(item.id); // item.id is the institute UUID
+    setActiveInstitute(item.id);
+  } else {
+    clearInstituteUUID();
+    setActiveInstitute("");
+  }
+};
   const dateError = from && to && from > to;
  
 
@@ -453,6 +468,7 @@ const openInstitute = async (item) => {
                   {/* <SortableHead className="w-28" label="Students" sortKey="students" sort={sort} onSort={setSortKey} /> */}
                   <SortableHead className="w-36" label="Admin Name" sortKey="adminName" sort={sort} onSort={setSortKey} />
                   <SortableHead className="w-32" label="Created Date" sortKey="createdAt" sort={sort} onSort={setSortKey} />
+                  <TableHead className="w-24 text-center"> Active</TableHead>
                   <TableHead className="w-40 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -507,6 +523,20 @@ const openInstitute = async (item) => {
                       {/* <TableCell className="tabular-nums">{item.students.toLocaleString("en-IN")}</TableCell> */}
                       <TableCell className="truncate">{item.adminName}</TableCell>
                       <TableCell>{formatDate(item.createdAt)}</TableCell>
+    <TableCell className="text-center">
+  <Switch
+    checked={activeInstitute === item.id}
+    onCheckedChange={(checked) => {
+      handleInstituteToggle(item, checked);
+
+      console.log("Institute UUID:", item.id);
+      console.log(
+        "Stored UUID:",
+        localStorage.getItem("active_institute_uuid")
+      );
+    }}
+  />
+</TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
                           <IconButton label="View" onClick={() => navigate(`/super/institutes/${item.id}`)}>

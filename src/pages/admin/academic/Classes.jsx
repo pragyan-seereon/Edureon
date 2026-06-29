@@ -948,7 +948,6 @@ export default function Classes() {
         open={secOpen}
         onOpenChange={setSecOpen}
         title={secEdit ? "Edit Section" : "Create New Section"}
-        description="Define a class section with capacity and class teacher."
         initial={
           secEdit
             ? {
