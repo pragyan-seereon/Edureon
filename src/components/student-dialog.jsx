@@ -726,18 +726,7 @@ import { Badge } from "./ui/badge";
 import { Eye, FileCheck2, FileUp, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
-/**
- * IMPORTANT: each slot's `field` MUST match one of the field names the
- * backend's StudentDraftDocumentService.upload_documents loop checks for:
- *   student_aadhaar_file, birth_certificate_file, transfer_certificate_file,
- *   previous_marksheet_file, parent_id_file, address_proof_file,
- *   passport_photo_file, medical_certificate_file
- *
- * There is currently NO backend slot for a caste/EWS certificate — either
- * add "caste_certificate_file" to the backend's document_fields list (and
- * to the Student/Admission models + submit() mapping), or drop this slot
- * from the UI until the backend supports it. It's kept here but flagged.
- */
+
 const DOC_SLOTS = [
   { id: "aadhar", field: "student_aadhaar_file", label: "Aadhar Card", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
   { id: "birth_certificate", field: "birth_certificate_file", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },

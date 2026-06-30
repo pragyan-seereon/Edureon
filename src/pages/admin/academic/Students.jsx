@@ -473,20 +473,29 @@ const restore = async (s) => {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/80 to-accent/80 flex items-center justify-center text-[11px] font-semibold text-primary-foreground">
-                          {s.full_name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .slice(0, 2)}
-                        </div>
-                        <div className="leading-tight">
-                          <div className="text-sm font-medium">{s.full_name}</div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {s.gender}
+                            {s.passport_photo_file ? (
+                              <img
+                                src={s.passport_photo_file}
+                                alt={s.full_name}
+                                className="h-8 w-8 rounded-full object-cover border"
+                              />
+                            ) : (
+                              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/80 to-accent/80 flex items-center justify-center text-[11px] font-semibold text-primary-foreground">
+                                {s.full_name
+                                  ?.split(" ")
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .slice(0, 2)}
+                              </div>
+                            )}
+
+                            <div className="leading-tight">
+                              <div className="text-sm font-medium">{s.full_name}</div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {s.gender}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {s.admission_no}

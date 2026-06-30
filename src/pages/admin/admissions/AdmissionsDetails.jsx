@@ -1192,13 +1192,14 @@ import {
   archiveAdmission,
   restoreAdmission,
   getAdmissionCounselors,
-    getAdmissionActivityLogs,
+  getAdmissionActivityLogs,
   createFollowup,
   getFollowups,
   completeFollowup,
   deleteFollowup
   
 } from "../../../api/admissions";
+import { updateStudent } from "../../../api/students";
 
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -1220,6 +1221,8 @@ const [inq, setInq] = useState(null);
 const [history, setHistory] = useState([]);
 const [stages, setStages] = useState([]);
 const [counselors, setCounselors] = useState([]);
+  const photoInputRef = useRef(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
 useEffect(() => {
   loadData();
@@ -1368,29 +1371,26 @@ const docsTotal = docs.length;
 //   };
 
 const enroll = async () => {
+ try {
+  const res = await enrollStudent(id, nextStage.id);
+  console.log("Enroll:", res);
+
   try {
-
-    await enrollStudent(
-      id,
-      7
-    );
-
-    toast.success(
-      "Student enrolled successfully"
-    );
-
-    loadData();
-
-    navigate("/students");
-
-  } catch (err) {
-
-    toast.error(
-      err.response?.data?.detail ||
-      "Enrollment failed"
-    );
-
+    await loadData();
+  } catch (e) {
+    console.error("loadData failed:", e);
   }
+
+  toast.success("Student enrolled successfully");
+
+} catch (err) {
+  console.error("Enroll failed:", err);
+  toast.error(
+    err.response?.data?.detail ||
+    err.response?.data?.message ||
+    "Failed to update stage"
+  );
+}
 };
 
 
@@ -1407,8 +1407,13 @@ const enroll = async () => {
     </Link>
   }
   title={inq.full_name}
-  description={`${inq.admission_no} · Class ${inq.class_name} · Source: ${inq.source?.name || ""} · Counselor: ${inq.counselor_name || ""}`}
-
+  // description={`${inq.admission_no} · Class ${inq.class_name} · Source: ${inq.source?.name || ""} · Counselor: ${inq.counselor_name || ""}`}
+    description={`
+    ${inq.admission_no || "-"} ·
+    Class ${inq.class_name || "-"} ·
+    Source: ${inq.source?.name || "-"} ·
+    Counselor: ${inq.counselor_name || "-"}
+    `}
   actions={
     <div className="flex items-center gap-2">
 <Button
@@ -1530,14 +1535,22 @@ const enroll = async () => {
         <Card className="lg:col-span-2 border-border/60">
           <CardContent className="p-5">
             <div className="flex items-center gap-4 mb-5">
-              <Avatar className="h-14 w-14">
-                <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                  {inq.full_name
-                    ?.split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
+            <Avatar className="h-20 w-20">
+            {inq.passport_photo_file ? (
+              <img
+                src={inq.passport_photo_file}
+                alt={inq.full_name}
+                className="h-full w-full object-cover rounded-full"
+              />
+            ) : (
+              <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                {inq.full_name
+                  ?.split(" ")
+                  .map((n) => n[0])
+                  .join("")}
+              </AvatarFallback>
+            )}
+          </Avatar>
               <div className="flex-1">
                 <Badge className={stageColor[inq.stage?.stage_name]}>
                   {inq.stage?.stage_name}
@@ -2428,41 +2441,49 @@ function DocumentsTab({ inq, id, loadData }) {
   {
     name: "Birth Certificate",
     field: "birth_certificate_file",
+    url: inq.birth_certificate_file,
     ok: !!inq.birth_certificate_file
   },
   {
     name: "Aadhar Card",
     field: "student_aadhaar_file",
+    url: inq.student_aadhaar_file,
     ok: !!inq.student_aadhaar_file
   },
   {
     name: "Transfer Certificate",
     field: "transfer_certificate_file",
+    url: inq.transfer_certificate_file,
     ok: !!inq.transfer_certificate_file
   },
   {
     name: "Previous Marksheet",
     field: "previous_marksheet_file",
+    url: inq.previous_marksheet_file,
     ok: !!inq.previous_marksheet_file
   },
   {
     name: "Parent ID Proof",
     field: "parent_id_file",
+    url: inq.parent_id_file,
     ok: !!inq.parent_id_file
   },
   {
     name: "Address Proof",
     field: "address_proof_file",
+    url: inq.address_proof_file,
     ok: !!inq.address_proof_file
   },
   {
     name: "Passport Photo",
     field: "passport_photo_file",
+    url: inq.passport_photo_file,
     ok: !!inq.passport_photo_file
   },
   {
     name: "Medical Certificate",
     field: "medical_certificate_file",
+    url: inq.medical_certificate_file,
     ok: !!inq.medical_certificate_file
   }
 ];
@@ -2525,17 +2546,11 @@ const saveLocal = async (name) => {
   }
 
 };
-  const openPreviewFromUrl = (doc) => {
-    if (!doc.dataUrl) return;
-    setPreviewTarget({
-      name: doc.name,
-      url: doc.dataUrl,
-      isImage: (doc.fileType || "").startsWith("image/"),
-      isPdf: doc.fileType === "application/pdf",
-      size: doc.fileSize || 0,
-      fileName: doc.fileName || doc.name,
-    });
-  };
+const openPreviewFromUrl = (doc) => {
+    if (!doc.url) return;
+
+    window.open(doc.url, "_blank");
+};
 
   const openPreviewFromFile = (name, file) => {
     setPreviewTarget({
@@ -2569,8 +2584,8 @@ const saveLocal = async (name) => {
               const submitted = doc.ok;
               const localFile = localFiles[doc.name];
               const inputId = `doc-${doc.name.replace(/\s+/g, "-")}`;
-              const hasStoredPreview = submitted && !!doc.dataUrl;
-              const storedIsImage = hasStoredPreview && (doc.fileType || "").startsWith("image/");
+              const hasStoredPreview = submitted && !!doc.url;
+             
 
               /* ═══ STATE A: submitted — show preview if dataUrl available ═══ */
               if (submitted) {
@@ -2581,9 +2596,9 @@ const saveLocal = async (name) => {
                       <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium">{doc.name}</div>
-                        <div className="text-[11px] text-muted-foreground mt-0.5">
-                          {doc.fileName ? `${doc.fileName} · ${formatBytes(doc.fileSize || 0)}` : "Submitted at inquiry"}
-                        </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Submitted at inquiry
+                      </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge className="bg-success/15 text-success border-success/20 text-[10px] gap-1">
@@ -2603,35 +2618,29 @@ const saveLocal = async (name) => {
                     </div>
 
                     {/* Image thumbnail if stored */}
-                    {storedIsImage && (
-                      <div
-                        className="mx-3 mb-3 rounded-md overflow-hidden border cursor-pointer"
-                        onClick={() => openPreviewFromUrl(doc)}
-                      >
-                        <img
-                          src={doc.dataUrl}
-                          alt={doc.name}
-                          className="w-full max-h-36 object-contain bg-white"
-                        />
-                      </div>
-                    )}
-
+                  
+                  window.open(doc.url, "_blank");
                     {/* PDF / other pill if stored */}
-                    {hasStoredPreview && !storedIsImage && (
-                      <div
-                        className="mx-3 mb-3 flex items-center gap-2.5 rounded-md border border-success/20 bg-background px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
-                        onClick={() => openPreviewFromUrl(doc)}
-                      >
-                        <div className="h-9 w-9 rounded bg-success/10 flex items-center justify-center shrink-0">
-                          <FileCheck2 className="h-4 w-4 text-success" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium truncate">{doc.fileName || doc.name}</div>
-                          <div className="text-[10px] text-muted-foreground">{formatBytes(doc.fileSize || 0)} · click to preview</div>
-                        </div>
-                      </div>
-                    )}
+                 {hasStoredPreview && (
+                  <div
+                    className="mx-3 mb-3 flex items-center gap-2.5 rounded-md border border-success/20 bg-background px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
+                    onClick={() => openPreviewFromUrl(doc)}
+                  >
+                    <div className="h-9 w-9 rounded bg-success/10 flex items-center justify-center shrink-0">
+                      <FileCheck2 className="h-4 w-4 text-success" />
+                    </div>
 
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">
+                        {doc.name}
+                      </div>
+
+                      <div className="text-[10px] text-muted-foreground">
+                        Click to preview
+                      </div>
+                    </div>
+                  </div>
+                )}
                     {/* No dataUrl — doc was submitted at creation before this feature existed */}
                     {!hasStoredPreview && (
                       <div className="mx-3 mb-3 flex items-center gap-3 rounded-md border border-success/20 bg-background px-3 py-2.5">

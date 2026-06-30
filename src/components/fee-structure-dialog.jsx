@@ -7,12 +7,21 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Plus, Trash2 } from "lucide-react";
-import { feeStructureApi } from "../lib/store";
+import {
+  createFeeStructure,
+  updateFeeStructure,
+} from "../api/feeStructure";
 import { toast } from "sonner";
 
 const CLASSES = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 const COURSES = ["CBSE", "ICSE", "State Board", "IB", "Cambridge"];
-const FREQ = ["Monthly","Quarterly","Annual","One-time"];
+const FREQ = [
+  "MONTHLY",
+  "QUARTERLY",
+  "HALF_YEARLY",
+  "ANNUAL",
+  "ONE_TIME",
+];
 
 const presetLabels = [
   "Base Fee","Tuition Fee","Hostel Fee","Transport Fee","Fooding Fee",
@@ -20,40 +29,71 @@ const presetLabels = [
 ];
 
 let _cid = 0;
-const newComp = (label = "", freq = "Monthly") => ({
+const newComp = (name = "", freq = "MONTHLY") => ({
   id: "c" + ++_cid + "_" + Date.now(),
-  label,
+  component_name: name,
   amount: 0,
   frequency: freq,
+  is_optional: false,
 });
 
 export function FeeStructureDialog({ open, onOpenChange, structure }) {
-  const [f, setF] = useState({
-    name: "",
-    class: "VI",
-    course: "CBSE",
-    components: [newComp("Base Fee")],
-    dueDay: 10,
-    lateFeePerMonth: 500,
-    graceDays: 0,
-  });
+const [f, setF] = useState({
+  academic_year: "2025-26",
+  class_name: "VI",
+  course_name: "CBSE",
+  structure_name: "",
 
-  useEffect(() => {
-    if (structure) {
-      const { id: _id, createdAt: _c, ...rest } = structure;
-      setF(rest);
-    } else if (open) {
-      setF({
-        name: "",
-        class: "VI",
-        course: "CBSE",
-        components: [newComp("Base Fee"), newComp("Tuition Fee")],
-        dueDay: 10,
-        lateFeePerMonth: 500,
-        graceDays: 0,
-      });
-    }
-  }, [structure, open]);
+  due_day: 10,
+  late_fee_amount: 500,
+  grace_days: 0,
+
+  components: [newComp("Base Fee")],
+});
+
+useEffect(() => {
+
+  if (structure) {
+
+    setF({
+      academic_year: structure.academic_year,
+      class_name: structure.class_name,
+      course_name: structure.course_name,
+      structure_name: structure.structure_name,
+      due_day: structure.due_day,
+      late_fee_amount: structure.late_fee_amount,
+      grace_days: structure.grace_days,
+
+      components: structure.components.map(c => ({
+        id: c.component_uuid,
+        component_uuid: c.component_uuid,
+        component_name: c.component_name,
+        amount: c.amount,
+        frequency: c.frequency,
+        is_optional: c.is_optional,
+      })),
+    });
+
+  } else if (open) {
+
+    setF({
+      academic_year: "2025-26",
+      class_name: "VI",
+      course_name: "CBSE",
+      structure_name: "",
+      due_day: 10,
+      late_fee_amount: 500,
+      grace_days: 0,
+      components: [
+        newComp("Base Fee"),
+        newComp("Tuition Fee"),
+      ],
+    });
+
+  }
+
+}, [structure, open]); 
+
 
   const addComp = (label = "") =>
     setF((p) => ({ ...p, components: [...p.components, newComp(label)] }));
@@ -67,21 +107,89 @@ export function FeeStructureDialog({ open, onOpenChange, structure }) {
   const rmComp = (id) =>
     setF((p) => ({ ...p, components: p.components.filter((c) => c.id !== id) }));
 
-  const save = () => {
-    if (!f.name.trim()) return toast.error("Structure name required");
-    if (!f.components.length) return toast.error("Add at least one fee component");
+ const save = async () => {
+
+  if (!f.structure_name.trim()) {
+    return toast.error("Structure name required");
+  }
+
+  if (!f.components.length) {
+    return toast.error("Add at least one fee component");
+  }
+
+  try {
+
+    const user = JSON.parse(localStorage.getItem("user"));
+
+    const payload = {
+
+      institute_id: 12,
+
+      institute_uuid: "fbad5628-a9c4-4377-8c2a-cf84eeb4f024",
+
+      academic_year: f.academic_year,
+
+      class_name: f.class_name,
+
+      course_name: f.course_name,
+
+      structure_name: f.structure_name,
+
+      due_day: Number(f.due_day),
+
+      late_fee_amount: Number(f.late_fee_amount),
+
+      grace_days: Number(f.grace_days),
+
+      components: f.components.map((item, index) => ({
+        component_name: item.component_name,
+        amount: Number(item.amount),
+        frequency: item.frequency,
+        display_order: index + 1,
+        is_optional: item.is_optional,
+      })),
+    };
+
     if (structure) {
-      feeStructureApi.update(structure.id, f);
-      toast.success("Structure updated");
+
+      await updateFeeStructure(
+        structure.fee_structure_uuid,
+        payload
+      );
+
+      toast.success("Fee Structure Updated");
+
     } else {
-      feeStructureApi.add(f);
-      toast.success("Fee structure created");
+
+      await createFeeStructure(payload);
+
+      toast.success("Fee Structure Created");
+
     }
+
     onOpenChange(false);
-  };
+
+  } catch (err) {
+
+    console.log(err.response?.data);
+
+    const detail = err?.response?.data?.detail;
+
+    if (Array.isArray(detail)) {
+
+        toast.error(detail.map(item => item.msg).join(", "));
+
+    } else {
+
+        toast.error(detail || "Something went wrong");
+
+    }
+
+}
+};
 
   const monthly = f.components
-    .filter((c) => c.frequency === "Monthly")
+    .filter((c) => c.frequency === "MONTHLY")
     .reduce((a, c) => a + c.amount, 0);
 
   return (
@@ -99,13 +207,18 @@ export function FeeStructureDialog({ open, onOpenChange, structure }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-2">
           <Field label="Structure name" className="sm:col-span-3">
             <Input
-              value={f.name}
-              onChange={(e) => setF({ ...f, name: e.target.value })}
+              value={f.structure_name}
+              onChange={(e) =>
+                setF({
+                  ...f,
+                  structure_name: e.target.value,
+                })
+              }
               placeholder="Class 6 — Standard 2025-26"
             />
           </Field>
           <Field label="Class">
-            <Select value={f.class} onValueChange={(v) => setF({ ...f, class: v })}>
+            <Select value={f.class_name} onValueChange={(v) => setF({ ...f, class_name: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CLASSES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -113,7 +226,7 @@ export function FeeStructureDialog({ open, onOpenChange, structure }) {
             </Select>
           </Field>
           <Field label="Course / Board">
-            <Select value={f.course} onValueChange={(v) => setF({ ...f, course: v })}>
+            <Select value={f.course_name} onValueChange={(v) => setF({ ...f, course_name: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {COURSES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -125,8 +238,8 @@ export function FeeStructureDialog({ open, onOpenChange, structure }) {
               type="number"
               min={1}
               max={28}
-              value={f.dueDay}
-              onChange={(e) => setF({ ...f, dueDay: parseInt(e.target.value) || 1 })}
+              value={f.due_day}
+              onChange={(e) => setF({ ...f, due_day: parseInt(e.target.value) || 1 })}
             />
           </Field>
         </div>
@@ -156,8 +269,10 @@ export function FeeStructureDialog({ open, onOpenChange, structure }) {
                 <Input
                   className="col-span-5"
                   placeholder="Label (e.g. Base Fee)"
-                  value={c.label}
-                  onChange={(e) => updComp(c.id, { label: e.target.value })}
+                  value={c.component_name}
+                  onChange={(e) => updComp(c.id, {
+  component_name: e.target.value,
+})}
                 />
                 <Input
                   className="col-span-3"
@@ -199,16 +314,16 @@ export function FeeStructureDialog({ open, onOpenChange, structure }) {
             <Input
               type="number"
               min={0}
-              value={f.lateFeePerMonth}
-              onChange={(e) => setF({ ...f, lateFeePerMonth: parseInt(e.target.value) || 0 })}
+              value={f.late_fee_amount}
+              onChange={(e) => setF({ ...f, late_fee_amount: parseInt(e.target.value) || 0 })}
             />
           </Field>
           <Field label="Grace days after due">
             <Input
               type="number"
               min={0}
-              value={f.graceDays}
-              onChange={(e) => setF({ ...f, graceDays: parseInt(e.target.value) || 0 })}
+              value={f.grace_days}
+              onChange={(e) => setF({ ...f, grace_days: parseInt(e.target.value) || 0 })}
             />
           </Field>
           <div className="text-xs text-muted-foreground self-end">
