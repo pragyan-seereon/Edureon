@@ -2499,4 +2499,53 @@ export const noticesApi = {
     noticeStore.set((a) => a.filter((x) => x.id !== id));
     activityApi.log("notice", id, "Deleted");
   },
+};// ============ Classes (stream / annual fee / status) ============
+// Mirrors the sections/subjects pattern above. Each row is a single
+// Class + Stream combination (e.g. "XI" + "Science"), matching the
+// Classes tab on the Classes, Sections & Subjects page.
+const initClasses = [
+  { id: "CLS1", name: "VI", stream: "Other", notes: "", fee: 72000, status: "Active" },
+  { id: "CLS2", name: "VII", stream: "Other", notes: "", fee: 78000, status: "Active" },
+  { id: "CLS3", name: "VIII", stream: "Other", notes: "", fee: 84000, status: "Active" },
+  { id: "CLS4", name: "IX", stream: "Other", notes: "", fee: 90000, status: "Active" },
+  { id: "CLS5", name: "X", stream: "Other", notes: "", fee: 96000, status: "Active" },
+  { id: "CLS6", name: "XI", stream: "Science", notes: "", fee: 120000, status: "Active" },
+  { id: "CLS7", name: "XI", stream: "Commerce", notes: "", fee: 100000, status: "Active" },
+  { id: "CLS8", name: "XI", stream: "Arts", notes: "", fee: 90000, status: "Active" },
+  { id: "CLS9", name: "XII", stream: "Science", notes: "", fee: 125000, status: "Active" },
+];
+const classStore = createStore(initClasses);
+export const useClasses = () => useStore(classStore);
+let _clsN = 100;
+export const classesApi = {
+  list: () => classStore.get(),
+  get: (id) => classStore.get().find((x) => x.id === id),
+  add: (c) => {
+    const id = "CLS" + ++_clsN;
+    classStore.set((arr) => {
+      activityApi.log("class", id, "Created");
+      return [{ ...c, id }, ...arr];
+    });
+    return id;
+  },
+  update: (id, patch) => {
+    classStore.set((arr) =>
+      arr.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    );
+    activityApi.log("class", id, "Updated");
+  },
+  remove: (id) => {
+    classStore.set((arr) => arr.filter((x) => x.id !== id));
+    activityApi.log("class", id, "Deleted");
+  },
+  archive: (id, archived = true) => {
+    classStore.set((arr) =>
+      arr.map((x) =>
+        x.id === id
+          ? { ...x, status: archived ? "Inactive" : "Active" }
+          : x,
+      ),
+    );
+    activityApi.log("class", id, archived ? "Archived" : "Restored");
+  },
 };
