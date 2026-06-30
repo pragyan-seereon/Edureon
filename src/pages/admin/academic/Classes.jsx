@@ -1,5 +1,7 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable no-unused-vars */
 import { useNavigate } from "react-router-dom";
-import { PageContainer, PageHeader } from "../../../components/page-shell";
+import { PageContainer } from "../../../components/page-shell";
 import { KpiCard } from "../../../components/kpi-card";
 import {
   Card,
@@ -44,9 +46,10 @@ import {
   Trash2,
   Eye,
   Search,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { CrudDialog } from "../../../components/crud-dialog";
 import { Input } from "../../../components/ui/input";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -66,6 +69,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
+import { Textarea } from "../../../components/ui/textarea";
 import {
   useSections,
   useSubjects,
@@ -79,6 +83,20 @@ import {
   studentsApi,
 } from "../../../lib/store";
 
+import {
+  getClasses,
+  createClass,
+  updateClass,
+  deleteClass,
+} from "../../../api/Class";
+// ---------------------------------------------------------------------------
+// "Classes" (class -> stream -> annual fee -> status) is backed by
+// useClasses / classesApi in lib/store, same pattern as sections/subjects.
+// ---------------------------------------------------------------------------
+
+const STREAM_OPTIONS = ["Other", "Science", "Commerce", "Arts"];
+const STATUS_OPTIONS = ["Active", "Inactive"];
+
 export default function Classes() {
   const navigate = useNavigate();
   const sections = useSections();
@@ -87,6 +105,109 @@ export default function Classes() {
   const calendar = useAcademicCalendar();
   const students = useStudents();
 
+  // ---- Classes tab state (now backed by API) ----
+  const [classes, setClasses] = useState([]);
+  const [classOpen, setClassOpen] = useState(false);
+  const [classEdit, setClassEdit] = useState(null);
+  const [classForm, setClassForm] = useState({
+    name: "",
+    stream: "Other",
+    customStream: "",
+    notes: "",
+    fee: "0",
+    status: "Active",
+  });
+
+  const loadClasses = async () => {
+    try {
+      const res = await getClasses();
+      setClasses(res.data || []);
+    } catch (err) {
+      toast.error("Failed to load classes");
+    }
+  };
+
+  useEffect(() => {
+    loadClasses();
+  }, []);
+
+  const openNewClass = () => {
+    setClassEdit(null);
+    setClassForm({
+      name: "",
+      stream: "Other",
+      customStream: "",
+      notes: "",
+      fee: "0",
+      status: "Active",
+    });
+    setClassOpen(true);
+  };
+
+  const openEditClass = (c) => {
+    setClassEdit(c);
+    const isPreset = STREAM_OPTIONS.includes(c.stream);
+    setClassForm({
+      name: c.class_name,
+      stream: isPreset ? c.stream : "Other",
+      customStream: isPreset ? "" : c.stream,
+      notes: c.notes || "",
+      fee: String(c.fee ?? 0),
+      status: c.status,
+    });
+    setClassOpen(true);
+  };
+
+  const submitClass = async () => {
+    if (!classForm.name.trim()) {
+      toast.error("Class name is required");
+      return;
+    }
+    const resolvedStream =
+      classForm.stream === "Other" && classForm.customStream.trim()
+        ? classForm.customStream.trim()
+        : classForm.stream;
+    const payload = {
+      name: classForm.name.trim(),
+      stream: resolvedStream,
+      notes: classForm.notes,
+      fee: Number(classForm.fee) || 0,
+      status: classForm.status,
+    };
+    try {
+      if (classEdit) {
+        await updateClass(classEdit.class_uuid, {
+          class_name: payload.name,
+          stream: payload.stream,
+          status: payload.status,
+        });
+        toast.success("Class updated");
+      } else {
+        await createClass({
+          class_name: payload.name,
+          stream: payload.stream,
+          status: payload.status,
+        });
+        toast.success("Class created");
+      }
+      await loadClasses();
+      setClassOpen(false);
+    } catch (err) {
+      toast.error("Failed to save class");
+    }
+  };
+
+  const removeClass = async (id) => {
+    try {
+      await deleteClass(id);
+      toast.success("Class removed");
+      await loadClasses();
+    } catch (err) {
+      toast.error("Failed to remove class");
+    }
+  };
+
+  // ---- Existing section/subject/mapping/calendar dialog state ----
   const [secOpen, setSecOpen] = useState(false);
   const [secEdit, setSecEdit] = useState(null);
   const [subOpen, setSubOpen] = useState(false);
@@ -95,6 +216,141 @@ export default function Classes() {
   const [mapEdit, setMapEdit] = useState(null);
   const [calOpen, setCalOpen] = useState(false);
   const [calEdit, setCalEdit] = useState(null);
+
+  // ---- Subject form (custom two-column dialog, matching design) ----
+  const [subForm, setSubForm] = useState({
+    code: "",
+    name: "",
+    dept: "",
+    type: "Core",
+    classes: "0",
+    faculty: "0",
+  });
+  const openNewSubject = () => {
+    setSubEdit(null);
+    setSubForm({ code: "", name: "", dept: "", type: "Core", classes: "0", faculty: "0" });
+    setSubOpen(true);
+  };
+  const openEditSubject = (s) => {
+    setSubEdit(s);
+    setSubForm({
+      code: s.code,
+      name: s.name,
+      dept: s.dept,
+      type: s.type,
+      classes: String(s.classes),
+      faculty: String(s.faculty),
+    });
+    setSubOpen(true);
+  };
+  const submitSubjectForm = () => {
+    if (!subForm.code.trim() || !subForm.name.trim()) {
+      toast.error("Subject code and name are required");
+      return;
+    }
+    const payload = {
+      code: subForm.code.trim(),
+      name: subForm.name.trim(),
+      dept: subForm.dept.trim(),
+      type: subForm.type || "Core",
+      classes: Number(subForm.classes) || 0,
+      faculty: Number(subForm.faculty) || 0,
+    };
+    if (subEdit) subjectsApi.update(subEdit.id, payload);
+    else subjectsApi.add(payload);
+    toast.success(subEdit ? "Subject updated" : "Subject created");
+    setSubOpen(false);
+  };
+
+  // ---- Promotions tab state ----
+  const allClassNames = [
+    "Pre-KG", "KG", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII",
+  ];
+  const nextSessionLabel = (() => {
+    const y = new Date().getFullYear();
+    return `${y + 1}-${String(y + 2).slice(-2)}`;
+  })();
+  const [promoFrom, setPromoFrom] = useState({ class: "XI", section: "all" });
+  const [promoTo, setPromoTo] = useState({
+    class: "XII",
+    section: "same",
+    session: nextSessionLabel,
+  });
+  const promoCount = useMemo(
+    () =>
+      students.filter((s) => {
+        if (s.class !== promoFrom.class) return false;
+        if (promoFrom.section !== "all" && s.section !== promoFrom.section)
+          return false;
+        return true;
+      }).length,
+    [students, promoFrom],
+  );
+  const runPromotion = () => {
+    if (promoCount === 0) {
+      toast.error("No students match the selected Class / Section");
+      return;
+    }
+    students.forEach((s) => {
+      if (s.class !== promoFrom.class) return;
+      if (promoFrom.section !== "all" && s.section !== promoFrom.section) return;
+      studentsApi.update(s.id, {
+        class: promoTo.class,
+        section: promoTo.section === "same" ? s.section : promoTo.section,
+        session: promoTo.session,
+      });
+    });
+    toast.success(
+      `Promoted ${promoCount} student(s) from ${promoFrom.class} to ${promoTo.class} · ${promoTo.session}`,
+    );
+  };
+
+  // ---- Transfers tab state ----
+  const streamNames = useMemo(
+    () => Array.from(new Set(classes.map((c) => c.stream))).sort(),
+    [classes],
+  );
+  const [secChange, setSecChange] = useState({
+    studentId: "",
+    newClass: "same",
+    newSection: "",
+    reason: "",
+  });
+  const [streamChange, setStreamChange] = useState({
+    studentId: "",
+    newStream: streamNames[0] || "Science",
+  });
+
+  const moveStudentSection = () => {
+    if (!secChange.studentId) {
+      toast.error("Pick a student first");
+      return;
+    }
+    if (!secChange.newSection) {
+      toast.error("Pick a new section");
+      return;
+    }
+    const updates = { section: secChange.newSection };
+    if (secChange.newClass !== "same") updates.class = secChange.newClass;
+    studentsApi.update(secChange.studentId, updates);
+    const stu = students.find((s) => s.id === secChange.studentId);
+    toast.success(
+      `${stu ? stu.name : "Student"} moved to ${updates.class || stu?.class}-${secChange.newSection}`,
+    );
+    setSecChange({ studentId: "", newClass: "same", newSection: "", reason: "" });
+  };
+
+  const applyStreamChange = () => {
+    if (!streamChange.studentId) {
+      toast.error("Pick a student first");
+      return;
+    }
+    const stu = students.find((s) => s.id === streamChange.studentId);
+    toast.success(
+      `${stu ? stu.name : "Student"} switched to ${streamChange.newStream} stream. Fee difference credited to wallet.`,
+    );
+    setStreamChange({ studentId: "", newStream: streamNames[0] || "Science" });
+  };
 
   // Students tab state
   const [stuQ, setStuQ] = useState("");
@@ -192,19 +448,6 @@ export default function Classes() {
     else sectionsApi.add(payload);
     toast.success(secEdit ? "Section updated" : "Section created");
   };
-  const submitSubject = (d) => {
-    const payload = {
-      code: String(d.code),
-      name: String(d.name),
-      dept: String(d.dept),
-      type: d.type || "Core",
-      classes: Number(d.classes) || 0,
-      faculty: Number(d.faculty) || 0,
-    };
-    if (subEdit) subjectsApi.update(subEdit.id, payload);
-    else subjectsApi.add(payload);
-    toast.success(subEdit ? "Subject updated" : "Subject created");
-  };
   const submitMapping = (d) => {
     const section =
       sections.find((s) => s.name === String(d.section)) ?? sections[0];
@@ -240,37 +483,36 @@ export default function Classes() {
   };
   const sectionName = (id) => sections.find((s) => s.id === id)?.name ?? id;
   const subjectName = (id) => subjects.find((s) => s.id === id)?.name ?? id;
+
   return (
     <PageContainer>
-      <PageHeader
-        title="Classes, Sections & Subjects"
-        actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSubEdit(null);
-                setSubOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              New Subject
-            </Button>
-            <Button
-              size="sm"
-              className="gradient-primary border-0"
-              onClick={() => {
-                setSecEdit(null);
-                setSecOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              New Section
-            </Button>
-          </>
-        }
-      />
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-1">
+            Academic
+          </p>
+          <h1 className="font-display text-2xl md:text-3xl font-semibold">
+            Classes, Sections &amp; Subjects
+          </h1>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={openNewSubject}>
+            <Plus className="h-4 w-4" />
+            New Subject
+          </Button>
+          <Button
+            size="sm"
+            className="gradient-primary border-0"
+            onClick={() => {
+              setSecEdit(null);
+              setSecOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            New Section
+          </Button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard
@@ -299,14 +541,100 @@ export default function Classes() {
         />
       </div>
 
-      <Tabs defaultValue="sections">
+      <Tabs defaultValue="classes">
         <TabsList>
+          <TabsTrigger value="classes">Classes</TabsTrigger>
           <TabsTrigger value="sections">Sections</TabsTrigger>
           <TabsTrigger value="subjects">Subjects</TabsTrigger>
           <TabsTrigger value="mapping">Subject Mapping</TabsTrigger>
           <TabsTrigger value="calendar">Academic Calendar</TabsTrigger>
           <TabsTrigger value="students">Students</TabsTrigger>
+          <TabsTrigger value="promotions">Promotions</TabsTrigger>
+          <TabsTrigger value="transfers">Transfers</TabsTrigger>
         </TabsList>
+
+        {/* ----------------------------- CLASSES TAB ----------------------------- */}
+        <TabsContent value="classes" className="mt-4">
+          <Card className="border-border/60">
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-base">Classes</CardTitle>
+              </div>
+              <Button
+                size="sm"
+                className="gradient-primary border-0"
+                onClick={openNewClass}
+              >
+                <Plus className="h-4 w-4" />
+                Add New Class
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Class</TableHead>
+                    <TableHead>Stream</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {classes.map((c) => (
+                    <TableRow key={c.class_uuid}>
+                      <TableCell className="font-medium">{c.class_name}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{c.stream}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={
+                            c.status === "Active"
+                              ? "bg-foreground text-background hover:bg-foreground/90"
+                              : ""
+                          }
+                          variant={c.status === "Active" ? "default" : "secondary"}
+                        >
+                          {c.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => openEditClass(c)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => removeClass(c.class_uuid)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {classes.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center text-sm text-muted-foreground py-10"
+                      >
+                        No classes yet. Click "Add New Class" to create one.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent
           value="sections"
@@ -411,6 +739,22 @@ export default function Classes() {
 
         <TabsContent value="subjects" className="mt-4">
           <Card className="border-border/60">
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-base">Subjects</CardTitle>
+                <CardDescription>
+                  Catalog of subjects offered across classes.
+                </CardDescription>
+              </div>
+              <Button
+                size="sm"
+                className="gradient-primary border-0"
+                onClick={openNewSubject}
+              >
+                <Plus className="h-4 w-4" />
+                New Subject
+              </Button>
+            </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
@@ -474,10 +818,7 @@ export default function Classes() {
                               View
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => {
-                                setSubEdit(s);
-                                setSubOpen(true);
-                              }}
+                              onClick={() => openEditSubject(s)}
                             >
                               <Pencil className="h-4 w-4" />
                               Edit
@@ -707,10 +1048,6 @@ export default function Classes() {
             <CardHeader className="flex-row items-center justify-between space-y-0 gap-3 flex-wrap">
               <div>
                 <CardTitle className="text-base">Students</CardTitle>
-                {/* <CardDescription>
-                  Filter, multi-select students and bulk-assign them to a
-                  Class, Section and Session.
-                </CardDescription> */}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
@@ -838,6 +1175,346 @@ export default function Classes() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ---------------------------- PROMOTIONS TAB ---------------------------- */}
+        <TabsContent value="promotions" className="mt-4">
+          <div className="space-y-1 mb-4">
+            <h3 className="font-display text-lg font-semibold">
+              Year-End Promotions
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Promote students by section or an entire class to the next
+              academic year.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card className="border-border/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
+                  From
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Class</Label>
+                  <Select
+                    value={promoFrom.class}
+                    onValueChange={(v) =>
+                      setPromoFrom((f) => ({ ...f, class: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allClassNames.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Section</Label>
+                  <Select
+                    value={promoFrom.section}
+                    onValueChange={(v) =>
+                      setPromoFrom((f) => ({ ...f, section: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All sections</SelectItem>
+                      {sectionOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          Section {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
+                  To
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Class</Label>
+                  <Select
+                    value={promoTo.class}
+                    onValueChange={(v) =>
+                      setPromoTo((f) => ({ ...f, class: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allClassNames.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Section</Label>
+                  <Select
+                    value={promoTo.section}
+                    onValueChange={(v) =>
+                      setPromoTo((f) => ({ ...f, section: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="same">Keep same section</SelectItem>
+                      {sectionOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          Section {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>New Session</Label>
+                  <Input
+                    value={promoTo.session}
+                    onChange={(e) =>
+                      setPromoTo((f) => ({ ...f, session: e.target.value }))
+                    }
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-border/60 mt-4">
+            <CardContent className="flex items-center justify-between flex-wrap gap-3 py-4">
+              <p className="text-sm">
+                <span className="font-semibold">{promoCount}</span> student(s)
+                will be promoted from{" "}
+                <Badge variant="secondary" className="mx-1">
+                  {promoFrom.class}
+                </Badge>
+                to
+                <Badge className="ml-1">{promoTo.class}</Badge>
+              </p>
+              <Button
+                className="gradient-primary border-0"
+                onClick={runPromotion}
+              >
+                <TrendingUp className="h-4 w-4" />
+                Promote
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ----------------------------- TRANSFERS TAB ---------------------------- */}
+        <TabsContent value="transfers" className="mt-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card className="border-border/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Section Change</CardTitle>
+                <CardDescription>
+                  Move a student to a different section. Updates reflect in
+                  the student portal instantly.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Student</Label>
+                  <Select
+                    value={secChange.studentId}
+                    onValueChange={(v) =>
+                      setSecChange((f) => ({ ...f, studentId: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pick student" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.slice(0, 300).map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} · {s.class}-{s.section}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>New Class (optional)</Label>
+                    <Select
+                      value={secChange.newClass}
+                      onValueChange={(v) =>
+                        setSecChange((f) => ({ ...f, newClass: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="same">Keep same</SelectItem>
+                        {allClassNames.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>New Section</Label>
+                    <Select
+                      value={secChange.newSection}
+                      onValueChange={(v) =>
+                        setSecChange((f) => ({ ...f, newSection: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pick section" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sectionOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            Section {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Reason (optional)</Label>
+                  <Textarea
+                    value={secChange.reason}
+                    onChange={(e) =>
+                      setSecChange((f) => ({ ...f, reason: e.target.value }))
+                    }
+                  />
+                </div>
+                <Button
+                  className="w-full gradient-primary border-0"
+                  onClick={moveStudentSection}
+                >
+                  Move Student
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Stream Change</CardTitle>
+                <CardDescription>
+                  Switch stream. Fee differential is auto-credited to the
+                  student wallet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Student</Label>
+                  <Select
+                    value={streamChange.studentId}
+                    onValueChange={(v) =>
+                      setStreamChange((f) => ({ ...f, studentId: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pick student" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.slice(0, 300).map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} · {s.class}-{s.section}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>New Stream</Label>
+                  <Select
+                    value={streamChange.newStream}
+                    onValueChange={(v) =>
+                      setStreamChange((f) => ({ ...f, newStream: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(streamNames.length ? streamNames : STREAM_OPTIONS).map(
+                        (s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  className="w-full gradient-primary border-0"
+                  onClick={applyStreamChange}
+                >
+                  Apply Stream Change
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Available streams in Classes:{" "}
+                  {(streamNames.length ? streamNames : STREAM_OPTIONS).join(
+                    ", ",
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-border/60 mt-4">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Student Requests</CardTitle>
+              <CardDescription>
+                Section change requests raised from the student portal.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="text-center text-sm text-muted-foreground py-10"
+                    >
+                      No requests yet.
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
@@ -944,6 +1621,94 @@ export default function Classes() {
         </DialogContent>
       </Dialog>
 
+      {/* ----------------------- ADD / EDIT CLASS DIALOG ----------------------- */}
+      <Dialog open={classOpen} onOpenChange={setClassOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl">
+              {classEdit ? "Edit Class" : "Add New Class"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Class Name</Label>
+              <Input
+                placeholder="e.g. XI"
+                value={classForm.name}
+                onChange={(e) =>
+                  setClassForm((f) => ({ ...f, name: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Stream</Label>
+              <Select
+                value={classForm.stream}
+                onValueChange={(v) =>
+                  setClassForm((f) => ({
+                    ...f,
+                    stream: v,
+                    customStream: v === "Other" ? f.customStream || "" : "",
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select stream" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STREAM_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {classForm.stream === "Other" && (
+                <Input
+                  className="mt-2"
+                  placeholder="Enter stream name"
+                  value={classForm.customStream || ""}
+                  onChange={(e) =>
+                    setClassForm((f) => ({
+                      ...f,
+                      customStream: e.target.value,
+                    }))
+                  }
+                />
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select
+                value={classForm.status}
+                onValueChange={(v) =>
+                  setClassForm((f) => ({ ...f, status: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClassOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitClass}>
+              {classEdit ? "Save" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <CrudDialog
         open={secOpen}
         onOpenChange={setSecOpen}
@@ -979,38 +1744,91 @@ export default function Classes() {
         onSubmit={submitSection}
       />
 
-      <CrudDialog
-        open={subOpen}
-        onOpenChange={setSubOpen}
-        title={subEdit ? "Edit Subject" : "Create New Subject"}
-        initial={
-          subEdit
-            ? {
-                code: subEdit.code,
-                name: subEdit.name,
-                dept: subEdit.dept,
-                type: subEdit.type,
-                classes: subEdit.classes,
-                faculty: subEdit.faculty,
-              }
-            : undefined
-        }
-        fields={[
-          { name: "code", label: "Subject Code (e.g. MTH101)" },
-          { name: "name", label: "Subject Name" },
-          { name: "dept", label: "Department" },
-          {
-            name: "type",
-            label: "Type",
-            type: "select",
-            options: ["Core", "Elective", "Skill"],
-          },
-          { name: "classes", label: "Classes offered", type: "number" },
-          { name: "faculty", label: "Faculty count", type: "number" },
-        ]}
-        submitLabel={subEdit ? "Save Subject" : "Create Subject"}
-        onSubmit={submitSubject}
-      />
+      {/* ------------------------ SUBJECT DIALOG (2-col) ------------------------ */}
+      <Dialog open={subOpen} onOpenChange={setSubOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl">
+              {subEdit ? "Edit Subject" : "Create New Subject"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Subject Code (e.g. MTH101)</Label>
+              <Input
+                value={subForm.code}
+                onChange={(e) =>
+                  setSubForm((f) => ({ ...f, code: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Subject Name</Label>
+              <Input
+                value={subForm.name}
+                onChange={(e) =>
+                  setSubForm((f) => ({ ...f, name: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Department</Label>
+              <Input
+                value={subForm.dept}
+                onChange={(e) =>
+                  setSubForm((f) => ({ ...f, dept: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select
+                value={subForm.type}
+                onValueChange={(v) => setSubForm((f) => ({ ...f, type: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Core", "Elective", "Skill"].map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Classes offered</Label>
+              <Input
+                type="number"
+                value={subForm.classes}
+                onChange={(e) =>
+                  setSubForm((f) => ({ ...f, classes: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Faculty count</Label>
+              <Input
+                type="number"
+                value={subForm.faculty}
+                onChange={(e) =>
+                  setSubForm((f) => ({ ...f, faculty: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSubOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitSubjectForm}>
+              {subEdit ? "Save Subject" : "Create Subject"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CrudDialog
         open={mapOpen}

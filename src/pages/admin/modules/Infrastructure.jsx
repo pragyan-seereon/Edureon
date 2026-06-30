@@ -55,6 +55,7 @@ import {
   Trash2,
   Pencil,
   X,
+  AlertCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { KpiCard } from "../../../components/kpi-card";
@@ -82,6 +83,13 @@ import {
   deleteBuilding 
 } from "../../../api/infrastructure";
 import { toast } from "sonner";
+import {
+  validateUniqueName,
+  validateUniqueCode,
+  isDuplicate,
+  isDuplicateInArray,
+  norm,
+} from "../../../lib/infrastructure-validation";
 
 const mapBuildingPayload = (data) => ({
   building_name: data.name,
@@ -121,23 +129,43 @@ const PURPOSES = [
   "Other",
 ];
 const FLOOR_NUMBER_MAP = {
-  "Basement": -1,
+"Basement": -1,
   "Ground Floor": 0,
   "First Floor": 1,
   "Second Floor": 2,
   "Third Floor": 3,
   "Fourth Floor": 4,
   "Fifth Floor": 5,
-  "Terrace": 6,
+  "Sixth Floor": 6,
+  "Seventh Floor": 7,
+  "Eighth Floor": 8,
+  "Ninth Floor": 9,
+  "Tenth Floor": 10,
+  "Eleventh Floor": 11,
+  "Twelfth Floor": 12,
+  "Thirteenth Floor": 13,
+  "Fourteenth Floor": 14,
+  "Fifteenth Floor": 15,
+  "Terrace": 16,
 };
 const FLOOR_NAMES = [
-  "Basement",
+   "Basement",
   "Ground Floor",
   "First Floor",
   "Second Floor",
   "Third Floor",
   "Fourth Floor",
   "Fifth Floor",
+  "Sixth Floor",
+  "Seventh Floor",
+  "Eighth Floor",
+  "Ninth Floor",
+  "Tenth Floor",
+  "Eleventh Floor",
+  "Twelfth Floor",
+  "Thirteenth Floor",
+  "Fourteenth Floor",
+  "Fifteenth Floor",
   "Terrace",
 ];
 const STATUS_OPTIONS = ["Active", "Maintenance", "Under Construction"];
@@ -170,6 +198,17 @@ const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 75 }, (_, i) =>
   String(CURRENT_YEAR - i),
 );
+
+// ── Field error helper ─────────────────────────────────────────────────────
+function FieldError({ message }) {
+  if (!message) return null;
+  return (
+    <p className="flex items-center gap-1 text-xs text-destructive mt-1">
+      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+      {message}
+    </p>
+  );
+}
 
 // ── Status Badge helper ───────────────────────────────────────────────────────
 function StatusBadge({ status }) {
@@ -229,6 +268,18 @@ export default function Infrastructure() {
   );
 
   const updateTree = (mutate) => setTree(mutate);
+
+  // ── Sibling lookup helpers (for duplicate-name/code validation) ──────────
+  const findBuildingByUuid = (uuid) => tree.find((t) => t.uuid === uuid);
+  const findBuildingByBlockUuid = (blockUuid) =>
+    tree.find((t) => (t.blocks || []).some((bl) => bl.uuid === blockUuid));
+  const findBlockByUuid = (blockUuid) => {
+    for (const t of tree) {
+      const bl = (t.blocks || []).find((x) => x.uuid === blockUuid);
+      if (bl) return bl;
+    }
+    return null;
+  };
 
   // Delete helpers
 
@@ -419,6 +470,11 @@ export default function Infrastructure() {
       <UnifiedBuildingDialog
         open={addBuilding}
         onOpenChange={setAddBuilding}
+        existingBuildings={tree.map((t) => ({
+          uuid: t.uuid,
+          name: t.name,
+          code: t.code,
+        }))}
         onSubmit={async (building) => {
           try {
             const payload = mapBuildingPayload(building);
@@ -443,6 +499,12 @@ export default function Infrastructure() {
       <EditBuildingDialog
   open
   building={editBuilding.b}
+  buildingUuid={editBuilding.uuid}
+  existingBuildings={tree.map((t) => ({
+    uuid: t.uuid,
+    name: t.name,
+    code: t.code,
+  }))}
   onOpenChange={(v) => !v && setEditBuilding(null)}
   onSubmit={async (d) => {
     try {
@@ -477,6 +539,9 @@ export default function Infrastructure() {
   <BlockDialog
     open
     title={`Add Block — ${addBlockFor.name}`}
+    existingBlocks={(findBuildingByUuid(addBlockFor.uuid)?.blocks || []).map(
+      (bl) => ({ uuid: bl.uuid, name: bl.name, code: bl.code }),
+    )}
     onOpenChange={(v) => !v && setAddBlockFor(null)}
     onSubmit={async (d) => {
       try {
@@ -515,6 +580,10 @@ export default function Infrastructure() {
       code: editBlock.block.code,
       status: editBlock.block.status,
     }}
+    excludeUuid={editBlock.uuid}
+    existingBlocks={(
+      findBuildingByBlockUuid(editBlock.uuid)?.blocks || []
+    ).map((bl) => ({ uuid: bl.uuid, name: bl.name, code: bl.code }))}
     onOpenChange={(v) => !v && setEditBlock(null)}
     onSubmit={async (d) => {
       try {
@@ -552,6 +621,9 @@ export default function Infrastructure() {
   <FloorDialog
     open
     title={`Add Floor — ${addFloorFor.b} / ${addFloorFor.bl}`}
+    existingFloors={(findBlockByUuid(addFloorFor.blockUUID)?.floors || []).map(
+      (f) => ({ uuid: f.uuid, name: f.name, floor_number: f.floor_number }),
+    )}
     onOpenChange={(v) => !v && setAddFloorFor(null)}
     onSubmit={async (d) => {
       try {
@@ -586,6 +658,10 @@ export default function Infrastructure() {
     open
     title={`Edit Floor — ${editFloor.f}`}
     initial={editFloor.data}
+    excludeUuid={editFloor.floorUUID}
+    existingFloors={(
+      findBlockByUuid(editFloor.blockUUID)?.floors || []
+    ).map((f) => ({ uuid: f.uuid, name: f.name, floor_number: f.floor_number }))}
     onOpenChange={(v) => !v && setEditFloor(null)}
     onSubmit={async (d) => {
       try {
@@ -1245,7 +1321,14 @@ export default function Infrastructure() {
 }
 
 // ── Edit Building Dialog ──────────────────────────────────────────────────────
-function EditBuildingDialog({ open, building, onOpenChange, onSubmit }) {
+function EditBuildingDialog({
+  open,
+  building,
+  buildingUuid,
+  existingBuildings = [],
+  onOpenChange,
+  onSubmit,
+}) {
  const [form, setForm] = useState({
   name: "",
   code: "",
@@ -1253,6 +1336,7 @@ function EditBuildingDialog({ open, building, onOpenChange, onSubmit }) {
   year_built: "",
   status: "Active",
 });
+const [errors, setErrors] = useState({});
 
 useEffect(() => {
   if (building) {
@@ -1263,12 +1347,37 @@ useEffect(() => {
       year_built: building.year_built?.toString() || "",
       status: building.status || "Active",
     });
+    setErrors({});
   }
 }, [building]);
 
+  const validate = () => {
+    const e = {};
+
+    const nameError = validateUniqueName(form.name, "Building name", {
+      existing: existingBuildings,
+      excludeUuid: buildingUuid,
+      duplicateMessage: "Building name already exists.",
+    });
+    if (nameError) e.name = nameError;
+
+    const codeError = validateUniqueCode(form.code, "Building code", {
+      existing: existingBuildings,
+      excludeUuid: buildingUuid,
+      duplicateMessage: "Building code already exists.",
+    });
+    if (codeError) e.code = codeError;
+
+    if (!form.year_built) e.year_built = "Year built is required.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
   const submit = () => {
-    if (!form.name.trim()) return toast.error("Building name is required");
-    if (!form.code.trim()) return toast.error("Building code is required");
+    if (!validate()) {
+      toast.error("Please fix the highlighted fields before continuing.");
+      return;
+    }
     onSubmit(form);
   };
 
@@ -1282,23 +1391,33 @@ useEffect(() => {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5 col-span-2">
               <Label className="text-xs text-muted-foreground">
-                Building Name
+                Building Name <span className="text-destructive">*</span>
               </Label>
               <Input
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, name: e.target.value });
+                  if (errors.name) setErrors({ ...errors, name: undefined });
+                }}
                 placeholder="e.g. Main Academic Block"
+                className={errors.name ? "border-destructive focus-visible:ring-destructive/40" : ""}
               />
+              <FieldError message={errors.name} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">
-                Building Code
+                Building Code <span className="text-destructive">*</span>
               </Label>
               <Input
                 value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value })}
-                placeholder="e.g. MAB"
+                onChange={(e) => {
+                  setForm({ ...form, code: e.target.value });
+                  if (errors.code) setErrors({ ...errors, code: undefined });
+                }}
+                placeholder="e.g. M-01"
+                className={errors.code ? "border-destructive focus-visible:ring-destructive/40" : ""}
               />
+              <FieldError message={errors.code} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Purpose</Label>
@@ -1320,13 +1439,16 @@ useEffect(() => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">
-                Year Built
+                Year Built <span className="text-destructive">*</span>
               </Label>
               <Select
                 value={form.year_built}
-                onValueChange={(v) => setForm({ ...form, year_built: v })}
+                onValueChange={(v) => {
+                  setForm({ ...form, year_built: v });
+                  if (errors.year_built) setErrors({ ...errors, year_built: undefined });
+                }}
               >
-                <SelectTrigger>
+                <SelectTrigger className={errors.year_built ? "border-destructive focus-visible:ring-destructive/40" : ""}>
                   <SelectValue placeholder="Select year" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1337,6 +1459,7 @@ useEffect(() => {
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError message={errors.year_built} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Status</Label>
@@ -1372,15 +1495,48 @@ useEffect(() => {
 }
 
 // ── Block Dialog (Add / Edit) ─────────────────────────────────────────────────
-function BlockDialog({ open, title, initial, onOpenChange, onSubmit }) {
+function BlockDialog({
+  open,
+  title,
+  initial,
+  existingBlocks = [],
+  excludeUuid,
+  onOpenChange,
+  onSubmit,
+}) {
   const [form, setForm] = useState({
     name: initial?.name || "",
     code: initial?.code || "",
     status: initial?.status || "Active",
   });
+  const [errors, setErrors] = useState({});
+
+  const validate = () => {
+    const e = {};
+
+    const nameError = validateUniqueName(form.name, "Block name", {
+      existing: existingBlocks,
+      excludeUuid,
+      duplicateMessage: "Block already exists in this building.",
+    });
+    if (nameError) e.name = nameError;
+
+    const codeError = validateUniqueCode(form.code, "Block code", {
+      existing: existingBlocks,
+      excludeUuid,
+      duplicateMessage: "Block code already exists in this building.",
+    });
+    if (codeError) e.code = codeError;
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
   const submit = () => {
-    if (!form.name.trim()) return toast.error("Block name is required");
+    if (!validate()) {
+      toast.error("Please fix the highlighted fields before continuing.");
+      return;
+    }
     onSubmit(form);
   };
 
@@ -1392,20 +1548,34 @@ function BlockDialog({ open, title, initial, onOpenChange, onSubmit }) {
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Block Name</Label>
+            <Label className="text-xs text-muted-foreground">
+              Block Name <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value });
+                if (errors.name) setErrors({ ...errors, name: undefined });
+              }}
               placeholder="e.g. Block A"
+              className={errors.name ? "border-destructive focus-visible:ring-destructive/40" : ""}
             />
+            <FieldError message={errors.name} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Block Code</Label>
+            <Label className="text-xs text-muted-foreground">
+              Block Code <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, code: e.target.value });
+                if (errors.code) setErrors({ ...errors, code: undefined });
+              }}
               placeholder="e.g. BLK-A"
+              className={errors.code ? "border-destructive focus-visible:ring-destructive/40" : ""}
             />
+            <FieldError message={errors.code} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Status</Label>
@@ -1440,17 +1610,54 @@ function BlockDialog({ open, title, initial, onOpenChange, onSubmit }) {
 }
 
 // ── Floor Dialog (Add / Edit) ─────────────────────────────────────────────────
-// ── Floor Dialog (Add / Edit) ─────────────────────────────────────────────────
-function FloorDialog({ open, title, initial, onOpenChange, onSubmit }) {
+function FloorDialog({
+  open,
+  title,
+  initial,
+  existingFloors = [],
+  excludeUuid,
+  onOpenChange,
+  onSubmit,
+}) {
   const [form, setForm] = useState({
     name: initial?.name || "Ground Floor",
     floor_number: initial?.floor_number ?? 0,
     status: initial?.status || "Active",
   });
+  const [errors, setErrors] = useState({});
+
+  const validate = () => {
+    const e = {};
+    if (!form.name) {
+      e.name = "Floor name is required.";
+    } else if (isDuplicate(form.name, existingFloors, "name", excludeUuid)) {
+      e.name = "Floor already exists in this block.";
+    }
+
+    if (
+      form.floor_number === "" ||
+      form.floor_number === null ||
+      form.floor_number === undefined
+    ) {
+      e.floor_number = "Floor number is required.";
+    } else if (
+      existingFloors.some(
+        (x) =>
+          x.uuid !== excludeUuid &&
+          Number(x.floor_number) === Number(form.floor_number),
+      )
+    ) {
+      e.floor_number = "Floor number already exists in this block.";
+    }
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
   const submit = () => {
-    if (form.floor_number === "" || form.floor_number === null) {
-      return toast.error("Floor number is required");
+    if (!validate()) {
+      toast.error("Please fix the highlighted fields before continuing.");
+      return;
     }
     onSubmit(form);
   };
@@ -1463,12 +1670,17 @@ function FloorDialog({ open, title, initial, onOpenChange, onSubmit }) {
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Floor Name</Label>
+            <Label className="text-xs text-muted-foreground">
+              Floor Name <span className="text-destructive">*</span>
+            </Label>
             <Select
               value={form.name}
-              onValueChange={(v) => setForm({ ...form, name: v })}
+              onValueChange={(v) => {
+                setForm({ ...form, name: v });
+                if (errors.name) setErrors({ ...errors, name: undefined });
+              }}
             >
-              <SelectTrigger>
+              <SelectTrigger className={errors.name ? "border-destructive focus-visible:ring-destructive/40" : ""}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1479,18 +1691,24 @@ function FloorDialog({ open, title, initial, onOpenChange, onSubmit }) {
                 ))}
               </SelectContent>
             </Select>
+            <FieldError message={errors.name} />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Floor Number</Label>
+            <Label className="text-xs text-muted-foreground">
+              Floor Number <span className="text-destructive">*</span>
+            </Label>
             <Input
               type="number"
               value={form.floor_number}
-              onChange={(e) =>
-                setForm({ ...form, floor_number: Number(e.target.value) })
-              }
+              onChange={(e) => {
+                setForm({ ...form, floor_number: e.target.value === "" ? "" : Number(e.target.value) });
+                if (errors.floor_number) setErrors({ ...errors, floor_number: undefined });
+              }}
               placeholder="e.g. 0 for Ground, 1 for First…"
+              className={errors.floor_number ? "border-destructive focus-visible:ring-destructive/40" : ""}
             />
+            <FieldError message={errors.floor_number} />
           </div>
 
           <div className="space-y-1.5">
@@ -1535,6 +1753,7 @@ function RoomDialog({ open, title, initial, onOpenChange, onSubmit }) {
     facilities: initial?.facilities || [],
     status: initial?.status || "Active",
   });
+  const [errors, setErrors] = useState({});
 
   const toggleFacility = (fac) => {
     setForm((f) => ({
@@ -1545,9 +1764,23 @@ function RoomDialog({ open, title, initial, onOpenChange, onSubmit }) {
     }));
   };
 
+  const validate = () => {
+    const e = {};
+    if (!form.no.trim()) e.no = "Room number is required.";
+
+    const nameError = validateUniqueName(form.name, "Room name");
+    if (nameError) e.name = nameError;
+
+    if (!form.capacity || Number(form.capacity) <= 0) e.capacity = "Capacity must be greater than 0.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
   const submit = () => {
-    if (!form.no.trim()) return toast.error("Room number is required");
-    if (!form.name.trim()) return toast.error("Room name is required");
+    if (!validate()) {
+      toast.error("Please fix the highlighted fields before continuing.");
+      return;
+    }
     onSubmit({ ...form, capacity: Number(form.capacity) || 30 });
   };
 
@@ -1561,21 +1794,33 @@ function RoomDialog({ open, title, initial, onOpenChange, onSubmit }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">
-                Room Number
+                Room Number <span className="text-destructive">*</span>
               </Label>
               <Input
                 value={form.no}
-                onChange={(e) => setForm({ ...form, no: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, no: e.target.value });
+                  if (errors.no) setErrors({ ...errors, no: undefined });
+                }}
                 placeholder="e.g. G-01"
+                className={errors.no ? "border-destructive focus-visible:ring-destructive/40" : ""}
               />
+              <FieldError message={errors.no} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Room Name</Label>
+              <Label className="text-xs text-muted-foreground">
+                Room Name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, name: e.target.value });
+                  if (errors.name) setErrors({ ...errors, name: undefined });
+                }}
                 placeholder="e.g. Class VI-A"
+                className={errors.name ? "border-destructive focus-visible:ring-destructive/40" : ""}
               />
+              <FieldError message={errors.name} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Room Type</Label>
@@ -1596,13 +1841,20 @@ function RoomDialog({ open, title, initial, onOpenChange, onSubmit }) {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Capacity</Label>
+              <Label className="text-xs text-muted-foreground">
+                Capacity <span className="text-destructive">*</span>
+              </Label>
               <Input
                 type="number"
                 value={form.capacity}
-                onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, capacity: e.target.value });
+                  if (errors.capacity) setErrors({ ...errors, capacity: undefined });
+                }}
                 placeholder="e.g. 40"
+                className={errors.capacity ? "border-destructive focus-visible:ring-destructive/40" : ""}
               />
+              <FieldError message={errors.capacity} />
             </div>
           </div>
 
@@ -1688,10 +1940,14 @@ const emptyBuilding = () => ({
   blocks: [emptyBlock()],
 });
 
-function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
+function UnifiedBuildingDialog({ open, onOpenChange, onSubmit, existingBuildings = [] }) {
   const [b, setB] = useState(emptyBuilding());
+  const [errors, setErrors] = useState({});
 
-  const reset = () => setB(emptyBuilding());
+  const reset = () => {
+    setB(emptyBuilding());
+    setErrors({});
+  };
   const close = (v) => {
     onOpenChange(v);
     if (!v) reset();
@@ -1744,9 +2000,93 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
     patchRoom(bi, fi, ri, { facilities });
   };
 
+  const clearError = (path) => {
+    if (!errors[path]) return;
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[path];
+      return next;
+    });
+  };
+
+  const validate = () => {
+    const e = {};
+
+    const buildingNameError = validateUniqueName(b.name, "Building name", {
+      existing: existingBuildings,
+      duplicateMessage: "Building name already exists.",
+    });
+    if (buildingNameError) e.name = buildingNameError;
+
+    const buildingCodeError = validateUniqueCode(b.code, "Building code", {
+      existing: existingBuildings,
+      duplicateMessage: "Building code already exists.",
+    });
+    if (buildingCodeError) e.code = buildingCodeError;
+
+    if (!b.year_built) e.year_built = "Year built is required.";
+
+    b.blocks.forEach((bl, bi) => {
+      const blockNameError = validateUniqueName(bl.name, "Block name", {
+        existing: b.blocks
+          .map((other, oi) => ({ uuid: String(oi), name: other.name }))
+          .filter((_, oi) => oi !== bi),
+        duplicateMessage: "Block already exists in this building.",
+      });
+      if (blockNameError) e[`block-${bi}-name`] = blockNameError;
+
+      const blockCodeError = validateUniqueCode(bl.code, "Block code", {
+        existing: b.blocks
+          .map((other, oi) => ({ uuid: String(oi), code: other.code }))
+          .filter((_, oi) => oi !== bi),
+        duplicateMessage: "Block code already exists in this building.",
+      });
+      if (blockCodeError) e[`block-${bi}-code`] = blockCodeError;
+
+      bl.floors.forEach((f, fi) => {
+        if (
+          isDuplicateInArray(
+            f.name,
+            bl.floors.map((x) => x.name),
+            fi,
+          )
+        ) {
+          e[`floor-${bi}-${fi}-name`] = "Floor already exists in this block.";
+        }
+
+        f.rooms.forEach((r, ri) => {
+          const key = `room-${bi}-${fi}-${ri}`;
+
+          if (!r.no.trim()) {
+            e[`${key}-no`] = "Room number is required.";
+          } else if (
+            isDuplicateInArray(
+              r.no,
+              f.rooms.map((x) => x.no),
+              ri,
+            )
+          ) {
+            e[`${key}-no`] = "Room number already exists on this floor.";
+          }
+
+          const roomNameError = validateUniqueName(r.name, "Room name");
+          if (roomNameError) e[`${key}-name`] = roomNameError;
+
+          if (!r.capacity || Number(r.capacity) <= 0)
+            e[`${key}-capacity`] = "Capacity is required.";
+        });
+      });
+    });
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
   const submit = () => {
-    if (!b.name.trim()) return toast.error("Building name is required");
-    if (!b.code.trim()) return toast.error("Building code is required");
+    if (!validate()) {
+      toast.error("Please fix the highlighted fields before continuing.");
+      return;
+    }
     onSubmit(b);
     close(false);
   };
@@ -1768,23 +2108,33 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 py-2">
           <div className="space-y-1.5 col-span-2 md:col-span-1">
             <Label className="text-xs text-muted-foreground">
-              Building Name
+              Building Name <span className="text-destructive">*</span>
             </Label>
             <Input
               value={b.name}
-              onChange={(e) => setB({ ...b, name: e.target.value })}
+              onChange={(e) => {
+                setB({ ...b, name: e.target.value });
+                clearError("name");
+              }}
               placeholder="e.g. Main Academic Block"
+              className={errors.name ? "border-destructive focus-visible:ring-destructive/40" : ""}
             />
+            <FieldError message={errors.name} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
-              Building Code
+              Building Code <span className="text-destructive">*</span>
             </Label>
             <Input
               value={b.code}
-              onChange={(e) => setB({ ...b, code: e.target.value })}
-              placeholder="e.g. MAB"
+              onChange={(e) => {
+                setB({ ...b, code: e.target.value });
+                clearError("code");
+              }}
+              placeholder="e.g. M-01"
+              className={errors.code ? "border-destructive focus-visible:ring-destructive/40" : ""}
             />
+            <FieldError message={errors.code} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Purpose</Label>
@@ -1805,12 +2155,17 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Year Built</Label>
+            <Label className="text-xs text-muted-foreground">
+              Year Built <span className="text-destructive">*</span>
+            </Label>
             <Select
               value={b.year_built}
-              onValueChange={(v) => setB({ ...b, year_built: v })}
+              onValueChange={(v) => {
+                setB({ ...b, year_built: v });
+                clearError("year_built");
+              }}
             >
-              <SelectTrigger>
+              <SelectTrigger className={errors.year_built ? "border-destructive focus-visible:ring-destructive/40" : ""}>
                 <SelectValue placeholder="Select year" />
               </SelectTrigger>
               <SelectContent>
@@ -1821,6 +2176,7 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
                 ))}
               </SelectContent>
             </Select>
+            <FieldError message={errors.year_built} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Status</Label>
@@ -1863,18 +2219,36 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
               {/* Block header */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Building2 className="h-4 w-4 text-primary shrink-0" />
-                <Input
-                  value={bl.name}
-                  onChange={(e) => patchBlock(bi, { name: e.target.value })}
-                  className="h-8 w-36"
-                  placeholder="Block name"
-                />
-                <Input
-                  value={bl.code}
-                  onChange={(e) => patchBlock(bi, { code: e.target.value })}
-                  className="h-8 w-28"
-                  placeholder="Block code"
-                />
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] text-muted-foreground">
+                    Block Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={bl.name}
+                    onChange={(e) => {
+                      patchBlock(bi, { name: e.target.value });
+                      clearError(`block-${bi}-name`);
+                    }}
+                    className={`h-8 w-36 ${errors[`block-${bi}-name`] ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                    placeholder="Block name"
+                  />
+                  <FieldError message={errors[`block-${bi}-name`]} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[10px] text-muted-foreground">
+                    Block Code <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={bl.code}
+                    onChange={(e) => {
+                      patchBlock(bi, { code: e.target.value });
+                      clearError(`block-${bi}-code`);
+                    }}
+                    className={`h-8 w-28 ${errors[`block-${bi}-code`] ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                    placeholder="Block code"
+                  />
+                  <FieldError message={errors[`block-${bi}-code`]} />
+                </div>
                 <Select
                   value={bl.status}
                   onValueChange={(v) => patchBlock(bi, { status: v })}
@@ -1914,21 +2288,32 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
                 <div key={fi} className="ml-3 border-l-2 pl-3 space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <Select
-                      value={f.name}
-                      onValueChange={(v) => patchFloor(bi, fi, { name: v })}
-                    >
-                      <SelectTrigger className="h-8 w-44">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FLOOR_NAMES.map((n) => (
-                          <SelectItem key={n} value={n}>
-                            {n}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Floor Name <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={f.name}
+                        onValueChange={(v) => {
+                          patchFloor(bi, fi, { name: v });
+                          clearError(`floor-${bi}-${fi}-name`);
+                        }}
+                      >
+                        <SelectTrigger
+                          className={`h-8 w-44 ${errors[`floor-${bi}-${fi}-name`] ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FLOOR_NAMES.map((n) => (
+                            <SelectItem key={n} value={n}>
+                              {n}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FieldError message={errors[`floor-${bi}-${fi}-name`]} />
+                    </div>
                     <Select
                       value={f.status}
                       onValueChange={(v) => patchFloor(bi, fi, { status: v })}
@@ -1964,36 +2349,50 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
 
                   {/* Room column headers */}
                   <div className="grid grid-cols-12 gap-1.5 text-[10px] text-muted-foreground px-1">
-                    <div className="col-span-2">Room No.</div>
-                    <div className="col-span-2">Name</div>
+                    <div className="col-span-2">
+                      Room No. <span className="text-destructive">*</span>
+                    </div>
+                    <div className="col-span-2">
+                      Name <span className="text-destructive">*</span>
+                    </div>
                     <div className="col-span-2">Type</div>
-                    <div className="col-span-1">Cap.</div>
+                    <div className="col-span-1">
+                      Cap. <span className="text-destructive">*</span>
+                    </div>
                     <div className="col-span-3">Facilities</div>
                     <div className="col-span-1">Status</div>
                     <div className="col-span-1" />
                   </div>
 
                   {/* Rooms */}
-                  {f.rooms.map((r, ri) => (
+                  {f.rooms.map((r, ri) => {
+                    const key = `room-${bi}-${fi}-${ri}`;
+                    return (
+                    <div key={ri} className="space-y-1">
                     <div
-                      key={ri}
-                      className="grid grid-cols-12 gap-1.5 items-center"
+                      className="grid grid-cols-12 gap-1.5 items-start"
                     >
-                      <Input
-                        className="col-span-2 h-8"
-                        value={r.no}
-                        onChange={(e) =>
-                          patchRoom(bi, fi, ri, { no: e.target.value })
-                        }
-                      />
-                      <Input
-                        className="col-span-2 h-8"
-                        value={r.name}
-                        placeholder="Room name"
-                        onChange={(e) =>
-                          patchRoom(bi, fi, ri, { name: e.target.value })
-                        }
-                      />
+                      <div className="col-span-2">
+                        <Input
+                          className={`h-8 ${errors[`${key}-no`] ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                          value={r.no}
+                          onChange={(e) => {
+                            patchRoom(bi, fi, ri, { no: e.target.value });
+                            clearError(`${key}-no`);
+                          }}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          className={`h-8 ${errors[`${key}-name`] ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                          value={r.name}
+                          placeholder="Room name"
+                          onChange={(e) => {
+                            patchRoom(bi, fi, ri, { name: e.target.value });
+                            clearError(`${key}-name`);
+                          }}
+                        />
+                      </div>
                       <div className="col-span-2">
                         <Select
                           value={r.type}
@@ -2013,16 +2412,19 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
                           </SelectContent>
                         </Select>
                       </div>
-                      <Input
-                        className="col-span-1 h-8"
-                        type="number"
-                        value={r.capacity}
-                        onChange={(e) =>
-                          patchRoom(bi, fi, ri, {
-                            capacity: Number(e.target.value) || 0,
-                          })
-                        }
-                      />
+                      <div className="col-span-1">
+                        <Input
+                          className={`h-8 ${errors[`${key}-capacity`] ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                          type="number"
+                          value={r.capacity}
+                          onChange={(e) => {
+                            patchRoom(bi, fi, ri, {
+                              capacity: e.target.value === "" ? "" : Number(e.target.value) || 0,
+                            });
+                            clearError(`${key}-capacity`);
+                          }}
+                        />
+                      </div>
                       {/* Facilities mini-picker */}
                       <div className="col-span-3">
                         <Select
@@ -2087,7 +2489,23 @@ function UnifiedBuildingDialog({ open, onOpenChange, onSubmit }) {
                         <X className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
-                  ))}
+                    {(errors[`${key}-no`] || errors[`${key}-name`] || errors[`${key}-capacity`]) && (
+                      <div className="grid grid-cols-12 gap-1.5">
+                        <div className="col-span-2">
+                          <FieldError message={errors[`${key}-no`]} />
+                        </div>
+                        <div className="col-span-2">
+                          <FieldError message={errors[`${key}-name`]} />
+                        </div>
+                        <div className="col-span-2" />
+                        <div className="col-span-1">
+                          <FieldError message={errors[`${key}-capacity`]} />
+                        </div>
+                      </div>
+                    )}
+                    </div>
+                    );
+                  })}
                   <Button
                     size="sm"
                     variant="outline"
