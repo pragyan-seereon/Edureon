@@ -15,12 +15,12 @@
 // // Verify Razorpay Payment
 // // --------------------------------------------
 
-export const verifyPayment = (data) => {
-  return api.post(
-    "/payments/verify",
-    data
-  );
-};
+// export const verifyPayment = (data) => {
+//   return api.post(
+//     "/payments/verify",
+//     data
+//   );
+// };
 
 
 
