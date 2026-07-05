@@ -92,11 +92,22 @@ const academicRoles = [
   "Vice Principal",
   "Academic Coordinator",
 ];
+
+// NOTE: The subject/faculty API expects `faculty_user_ids` to be a list of
+// PLAIN INTEGERS (e.g. [1, 2]) — not a string code like "EMP2002".
+// Sending ["EMP2002", "EMP2004"] causes the API to reject the request with
+// an "int_parsing" validation error, because it can't parse those strings
+// as integers.
+//
+// Fix: `id` is now a plain integer (1, 2, 3, ...), matching what the
+// backend expects for `faculty_user_ids`. `employeeCode` (e.g. "EMP2000")
+// is kept separately for display purposes only.
 export const employees = Array.from({ length: 24 }).map((_, i) => {
   const role = pick(roles);
   const salary = 18000 + Math.floor(sr() * 60000);
   return {
-    id: `EMP${(2000 + i).toString()}`,
+    id: i + 1, // <-- numeric ID, use this for faculty_user_ids / created_by / etc.
+    employeeCode: `EMP${(2000 + i).toString()}`, // display code only
     name: `${pick(firstNames)} ${pick(lastNames)}`,
     role,
     department: pick(depts),
@@ -130,6 +141,21 @@ export const employees = Array.from({ length: 24 }).map((_, i) => {
     docs: ["Aadhar", "PAN", "Highest Degree", "Resume"],
   };
 });
+
+// Helper: given one or more employee display codes (e.g. "EMP2002") or
+// employee objects, return the numeric id(s) to send as
+// `faculty_user_ids` in the create-subject API payload.
+export function toFacultyUserIds(employeeCodesOrObjects) {
+  return employeeCodesOrObjects.map((e) => {
+    const emp =
+      typeof e === "string"
+        ? employees.find((emp) => emp.employeeCode === e)
+        : e;
+    if (!emp) throw new Error(`Unknown employee reference: ${e}`);
+    return emp.id;
+  });
+}
+
 export const feeCollectionTrend = [
   { month: "Apr", collected: 4200000, pending: 800000 },
   { month: "May", collected: 4500000, pending: 720000 },

@@ -155,10 +155,8 @@ const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState([]);
   const [sort, setSort] = useState({ key: "createdAt", dir: "desc" });
-  const [activeInstitute, setActiveInstitute] = useState(
-  localStorage.getItem("active_institute_uuid") || ""
-);
-const { setInstituteUUID, clearInstituteUUID } = useAuthStore.getState();
+ const activeInstitute = useAuthStore((state) => state.instituteUUID);
+const { setInstituteUUID, clearInstituteUUID } = useAuthStore();
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -235,11 +233,10 @@ const { setInstituteUUID, clearInstituteUUID } = useAuthStore.getState();
 
 const handleInstituteToggle = (item, checked) => {
   if (checked) {
-    setInstituteUUID(item.id); // item.id is the institute UUID
-    setActiveInstitute(item.id);
+    setInstituteUUID(item.id);
+    console.log("New store value:", useAuthStore.getState().instituteUUID);
   } else {
     clearInstituteUUID();
-    setActiveInstitute("");
   }
 };
   const dateError = from && to && from > to;
@@ -524,18 +521,10 @@ const openInstitute = async (item) => {
                       <TableCell className="truncate">{item.adminName}</TableCell>
                       <TableCell>{formatDate(item.createdAt)}</TableCell>
     <TableCell className="text-center">
-  <Switch
-    checked={activeInstitute === item.id}
-    onCheckedChange={(checked) => {
-      handleInstituteToggle(item, checked);
-
-      console.log("Institute UUID:", item.id);
-      console.log(
-        "Stored UUID:",
-        localStorage.getItem("active_institute_uuid")
-      );
-    }}
-  />
+<Switch
+  checked={activeInstitute === item.id}
+  onCheckedChange={(checked) => handleInstituteToggle(item, checked)}
+/>
 </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">

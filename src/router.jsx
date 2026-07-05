@@ -67,7 +67,7 @@ import NotificationsPage from "./pages/superadmin/NotificationsPage";
 import SendNotificationPage from "./pages/superadmin/send-notification";
 import TransactionsPage from "./pages/superadmin/TransactionsPage";
 import FeeCollection from "./pages/admin/modules/FeeCollection";
-// const defaultPrivatePath = "/super/institutes";
+import SubjectDetail from "./pages/admin/academic/SubjectDetail";// const defaultPrivatePath = "/super/institutes";
 
 const router = createBrowserRouter([
   {
@@ -142,6 +142,7 @@ const router = createBrowserRouter([
       { path: "/assignments", element: <AdminAssignments /> },
       { path: "/assignments/:id", element: <AssignmentDetail /> },
       { path: "/timetable", element: <TimeTable /> },
+      { path: "/subjects/:id", element: <SubjectDetail /> },
       //admin modules routes
       { path: "/fees", element: <FeesPage /> },
       { path: "/admin/dms", element: <Dms /> },
