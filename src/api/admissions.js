@@ -1,307 +1,608 @@
+// import api from "./axios";
+
+// // Create Admission
+// export const createAdmission = (data) => {
+//     return api.post(
+//         "/admissions/",
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+// };
+
+
+// // Get Admission Sources
+// export const getAdmissionSources = () => {
+
+//     return api.get(
+//         "/admission-sources"
+//     );
+
+// };
+
+
+// // Pipeline
+// export const getAdmissionPipeline = () => {
+//     return api.get(
+//         "/admissions/pipeline"
+//     );
+// };
+
+
+// // Single Admission
+// export const getAdmissionByUuid = (uuid) => {
+//     return api.get(
+//         `/admissions/${uuid}`
+//     );
+// };
+
+
+// // Guardian
+// export const updateGuardian = (
+//     uuid,
+//     data
+// ) => {
+
+//     return api.put(
+//         `/admissions/${uuid}/guardian`,
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+// };
+
+
+// // Services
+// export const updateServices = (
+//     uuid,
+//     data
+// ) => {
+
+//     return api.put(
+//         `/admissions/${uuid}/Services`,
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+// };
+
+
+// // Medical
+// export const updateMedical = (
+//     uuid,
+//     data
+// ) => {
+
+//     return api.put(
+//         `/admissions/${uuid}/Medical`,
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+// };
+
+
+// // Documents
+// export const updateDocuments = (
+//     uuid,
+//     data
+// ) => {
+
+//     return api.put(
+//         `/admissions/${uuid}/Documents`,
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+// };
+
+
+// // Full Stage Update
+// export const updateStage = (
+//     uuid,
+//     data
+// ) => {
+
+//     return api.put(
+//         `/admissions/${uuid}/stage`,
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+// };
+
+
+// // Get Stages
+// export const getStages = () => {
+
+//     return api.get(
+//         "/admissions"
+//     );
+
+// };
+
+// // Get Admission Counselors
+// export const getAdmissionCounselors = () => {
+
+//     return api.get(
+//         "/admission-counselors/"
+//     );
+
+// };
+
+// // Analytics
+// export const getAdmissionAnalytics = () => {
+
+//     return api.get(
+//         "/admissions/analytics"
+//     );
+
+// };
+
+
+// // Get All Admissions
+// export const getAllAdmissions = () => {
+//     return api.get(
+//         "/admissions/all"
+//     );
+// };
+
+
+// // Enroll Student
+// export const enrollStudent = (uuid, stage_id) => {
+//   const formData = new FormData();
+
+//   formData.append("stage_id", stage_id);
+
+//   return api.put(
+//     `/admissions/${uuid}/enroll`,
+//     formData,
+//     {
+//       headers: {
+//         "Content-Type": "multipart/form-data",
+//       },
+//     }
+//   );
+// };
+
+
+
+// // Update Admission
+// export const updateAdmission = (
+//     uuid,
+//     data
+// ) => {
+
+//     return api.put(
+//         `/admissions/${uuid}`,
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+// };
+
+
+
+
+
+
+// // Add to admissions.js
+// // Archive Admission
+// export const archiveAdmission = (uuid) => {
+
+//     return api.put(
+//         `/admissions/${uuid}/archive`
+//     );
+
+// };
+
+
+// // Restore Admission
+// export const restoreAdmission = (uuid) => {
+
+//     return api.put(
+//         `/admissions/${uuid}/restore`
+//     );
+
+// };
+
+
+// // Delete Admission
+// export const deleteAdmission = (uuid) => {
+
+//     return api.delete(
+//         `/admissions/${uuid}`
+//     );
+
+// };
+
+
+// // Get Admission Stage History
+// export const getAdmissionStageHistory = (uuid) => {
+
+//     return api.get(
+//         `/admission-stage-history/${uuid}`
+//     );
+
+// };
+
+
+// // Get Admission Activity Logs
+// export const getAdmissionActivityLogs = (uuid) => {
+
+//     return api.get(
+//         `/admission-activity-logs/${uuid}`
+//     );
+
+// };
+
+
+// // Create Followup
+// export const createFollowup = (
+//     uuid,
+//     data
+// ) => {
+
+//     return api.post(
+//         `/admissions/${uuid}/followups`,
+//         data,
+//         {
+//             headers: {
+//                 "Content-Type": "multipart/form-data"
+//             }
+//         }
+//     );
+
+// };
+
+
+// // Get Followups
+// export const getFollowups = (uuid) => {
+
+//     return api.get(
+//         `/admissions/${uuid}/followups`
+//     );
+
+// };
+
+
+// // Complete Followup
+// export const completeFollowup = (id) => {
+
+//     return api.put(
+//         `/admissions/followups/${id}/complete`
+//     );
+
+// };
+
+
+// // Delete Followup
+// export const deleteFollowup = (id) => {
+
+//     return api.delete(
+//         `/admissions/followups/${id}`
+//     );
+
+// };
+
+
+
+
 import api from "./axios";
+import useAuthStore from "../store/authStore";
 
+const getHeaders = () => {
+  const { instituteUUID } = useAuthStore.getState();
+
+  return {
+    "X-Institute-UUID": instituteUUID,
+  };
+};
+
+// =========================
 // Create Admission
+// =========================
+
 export const createAdmission = (data) => {
-    return api.post(
-        "/admissions/",
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
+  return api.post("/admissions/", data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
 };
 
 
-// Get Admission Sources
+
+// =========================
+// Admission Sources
+// =========================
+
 export const getAdmissionSources = () => {
-
-    return api.get(
-        "/admission-sources"
-    );
-
+  return api.get("/admission-sources", {
+    headers: getHeaders(),
+  });
 };
 
+// =========================
+// Admission Pipeline
+// =========================
 
-// Pipeline
 export const getAdmissionPipeline = () => {
-    return api.get(
-        "/admissions/pipeline"
-    );
+  return api.get("/admissions/pipeline", {
+    headers: getHeaders(),
+  });
 };
 
-
+// =========================
 // Single Admission
+// =========================
+
 export const getAdmissionByUuid = (uuid) => {
-    return api.get(
-        `/admissions/${uuid}`
-    );
+  return api.get(`/admissions/${uuid}`, {
+    headers: getHeaders(),
+  });
 };
 
-
-// Guardian
-export const updateGuardian = (
-    uuid,
-    data
-) => {
-
-    return api.put(
-        `/admissions/${uuid}/guardian`,
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
-};
-
-
-// Services
-export const updateServices = (
-    uuid,
-    data
-) => {
-
-    return api.put(
-        `/admissions/${uuid}/Services`,
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
-};
-
-
-// Medical
-export const updateMedical = (
-    uuid,
-    data
-) => {
-
-    return api.put(
-        `/admissions/${uuid}/Medical`,
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
-};
-
-
-// Documents
-export const updateDocuments = (
-    uuid,
-    data
-) => {
-
-    return api.put(
-        `/admissions/${uuid}/Documents`,
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
-};
-
-
-// Full Stage Update
-export const updateStage = (
-    uuid,
-    data
-) => {
-
-    return api.put(
-        `/admissions/${uuid}/stage`,
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
-};
-
-
+// =========================
 // Get Stages
+// =========================
+
 export const getStages = () => {
-
-    return api.get(
-        "/admissions"
-    );
-
+  return api.get("/admissions", {
+    headers: getHeaders(),
+  });
 };
 
-// Get Admission Counselors
+// =========================
+// Admission Counselors
+// =========================
+
 export const getAdmissionCounselors = () => {
-
-    return api.get(
-        "/admission-counselors/"
-    );
-
+  return api.get("/admission-counselors/", {
+    headers: getHeaders(),
+  });
 };
 
-// Analytics
+// =========================
+// Admission Analytics
+// =========================
+
 export const getAdmissionAnalytics = () => {
-
-    return api.get(
-        "/admissions/analytics"
-    );
-
+  return api.get("/admissions/analytics", {
+    headers: getHeaders(),
+  });
 };
 
-
+// =========================
 // Get All Admissions
+// =========================
+
 export const getAllAdmissions = () => {
-    return api.get(
-        "/admissions/all"
-    );
+  return api.get("/admissions/all", {
+    headers: getHeaders(),
+  });
+};
+
+// =========================
+// Stage History
+// =========================
+
+export const getAdmissionStageHistory = (uuid) => {
+  return api.get(`/admission-stage-history/${uuid}`, {
+    headers: getHeaders(),
+  });
+};
+
+// =========================
+// Activity Logs
+// =========================
+
+export const getAdmissionActivityLogs = (uuid) => {
+  return api.get(`/admission-activity-logs/${uuid}`, {
+    headers: getHeaders(),
+  });
+};
+
+// =========================
+// Get Followups
+// =========================
+
+export const getFollowups = (uuid) => {
+  return api.get(`/admissions/${uuid}/followups`, {
+    headers: getHeaders(),
+  });
 };
 
 
+
+
+// =========================
+// Guardian
+// =========================
+
+export const updateGuardian = (uuid, data) => {
+  return api.put(`/admissions/${uuid}/guardian`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
+};
+
+// =========================
+// Services
+// =========================
+
+export const updateServices = (uuid, data) => {
+  return api.put(`/admissions/${uuid}/Services`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
+};
+
+// =========================
+// Medical
+// =========================
+
+export const updateMedical = (uuid, data) => {
+  return api.put(`/admissions/${uuid}/Medical`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
+};
+
+// =========================
+// Documents
+// =========================
+
+export const updateDocuments = (uuid, data) => {
+  return api.put(`/admissions/${uuid}/Documents`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
+};
+
+// =========================
+// Full Stage Update
+// =========================
+
+export const updateStage = (uuid, data) => {
+  return api.put(`/admissions/${uuid}/stage`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
+};
+
+// =========================
 // Enroll Student
+// =========================
+
 export const enrollStudent = (uuid, stage_id) => {
   const formData = new FormData();
 
   formData.append("stage_id", stage_id);
 
-  return api.put(
-    `/admissions/${uuid}/enroll`,
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }
-  );
+  return api.put(`/admissions/${uuid}/enroll`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
 };
 
-
-
+// =========================
 // Update Admission
-export const updateAdmission = (
-    uuid,
-    data
-) => {
+// =========================
 
-    return api.put(
-        `/admissions/${uuid}`,
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
+export const updateAdmission = (uuid, data) => {
+  return api.put(`/admissions/${uuid}`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
 };
 
-
-
-
-
-
-// Add to admissions.js
+// =========================
 // Archive Admission
+// =========================
+
 export const archiveAdmission = (uuid) => {
-
-    return api.put(
-        `/admissions/${uuid}/archive`
-    );
-
+  return api.put(`/admissions/${uuid}/archive`, null, {
+    headers: getHeaders(),
+  });
 };
 
-
+// =========================
 // Restore Admission
+// =========================
+
 export const restoreAdmission = (uuid) => {
-
-    return api.put(
-        `/admissions/${uuid}/restore`
-    );
-
+  return api.put(`/admissions/${uuid}/restore`, null, {
+    headers: getHeaders(),
+  });
 };
 
-
+// =========================
 // Delete Admission
+// =========================
+
 export const deleteAdmission = (uuid) => {
-
-    return api.delete(
-        `/admissions/${uuid}`
-    );
-
+  return api.delete(`/admissions/${uuid}`, {
+    headers: getHeaders(),
+  });
 };
 
-
-// Get Admission Stage History
-export const getAdmissionStageHistory = (uuid) => {
-
-    return api.get(
-        `/admission-stage-history/${uuid}`
-    );
-
-};
-
-
-// Get Admission Activity Logs
-export const getAdmissionActivityLogs = (uuid) => {
-
-    return api.get(
-        `/admission-activity-logs/${uuid}`
-    );
-
-};
-
-
+// =========================
 // Create Followup
-export const createFollowup = (
-    uuid,
-    data
-) => {
+// =========================
 
-    return api.post(
-        `/admissions/${uuid}/followups`,
-        data,
-        {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        }
-    );
-
+export const createFollowup = (uuid, data) => {
+  return api.post(`/admissions/${uuid}/followups`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...getHeaders(),
+    },
+  });
 };
 
-
-// Get Followups
-export const getFollowups = (uuid) => {
-
-    return api.get(
-        `/admissions/${uuid}/followups`
-    );
-
-};
-
-
+// =========================
 // Complete Followup
+// =========================
+
 export const completeFollowup = (id) => {
+  return api.put(`/admissions/followups/${id}/complete`, null, {
+    headers: getHeaders(),
+  });
+};
 
-    return api.put(
-        `/admissions/followups/${id}/complete`
-    );
+// =========================
+// Delete Followup
+// =========================
 
+export const deleteFollowup = (id) => {
+  return api.delete(`/admissions/followups/${id}`, {
+    headers: getHeaders(),
+  });
 };
 
 
-// Delete Followup
-export const deleteFollowup = (id) => {
-
-    return api.delete(
-        `/admissions/followups/${id}`
-    );
-
+export const getSections = (classUuid) => {
+  return api.get("/sections", {
+    headers: getHeaders(),
+    params: {
+      class_id: classUuid,
+      count: false,
+    },
+  });
 };
