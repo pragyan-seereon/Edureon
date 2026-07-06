@@ -134,6 +134,36 @@ export const studentsApi = {
       arr.map((x) => (x.id === id ? { ...x, ...patch } : x)),
     ),
   remove: (id) => studentStore.set((arr) => arr.filter((x) => x.id !== id)),
+  archive: (id, meta = {}) =>
+    studentStore.set((arr) =>
+      arr.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              archived: true,
+              archiveType: meta.archiveType,
+              archiveReason: meta.archiveReason,
+              archiveTargetBranch: meta.archiveTargetBranch,
+              archiveDate: new Date().toISOString().slice(0, 10),
+            }
+          : x,
+      ),
+    ),
+  restore: (id) =>
+    studentStore.set((arr) =>
+      arr.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              archived: false,
+              archiveType: undefined,
+              archiveReason: undefined,
+              archiveTargetBranch: undefined,
+              archiveDate: undefined,
+            }
+          : x,
+      ),
+    ),
 };
 export const employeesApi = {
   add: (e) => employeeStore.set((arr) => [{ ...e, id: "EMP" + ++_en }, ...arr]),
@@ -592,6 +622,7 @@ const subjectMappingStore = createStore(initMappings);
 const calendarStore = createStore(initCalendar);
 export const useSections = () => useStore(sectionStore);
 export const useSubjects = () => useStore(subjectStore);
+export const SUBJECT_TYPES = ["Core", "Elective", "Skill", "Language", "Co-Curricular"];
 export const useSubjectMappings = () => useStore(subjectMappingStore);
 export const useAcademicCalendar = () => useStore(calendarStore);
 let _secN = 100,
@@ -2069,6 +2100,7 @@ export const marksApi = {
       arr.map((m) => (m.id === id ? { ...m, grace } : m)),
     ),
   bulkUploadCsv: (examId, rows) => {
+    // eslint-disable-next-line no-unused-vars
     const _exam = examsApi.get(examId);
     rows.forEach((r) => {
       const existing = markEntryStore
@@ -2520,6 +2552,12 @@ let _clsN = 100;
 export const classesApi = {
   list: () => classStore.get(),
   get: (id) => classStore.get().find((x) => x.id === id),
+  feeFor: (className, stream) => {
+    const c = classStore
+      .get()
+      .find((x) => x.name === className && x.stream === stream);
+    return c ? c.fee : 0;
+  },
   add: (c) => {
     const id = "CLS" + ++_clsN;
     classStore.set((arr) => {
@@ -2548,4 +2586,105 @@ export const classesApi = {
     );
     activityApi.log("class", id, archived ? "Archived" : "Restored");
   },
+};
+
+// ============ Rooms ============
+const initRooms = [
+  { id: "RM1", no: "R-101", floor: "1st Floor", building: "Main Block" },
+  { id: "RM2", no: "R-102", floor: "1st Floor", building: "Main Block" },
+  { id: "RM3", no: "R-104", floor: "1st Floor", building: "Main Block" },
+  { id: "RM4", no: "R-201", floor: "2nd Floor", building: "Main Block" },
+  { id: "RM5", no: "R-202", floor: "2nd Floor", building: "Main Block" },
+  { id: "RM6", no: "R-203", floor: "2nd Floor", building: "Main Block" },
+  { id: "RM7", no: "R-301", floor: "3rd Floor", building: "Science Block" },
+  { id: "RM8", no: "R-302", floor: "3rd Floor", building: "Science Block" },
+  { id: "RM9", no: "Lab-1", floor: "Ground Floor", building: "Science Block" },
+  { id: "RM10", no: "Lab-2", floor: "Ground Floor", building: "Science Block" },
+];
+const roomStore = createStore(initRooms);
+export const useRooms = () => useStore(roomStore);
+let _rmN = 100;
+export const roomsApi = {
+  list: () => roomStore.get(),
+  add: (r) => {
+    const id = "RM" + ++_rmN;
+    roomStore.set((arr) => [{ ...r, id }, ...arr]);
+    activityApi.log("room", id, "Created");
+    return id;
+  },
+  update: (id, patch) => {
+    roomStore.set((arr) =>
+      arr.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    );
+    activityApi.log("room", id, "Updated");
+  },
+  remove: (id) => {
+    roomStore.set((arr) => arr.filter((x) => x.id !== id));
+    activityApi.log("room", id, "Deleted");
+  },
+};
+
+// ============ Student Wallet (credits / debits from stream / fee changes) ============
+const walletStore = createStore([]);
+export const useWallet = () => useStore(walletStore);
+let _wtN = 1000;
+export const walletApi = {
+  list: () => walletStore.get(),
+  forStudent: (studentId) =>
+    walletStore.get().filter((w) => w.studentId === studentId),
+  add: (w) => {
+    const id = "WT" + ++_wtN;
+    walletStore.set((arr) => [
+      { ...w, id, at: new Date().toISOString() },
+      ...arr,
+    ]);
+    activityApi.log("wallet", id, `${w.type} ₹${w.amount} — ${w.reason}`);
+    return id;
+  },
+  balanceFor: (studentId) =>
+    walletStore
+      .get()
+      .filter((w) => w.studentId === studentId)
+      .reduce(
+        (sum, w) => sum + (w.type === "Credit" ? w.amount : -w.amount),
+        0,
+      ),
+};
+
+// ============ Section Change Requests (student portal → admin approval) ============
+const sectionChangeStore = createStore([]);
+export const useSectionChangeRequests = () => useStore(sectionChangeStore);
+let _scrN = 100;
+export const sectionChangeApi = {
+  list: () => sectionChangeStore.get(),
+  add: (r) => {
+    const id = "SCR-" + String(++_scrN).padStart(3, "0");
+    sectionChangeStore.set((arr) => [
+      {
+        ...r,
+        id,
+        status: r.status || "Pending",
+        raisedAt: new Date().toISOString(),
+      },
+      ...arr,
+    ]);
+    activityApi.log(
+      "section-change",
+      id,
+      r.status === "Approved" ? "Auto-approved (admin)" : "Requested",
+    );
+    return id;
+  },
+  update: (id, patch) => {
+    sectionChangeStore.set((arr) =>
+      arr.map((x) =>
+        x.id === id
+          ? { ...x, ...patch, decidedAt: new Date().toISOString() }
+          : x,
+      ),
+    );
+    activityApi.log("section-change", id, patch.status || "Updated");
+  },
+  remove: (id) =>
+    sectionChangeStore.set((arr) => arr.filter((x) => x.id !== id)),
 };
