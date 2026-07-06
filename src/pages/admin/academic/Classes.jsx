@@ -123,6 +123,14 @@ import {
   deleteSection,
   getSectionByUUID,
 } from "../../../api/section";
+import {
+  getAcademicCalendar,
+  createAcademicCalendar,
+  updateAcademicCalendar,
+  deleteAcademicCalendar,
+  getAcademicCalendarByUUID,
+} from "../../../api/academicCalendar";
+
 import { Calendar } from "../../../components/ui/calendar";
 import {
   Popover,
@@ -139,7 +147,7 @@ export default function Classes() {
   const [sectionLoading, setSectionLoading] = useState(false);
   const [subjects, setSubjects] = useState([]);
   const mappings = useSubjectMappings();
-  const calendar = useAcademicCalendar();
+  const [calendar, setCalendar] = useState([]);
   const students = useStudents();
   const [teacherOptions, setTeacherOptions] = useState([]);
   const [subLoading, setSubLoading] = useState(false);
@@ -155,18 +163,10 @@ export default function Classes() {
     }
   };
 
-  useEffect(() => {
-    fetchRooms();
-  }, []); // eslint-disable-next-line no-unused-vars
   const roomOptions = rooms.map((room) => ({
     value: room.room_uuid,
     label: room.display_label,
   }));
-
-  useEffect(() => {
-    fetchSubjects();
-    fetchFaculties();
-  }, []);
 
   const fetchSubjects = async () => {
     try {
@@ -176,6 +176,14 @@ export default function Classes() {
     } catch (err) {
       console.error(err);
       toast.error("Failed to fetch subjects");
+    }
+  };
+  const fetchCalendar = async () => {
+    try {
+      const res = await getAcademicCalendar();
+      setCalendar(res.data || []);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -194,38 +202,35 @@ export default function Classes() {
       toast.error("Failed to fetch faculties");
     }
   };
- const fetchSections = async () => {
-  try {
-    setSectionLoading(true);
-    const res = await getSections();
-    const mapped = (res.data || []).map((s) => ({
-      id: s.section_uuid,
-      section_uuid: s.section_uuid,
-      // raw fields kept for validation
-      class_uuid: s.class_uuid,
-      section_name: s.section_name,
-      class_teacher_user_id: s.class_teacher_user_id,
-      room_uuid: s.room_uuid ?? s.room?.room_uuid,
-      // display fields
-      name: `${s.class_name}-${s.section_name}`,
-      teacher: s.class_teacher_name ?? s.class_teacher?.name ?? "—",
-      room: s.room,
-      students: s.current_students,
-      cap: s.capacity,
-      subjects: s.subjects_offered ?? s.subjects_count ?? 0,
-    }));
-    setSections(mapped);
-  } catch (err) {
-    console.error(err);
-    toast.error("Failed to fetch sections");
-  } finally {
-    setSectionLoading(false);
-  }
-};
+  const fetchSections = async () => {
+    try {
+      setSectionLoading(true);
+      const res = await getSections();
+      const mapped = (res.data || []).map((s) => ({
+        id: s.section_uuid,
+        section_uuid: s.section_uuid,
+        // raw fields kept for validation
+        class_uuid: s.class_uuid,
+        section_name: s.section_name,
+        class_teacher_user_id: s.class_teacher_user_id,
+        room_uuid: s.room_uuid ?? s.room?.room_uuid,
+        // display fields
+        name: `${s.class_name}-${s.section_name}`,
+        teacher: s.class_teacher_name ?? s.class_teacher?.name ?? "—",
+        room: s.room,
+        students: s.current_students,
+        cap: s.capacity,
+        subjects: s.subjects_offered ?? s.subjects_count ?? 0,
+      }));
+      setSections(mapped);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch sections");
+    } finally {
+      setSectionLoading(false);
+    }
+  };
 
-  useEffect(() => {
-    fetchSections();
-  }, []);
   const handleDelete = async (c) => {
     try {
       await deleteClass(c.class_uuid);
@@ -237,7 +242,31 @@ export default function Classes() {
     }
   };
 
+  const [activeTab, setActiveTab] = useState("classes");
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === "classes") {
+      fetchSubjects();
+      fetchFaculties();
+    } else if (tab === "subjects") {
+      fetchSubjects();
+      fetchFaculties();
+    } else if (tab === "sections") {
+      fetchSections();
+      fetchRooms();
+    } else if (tab === "calendar") {
+      fetchCalendar();
+    }
+  };
+
+  useEffect(() => {
+    handleTabChange("classes");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [secOpen, setSecOpen] = useState(false);
+
   const [secEdit, setSecEdit] = useState(null);
   const [subOpen, setSubOpen] = useState(false);
   const [subEdit, setSubEdit] = useState(null);
@@ -245,6 +274,8 @@ export default function Classes() {
   const [mapEdit, setMapEdit] = useState(null);
   const [calOpen, setCalOpen] = useState(false);
   const [calEdit, setCalEdit] = useState(null);
+  const [calLoading, setCalLoading] = useState(false);
+
   // Students tab state
   const [stuQ, setStuQ] = useState("");
   const [stuClass, setStuClass] = useState("all");
@@ -396,7 +427,7 @@ export default function Classes() {
         />
       </div>
 
-      <Tabs defaultValue="classes">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="subjects">Subjects</TabsTrigger>
           <TabsTrigger value="classes">Classes</TabsTrigger>
@@ -527,12 +558,12 @@ export default function Classes() {
                         </DropdownMenu>
                       </div>
                     </div>
-                   <CardDescription className="text-xs">
-  Class Teacher: {s.teacher} · Room{" "}
-  {typeof s.room === "object" && s.room !== null
-    ? s.room.room_number || "—"
-    : (s.room ?? "—")}
-</CardDescription>
+                    <CardDescription className="text-xs">
+                      Class Teacher: {s.teacher} · Room{" "}
+                      {typeof s.room === "object" && s.room !== null
+                        ? s.room.room_number || "—"
+                        : (s.room ?? "—")}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div>
@@ -779,10 +810,10 @@ export default function Classes() {
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-base">Academic Calendar</CardTitle>
-                <CardDescription>
+                {/* <CardDescription>
                   Add holidays, exams, PTMs and events with full edit/delete
                   control.
-                </CardDescription>
+                </CardDescription> */}
               </div>
               <Button
                 size="sm"
@@ -797,51 +828,72 @@ export default function Classes() {
               </Button>
             </CardHeader>
             <CardContent className="p-0 divide-y">
+              {calendar.length === 0 && (
+                <div className="text-center text-sm text-muted-foreground py-10">
+                  No calendar events yet.
+                </div>
+              )}
               {calendar.map((e) => (
                 <div
-                  key={e.id}
+                  key={e.calendar_uuid}
                   className="flex items-center justify-between gap-3 p-4"
                 >
                   <div>
                     <div className="text-xs text-muted-foreground">
-                      {e.date}
+                      {e.date_label}
                     </div>
-                    <div className="text-sm font-medium">{e.event}</div>
+                    <div className="text-sm font-medium">{e.event_name}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {e.audience} · {e.notes}
+                      {e.audience_label ?? `${e.audience} · ${e.notes}`}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge
                       variant={
-                        e.type === "Holiday"
+                        e.event_type === "Holiday"
                           ? "secondary"
-                          : e.type === "Exam"
+                          : e.event_type === "Exam"
                             ? "destructive"
                             : "default"
                       }
                     >
-                      {e.type === "Other" ? e.customType || "Other" : e.type}
+                      {e.display_type ?? e.event_type}
                     </Badge>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={calLoading}
+                        >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           onClick={() =>
-                            toast.info(`${e.event} · ${e.audience}`)
+                            toast.info(`${e.event_name} · ${e.audience}`)
                           }
                         >
                           <Eye className="h-4 w-4" />
                           View
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => {
-                            setCalEdit(e);
-                            setCalOpen(true);
+                          onClick={async () => {
+                            try {
+                              setCalLoading(true);
+                              const res = await getAcademicCalendarByUUID(
+                                e.calendar_uuid,
+                              );
+                              setCalEdit(res.data);
+                              setCalOpen(true);
+                            } catch (err) {
+                              console.error(err);
+                              toast.error("Failed to load event");
+                            } finally {
+                              setCalLoading(false);
+                            }
                           }}
                         >
                           <Pencil className="h-4 w-4" />
@@ -850,9 +902,15 @@ export default function Classes() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
-                          onClick={() => {
-                            academicCalendarApi.remove(e.id);
-                            toast.success("Calendar event deleted");
+                          onClick={async () => {
+                            try {
+                              await deleteAcademicCalendar(e.calendar_uuid);
+                              fetchCalendar();
+                              toast.success("Calendar event deleted");
+                            } catch (err) {
+                              console.error(err);
+                              toast.error("Failed to delete event");
+                            }
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1120,24 +1178,24 @@ export default function Classes() {
         </DialogContent>
       </Dialog>
 
-    <SectionDialog
-  open={secOpen}
-  onOpenChange={setSecOpen}
-  edit={secEdit}
-  sections={sections}
-  onSubmit={async (payload) => {
-    if (secEdit) {
-      await updateSection(secEdit.section_uuid, payload);
-      toast.success("Section updated");
-    } else {
-      await createSection(payload);
-      toast.success("Section created");
-    }
-    fetchSections();
-    setSecOpen(false);
-    setSecEdit(null);
-  }}
-/>
+      <SectionDialog
+        open={secOpen}
+        onOpenChange={setSecOpen}
+        edit={secEdit}
+        sections={sections}
+        onSubmit={async (payload) => {
+          if (secEdit) {
+            await updateSection(secEdit.section_uuid, payload);
+            toast.success("Section updated");
+          } else {
+            await createSection(payload);
+            toast.success("Section created");
+          }
+          fetchSections();
+          setSecOpen(false);
+          setSecEdit(null);
+        }}
+      />
 
       <SubjectDialog
         open={subOpen}
@@ -1213,13 +1271,22 @@ export default function Classes() {
         open={calOpen}
         onOpenChange={setCalOpen}
         edit={calEdit}
-        onSubmit={(payload) => {
-          if (calEdit) academicCalendarApi.update(calEdit.id, payload);
-          else academicCalendarApi.add(payload);
-          toast.success(
-            calEdit ? "Calendar event updated" : "Calendar event added",
-          );
-          setCalOpen(false);
+        onSubmit={async (payload) => {
+          try {
+            if (calEdit) {
+              await updateAcademicCalendar(calEdit.calendar_uuid, payload);
+            } else {
+              await createAcademicCalendar(payload);
+            }
+            fetchCalendar();
+            toast.success(
+              calEdit ? "Calendar event updated" : "Calendar event added",
+            );
+            setCalOpen(false);
+          } catch (err) {
+            console.error(err);
+            toast.error("Failed to save calendar event");
+          }
         }}
       />
     </PageContainer>
@@ -1227,33 +1294,32 @@ export default function Classes() {
 }
 
 function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
-  const parseRange = (s) => {
-    if (!s) return {};
-    const parts = s.split(/\s*(?:→|to|-)\s*/);
-    const a = parts[0] ? new Date(parts[0]) : undefined;
-    const b = parts[1] ? new Date(parts[1]) : undefined;
+  const parseEditRange = (ed) => {
+    if (!ed) return {};
+    const a = ed.start_date ? new Date(ed.start_date) : undefined;
+    const b = ed.end_date ? new Date(ed.end_date) : undefined;
     return {
       from: a && !isNaN(+a) ? a : undefined,
       to: b && !isNaN(+b) ? b : undefined,
     };
   };
-  const init = edit ? parseRange(edit.date) : {};
+  const init = edit ? parseEditRange(edit) : {};
   const [from, setFrom] = useState(init.from);
   const [to, setTo] = useState(init.to);
-  const [event, setEvent] = useState(edit?.event ?? "");
-  const [type, setType] = useState(edit?.type ?? "Event");
-  const [customType, setCustomType] = useState(edit?.customType ?? "");
+  const [event, setEvent] = useState(edit?.event_name ?? "");
+  const [type, setType] = useState(edit?.event_type ?? "Event");
+  const [customType, setCustomType] = useState(edit?.custom_type ?? "");
   const [audience, setAudience] = useState(edit?.audience ?? "All");
   const [notes, setNotes] = useState(edit?.notes ?? "");
 
   useEffect(() => {
     if (!open) return;
-    const r = edit ? parseRange(edit.date) : {};
+    const r = edit ? parseEditRange(edit) : {};
     setFrom(r.from);
     setTo(r.to);
-    setEvent(edit?.event ?? "");
-    setType(edit?.type ?? "Event");
-    setCustomType(edit?.customType ?? "");
+    setEvent(edit?.event_name ?? "");
+    setType(edit?.event_type ?? "Event");
+    setCustomType(edit?.custom_type ?? "");
     setAudience(edit?.audience ?? "All");
     setNotes(edit?.notes ?? "");
   }, [open, edit]);
@@ -1263,15 +1329,16 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
     if (!event.trim()) return toast.error("Event name is required");
     if (type === "Other" && !customType.trim())
       return toast.error("Specify the custom type");
-    const dateStr =
-      to && +to !== +from
-        ? `${format(from, "yyyy-MM-dd")} → ${format(to, "yyyy-MM-dd")}`
-        : format(from, "yyyy-MM-dd");
+
+    const startDate = format(from, "yyyy-MM-dd");
+    const endDate = to && +to !== +from ? format(to, "yyyy-MM-dd") : startDate;
+
     onSubmit({
-      date: dateStr,
-      event: event.trim(),
-      type,
-      customType: type === "Other" ? customType.trim() : undefined,
+      start_date: startDate,
+      end_date: endDate,
+      event_name: event.trim(),
+      event_type: type,
+      custom_type: type === "Other" ? customType.trim() : undefined,
       audience,
       notes,
     });
@@ -1918,9 +1985,11 @@ function nextClass(c) {
 }
 function PromotionsTab() {
   const students = useStudents();
-  const [fromClass, setFromClass] = useState("XI");
+  const [classList, setClassList] = useState([]);
+  const [sectionList, setSectionList] = useState([]);
+  const [fromClass, setFromClass] = useState("");
   const [fromSection, setFromSection] = useState("all");
-  const [toClass, setToClass] = useState("XII");
+  const [toClass, setToClass] = useState("");
   const [toSection, setToSection] = useState("same");
   const [session, setSession] = useState(() => {
     const y = new Date().getFullYear() + 1;
@@ -1928,19 +1997,19 @@ function PromotionsTab() {
   });
   const [selected, setSelected] = useState(new Set());
 
-  const classes = useMemo(
-    () => Array.from(new Set(students.map((s) => s.class))).sort(),
-    [students],
-  );
-  const sections = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          students.filter((s) => s.class === fromClass).map((s) => s.section),
-        ),
-      ).sort(),
-    [students, fromClass],
-  );
+  const classes = classList;
+  const sections = useMemo(() => {
+    const selectedClass = classList.find((c) => c.class_name === fromClass);
+    if (!selectedClass) return [];
+    return sectionList.filter((s) => s.class_uuid === selectedClass.class_uuid);
+  }, [fromClass, classList, sectionList]);
+
+  const toClassSections = useMemo(() => {
+    const selectedClass = classList.find((c) => c.class_name === toClass);
+    if (!selectedClass) return [];
+    return sectionList.filter((s) => s.class_uuid === selectedClass.class_uuid);
+  }, [toClass, classList, sectionList]);
+
   const candidates = useMemo(
     () =>
       students.filter(
@@ -1952,11 +2021,43 @@ function PromotionsTab() {
     [students, fromClass, fromSection],
   );
 
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const classRes = await getClasses();
+        setClassList(classRes.data || []);
+
+        const sectionRes = await getSections();
+        setSectionList(sectionRes.data || []);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load classes and sections");
+      }
+    };
+
+    loadData();
+  }, []);
   // Auto-select all candidates whenever the filter changes
   useEffect(() => {
     setSelected(new Set(candidates.map((s) => s.id)));
   }, [candidates]);
 
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const classRes = await getClasses();
+        setClassList(classRes.data || []);
+
+        const sectionRes = await getSections();
+        setSectionList(sectionRes.data || []);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load classes and sections");
+      }
+    };
+
+    loadData();
+  }, []);
   const toggle = (id) =>
     setSelected((p) => {
       const n = new Set(p);
@@ -1994,10 +2095,10 @@ function PromotionsTab() {
     <Card className="border-border/60">
       <CardHeader>
         <CardTitle className="text-base">Year-End Promotions</CardTitle>
-        <CardDescription>
+        {/* <CardDescription>
           Filter by class/section, then deselect students who failed and should
           not be promoted.
-        </CardDescription>
+        </CardDescription> */}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid md:grid-cols-2 gap-4">
@@ -2019,8 +2120,8 @@ function PromotionsTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {classes.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                    <SelectItem key={c.class_uuid} value={c.class_name}>
+                      {c.class_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2035,8 +2136,8 @@ function PromotionsTab() {
                 <SelectContent>
                   <SelectItem value="all">All sections</SelectItem>
                   {sections.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      Section {s}
+                    <SelectItem key={s.section_uuid} value={s.section_name}>
+                      Section {s.section_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2054,9 +2155,9 @@ function PromotionsTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROMAN_ORDER.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+                  {classes.map((c) => (
+                    <SelectItem key={c.class_uuid} value={c.class_name}>
+                      {c.class_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2070,9 +2171,9 @@ function PromotionsTab() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="same">Keep same section</SelectItem>
-                  {["A", "B", "C", "D", "E"].map((s) => (
-                    <SelectItem key={s} value={s}>
-                      Section {s}
+                  {toClassSections.map((s) => (
+                    <SelectItem key={s.section_uuid} value={s.section_name}>
+                      Section {s.section_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2836,7 +2937,9 @@ function SectionDialog({ open, onOpenChange, edit, sections = [], onSubmit }) {
     setForm({
       name: edit?.section_name ?? "",
       class_uuid: edit?.class_uuid ?? "",
-      teacher: edit?.class_teacher_user_id ? String(edit.class_teacher_user_id) : "",
+      teacher: edit?.class_teacher_user_id
+        ? String(edit.class_teacher_user_id)
+        : "",
       room_uuid: edit?.room_uuid ?? "",
       room: edit?.room ?? "",
       present: edit?.current_students ?? 0,
