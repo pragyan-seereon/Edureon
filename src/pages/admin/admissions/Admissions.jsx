@@ -696,28 +696,17 @@ const bySource = analytics.by_source || [];
       <PageHeader
         title="Admissions "
         actions={
-          <NewInquiryDialog
-            trigger={
-              <Button size="sm" className="gradient-primary border-0">
-                <Plus className="h-4 w-4" />
-                New Inquiry
-              </Button>
-            }
-            onCreate={(d) => {
-              const id = inquiriesApi.add({
-                ...d,
-                name: d.name,
-                class: d.class,
-                parent: d.parent,
-                phone: d.phone,
-                email: d.email || "—",
-                source: d.source,
-                stage: "Inquiry",
-                
-              });
-              toast.success(`${d.name} added · ${id}`);
-            }}
-          />
+        <NewInquiryDialog
+          trigger={
+            <Button size="sm" className="gradient-primary border-0">
+              <Plus className="h-4 w-4" />
+              New Inquiry
+            </Button>
+          }
+          onCreate={async () => {
+            await loadData();
+          }}
+        />
         }
       />
 

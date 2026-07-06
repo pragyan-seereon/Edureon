@@ -1306,14 +1306,7 @@ stages.findIndex(
   s => s.stage_name === inq?.stage?.stage_name
 );
 
-// const nextStage =
-// stages[stageIdx + 1];
-//   // const progress = Math.round(((stageIdx + 1) / ADM_STAGES.length) * 100);
-//   const progress = Math.round(
-//   ((stageIdx + 1) / stages.length) * 100
-// );
-//   const docsOk = (inq.documents || []).filter((d) => d.ok).length;
-//   const docsTotal = (inq.documents || []).length;
+
 const nextStage =
   stages[stageIdx + 1];
 
@@ -1336,39 +1329,6 @@ const docs = [
 const docsOk = docs.filter(Boolean).length;
 const docsTotal = docs.length;
 
-// const enroll = () => {
-//   const admissionNo =
-//     inq.admissionNo || `ADM-${new Date().getFullYear()}-${id.replace("ADM-", "")}`;
-
-//   const existing = students.find(
-//     (s) => s.sourceInquiryId === id || s.admissionNo === admissionNo,
-//   );
-
-//   if (!existing && inq.stage !== "Enrolled") {
-//     inquiriesApi.moveStage(id, "Enrolled");
-//   } else if (!existing) {
-// const studentId = studentsApi.add({
-//   name: inq.full_name,
-//   admissionNo,
-//   class: inq.class_name,
-//   section: inq.section || "A",
-//   rollNo: inq.rollNo || Math.floor(Math.random() * 60) + 1,
-//   gender: inq.gender || "Male",
-//   parent: inq.parent,
-//   phone: inq.phone,
-//   feeStatus: inq.feePaid > 0 ? "Paid" : "Pending",
-//   attendance: 100,
-//   email: inq.email,
-//   address: inq.address,
-//   dob: inq.dob,
-//   sourceInquiryId: id,
-//   documents: (inq.documents || []).filter((d) => d.ok).map((d) => d.name),
-// });
-//       inquiriesApi.update(id, { enrolledStudentId: studentId });
-//     }
-//     toast.success(`${inq.name} enrolled as student`);
-//     setTimeout(() => navigate("/students"), 400);
-//   };
 
 const enroll = async () => {
  try {
@@ -2105,34 +2065,31 @@ function PersonalTab({ inq, id }) {
    Fields: class, section, rollNo, previousSchool, previousClass, board, lastPercent, attendance
 */
 function AcademicTab({ inq, id }) {
-  const [d, setD] = useState({
-    class: inq.class_name  || "X",
-    section: inq.section || "A",
-    rollNo: inq.roll_no  || 1,
-    previousSchool: inq.previous_school  || inq.previous_school  || "",
-    previousClass: inq.previous_class  || "",
-    board: inq.board || "CBSE",
-    lastPercent: inq.last_aggregate_percentage  || "",
-    attendance: inq.attendance_percentage  || 95,
-  });
+const [d, setD] = useState({
+  class_uuid: inq.class_uuid ?? "",
+  section_uuid: inq.section_uuid ?? "",
+  rollNo: inq.roll_no ?? "",
+  previousSchool: inq.previous_school ?? "",
+  previousClass: inq.previous_class ?? "",
+  board: inq.board ?? "CBSE",
+  lastPercent: inq.last_aggregate_percentage ?? "",
+  attendance: inq.attendance_percentage ?? "",
+});
   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
 const saveAll = async () => {
   try {
 
-    await updateAdmission(
-  id,
-  {
-    class_name: d.class,
-    section: d.section,
-    roll_no: d.rollNo,
-    previous_school: d.previousSchool,
-    previous_class: d.previousClass,
-    board: d.board,
-    last_aggregate_percentage: d.lastPercent,
-    attendance_percentage: d.attendance
-  }
-);
+await updateAdmission(id, {
+  class_uuid: d.class_uuid,
+  section_uuid: d.section_uuid,
+  roll_no: d.rollNo,
+  previous_school: d.previousSchool,
+  previous_class: d.previousClass,
+  board: d.board,
+  last_aggregate_percentage: d.lastPercent,
+  attendance_percentage: d.attendance
+});
 
     toast.success("Academic details saved");
 
@@ -2148,13 +2105,16 @@ const saveAll = async () => {
       <CardContent className="p-5 space-y-4">
         <div className="grid md:grid-cols-2 gap-4">
           <F label="Class">
-            <Select value={d.class} onValueChange={(v) => set("class", v)}>
+            <Select
+                  value={d.class_uuid}
+                  onValueChange={(v) => set("class_uuid", v)}
+              >
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{["Pre-KG","KG","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"].map((c) => <SelectItem key={c} value={c}>Class {c}</SelectItem>)}</SelectContent>
+              {/* <SelectContent>{["Pre-KG","KG","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"].map((c) => <SelectItem key={c} value={c}>Class {c}</SelectItem>)}</SelectContent> */}
             </Select>
           </F>
           <F label="Section">
-            <Select value={d.section} onValueChange={(v) => set("section", v)}>
+            <Select value={d.section_uuid} onValueChange={(v) => set("section_uuid", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{["A","B","C","D","Any"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
