@@ -263,3 +263,105 @@ export function mapApiErrorToSectionFieldErrors(err) {
 
   return errors;
 }
+
+export const CALENDAR_VALIDATION_MESSAGES = {
+  START_DATE_REQUIRED: "Start date required.",
+  EVENT_NAME_REQUIRED: "Event Name required.",
+  CUSTOM_TYPE_REQUIRED: "Please specify the custom type.",
+  DUPLICATE_EVENT: "Event already exists for this date range.",
+};
+
+/**
+ * Normalizes any date-ish value (Date object, ISO string with time,
+ * or plain "yyyy-MM-dd") down to "yyyy-MM-dd" for safe comparison.
+ * Returns "" if the value can't be parsed.
+ */
+function normalizeDate(value) {
+  if (!value) return "";
+  // Already a clean yyyy-MM-dd string — fast path
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(+d)) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Client-side validation for the Academic Calendar form.
+ *
+ * @param {Object} form            - { start_date, end_date, event_name, event_type, custom_type }
+ * @param {Array}  existingEvents  - full list of calendar events already loaded
+ * @param {string|number|null} editUuid - calendar_uuid currently being edited
+ * @returns {Object} errors
+ */
+export function validateCalendarForm(form, existingEvents = [], editUuid = null) {
+  const errors = {};
+
+  const startDate = normalizeDate(form.start_date);
+  const endDate = normalizeDate(form.end_date) || startDate;
+  const eventName = (form.event_name ?? "").trim();
+
+  // ---- Required checks ----
+  if (!startDate) {
+    errors.start_date = CALENDAR_VALIDATION_MESSAGES.START_DATE_REQUIRED;
+  }
+  if (!eventName) {
+    errors.event_name = CALENDAR_VALIDATION_MESSAGES.EVENT_NAME_REQUIRED;
+  }
+  if (form.event_type === "Other" && !(form.custom_type ?? "").trim()) {
+    errors.custom_type = CALENDAR_VALIDATION_MESSAGES.CUSTOM_TYPE_REQUIRED;
+  }
+
+  // ---- Duplicate check: same event name + same (normalized) date range ----
+  const others = existingEvents.filter((e) => e.calendar_uuid !== editUuid);
+
+  if (!errors.start_date && !errors.event_name && startDate && eventName) {
+    const dup = others.some((e) => {
+      const eStart = normalizeDate(e.start_date);
+      const eEnd = normalizeDate(e.end_date) || eStart;
+      const eName = (e.event_name ?? "").trim().toLowerCase();
+      return (
+        eStart === startDate &&
+        eEnd === endDate &&
+        eName === eventName.toLowerCase()
+      );
+    });
+    if (dup) errors.event_name = CALENDAR_VALIDATION_MESSAGES.DUPLICATE_EVENT;
+  }
+
+  return errors;
+}
+
+export function isCalendarFormValid(errors) {
+  return Object.keys(errors).length === 0;
+}
+
+export function mapApiErrorToCalendarFieldErrors(err) {
+  const message =
+    err?.response?.data?.detail ||
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    "";
+
+  const lower = message.toLowerCase();
+  const errors = {};
+
+  if (
+    lower.includes("exist") ||
+    lower.includes("duplicate") ||
+    (lower.includes("date") && lower.includes("event"))
+  ) {
+    errors.event_name = CALENDAR_VALIDATION_MESSAGES.DUPLICATE_EVENT;
+  } else if (lower.includes("name")) {
+    errors.event_name = message || CALENDAR_VALIDATION_MESSAGES.EVENT_NAME_REQUIRED;
+  } else if (lower.includes("date")) {
+    errors.start_date = message || CALENDAR_VALIDATION_MESSAGES.START_DATE_REQUIRED;
+  }
+
+  return errors;
+}
