@@ -112,6 +112,8 @@ import {
   mapApiErrorToClassFieldErrors,
   validateSectionForm,
   mapApiErrorToSectionFieldErrors,
+  validateCalendarForm,
+  mapApiErrorToCalendarFieldErrors,
 } from "../../../lib/subjectValidation";
 import {
   getRooms,
@@ -242,8 +244,7 @@ export default function Classes() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState("classes");
-
+const [activeTab, setActiveTab] = useState("subjects");
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === "classes") {
@@ -260,10 +261,10 @@ export default function Classes() {
     }
   };
 
-  useEffect(() => {
-    handleTabChange("classes");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+useEffect(() => {
+  handleTabChange("subjects");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const [secOpen, setSecOpen] = useState(false);
 
@@ -871,14 +872,14 @@ export default function Classes() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
+                        {/* <DropdownMenuItem
                           onClick={() =>
                             toast.info(`${e.event_name} · ${e.audience}`)
                           }
                         >
                           <Eye className="h-4 w-4" />
                           View
-                        </DropdownMenuItem>
+                        </DropdownMenuItem> */}
                         <DropdownMenuItem
                           onClick={async () => {
                             try {
@@ -930,10 +931,10 @@ export default function Classes() {
             <CardHeader className="flex-row items-center justify-between space-y-0 gap-3 flex-wrap">
               <div>
                 <CardTitle className="text-base">Students</CardTitle>
-                <CardDescription>
+                {/* <CardDescription>
                   Filter, multi-select students and bulk-assign them to a Class,
                   Section and Session.
-                </CardDescription>
+                </CardDescription> */}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
@@ -1268,32 +1269,34 @@ export default function Classes() {
       />
 
       <CalendarEventDialog
-        open={calOpen}
-        onOpenChange={setCalOpen}
-        edit={calEdit}
-        onSubmit={async (payload) => {
-          try {
-            if (calEdit) {
-              await updateAcademicCalendar(calEdit.calendar_uuid, payload);
-            } else {
-              await createAcademicCalendar(payload);
-            }
-            fetchCalendar();
-            toast.success(
-              calEdit ? "Calendar event updated" : "Calendar event added",
-            );
-            setCalOpen(false);
-          } catch (err) {
-            console.error(err);
-            toast.error("Failed to save calendar event");
-          }
-        }}
-      />
+  open={calOpen}
+  onOpenChange={setCalOpen}
+  edit={calEdit}
+  calendar={calendar}
+  onSubmit={async (payload) => {
+    try {
+      if (calEdit) {
+        await updateAcademicCalendar(calEdit.calendar_uuid, payload);
+      } else {
+        await createAcademicCalendar(payload);
+      }
+      fetchCalendar();
+      toast.success(
+        calEdit ? "Calendar event updated" : "Calendar event added",
+      );
+      setCalOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save calendar event");
+      throw err; // let the dialog map field errors too
+    }
+  }}
+/>
     </PageContainer>
   );
 }
 
-function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
+function CalendarEventDialog({ open, onOpenChange, edit, calendar = [], onSubmit }) {
   const parseEditRange = (ed) => {
     if (!ed) return {};
     const a = ed.start_date ? new Date(ed.start_date) : undefined;
@@ -1311,6 +1314,8 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
   const [customType, setCustomType] = useState(edit?.custom_type ?? "");
   const [audience, setAudience] = useState(edit?.audience ?? "All");
   const [notes, setNotes] = useState(edit?.notes ?? "");
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -1322,26 +1327,55 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
     setCustomType(edit?.custom_type ?? "");
     setAudience(edit?.audience ?? "All");
     setNotes(edit?.notes ?? "");
+    setErrors({});
   }, [open, edit]);
 
-  const submit = () => {
-    if (!from) return toast.error("Pick a start date");
-    if (!event.trim()) return toast.error("Event name is required");
-    if (type === "Other" && !customType.trim())
-      return toast.error("Specify the custom type");
+  const clearError = (field) =>
+    setErrors((p) => (p[field] ? { ...p, [field]: undefined } : p));
 
-    const startDate = format(from, "yyyy-MM-dd");
-    const endDate = to && +to !== +from ? format(to, "yyyy-MM-dd") : startDate;
+  const submit = async () => {
+    const startDate = from ? format(from, "yyyy-MM-dd") : "";
+    const endDate =
+      from && to && +to !== +from ? format(to, "yyyy-MM-dd") : startDate;
 
-    onSubmit({
+    const form = {
       start_date: startDate,
       end_date: endDate,
-      event_name: event.trim(),
+      event_name: event,
       event_type: type,
-      custom_type: type === "Other" ? customType.trim() : undefined,
-      audience,
-      notes,
-    });
+      custom_type: customType,
+    };
+
+    const clientErrors = validateCalendarForm(
+      form,
+      calendar,
+      edit?.calendar_uuid ?? null,
+    );
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors);
+      return;
+    }
+    setErrors({});
+
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        start_date: startDate,
+        end_date: endDate,
+        event_name: event.trim(),
+        event_type: type,
+        custom_type: type === "Other" ? customType.trim() : undefined,
+        audience,
+        notes,
+      });
+    } catch (err) {
+      const apiErrors = mapApiErrorToCalendarFieldErrors(err);
+      if (Object.keys(apiErrors).length > 0) {
+        setErrors(apiErrors);
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -1351,14 +1385,12 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
           <DialogTitle className="font-display">
             {edit ? "Edit Calendar Event" : "Add Calendar Event"}
           </DialogTitle>
-          <DialogDescription>
-            Pick a date range, choose the event type and the audience it applies
-            to.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Date range</Label>
+            <Label className="text-xs text-muted-foreground">
+              Date range <span className="text-destructive">*</span>
+            </Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -1366,6 +1398,8 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
                   className={cn(
                     "w-full justify-start text-left font-normal",
                     !from && "text-muted-foreground",
+                    errors.start_date &&
+                      "border-destructive focus-visible:ring-destructive",
                   )}
                 >
                   <CalendarDays className="h-4 w-4" />
@@ -1383,25 +1417,57 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
                   onSelect={(r) => {
                     setFrom(r?.from);
                     setTo(r?.to);
+                    clearError("start_date");
+                    clearError("event_name"); // date changed, re-check dup on next submit
                   }}
                   numberOfMonths={2}
                   className={cn("p-3 pointer-events-auto")}
                 />
               </PopoverContent>
             </Popover>
+            {errors.start_date && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                {errors.start_date}
+              </p>
+            )}
           </div>
+
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Event name</Label>
+            <Label className="text-xs text-muted-foreground">
+              Event name <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={event}
-              onChange={(e) => setEvent(e.target.value)}
+              onChange={(e) => {
+                setEvent(e.target.value);
+                clearError("event_name");
+              }}
               placeholder="e.g. Mid-term exam"
+              className={
+                errors.event_name
+                  ? "border-destructive focus-visible:ring-destructive"
+                  : ""
+              }
             />
+            {errors.event_name && (
+  <p className="text-xs text-destructive flex items-center gap-1">
+    <AlertTriangle className="h-3 w-3" />
+    {errors.event_name}
+  </p>
+)}
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v)}>
+              <Select
+                value={type}
+                onValueChange={(v) => {
+                  setType(v);
+                  clearError("custom_type");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1435,13 +1501,27 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
           {type === "Other" && (
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">
-                Custom type
+                Custom type <span className="text-destructive">*</span>
               </Label>
               <Input
                 value={customType}
-                onChange={(e) => setCustomType(e.target.value)}
+                onChange={(e) => {
+                  setCustomType(e.target.value);
+                  clearError("custom_type");
+                }}
                 placeholder="e.g. Workshop, Sports Day"
+                className={
+                  errors.custom_type
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : ""
+                }
               />
+              {errors.custom_type && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {errors.custom_type}
+                </p>
+              )}
             </div>
           )}
           <div className="space-y-1.5">
@@ -1454,18 +1534,25 @@ function CalendarEventDialog({ open, onOpenChange, edit, onSubmit }) {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
             Cancel
           </Button>
-          <Button className="gradient-primary border-0" onClick={submit}>
-            {edit ? "Save Event" : "Add Event"}
+          <Button
+            className="gradient-primary border-0"
+            onClick={submit}
+            disabled={submitting}
+          >
+            {submitting ? "Saving..." : edit ? "Save Event" : "Add Event"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
 // ================= Classes Tab =================
 // ================= Classes Tab =================
 const STREAMS = ["Science", "Commerce", "Arts", "Vocational", "Other"];
