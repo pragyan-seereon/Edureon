@@ -938,7 +938,8 @@ function PersonalTab({ inq, id }) {
 
 /* ── ACADEMIC TAB
    Mirrors: NewInquiryDialog "academic" tab
-   Fields: class, section, rollNo, previousSchool, previousClass, board, lastPercent, attendance
+   Fields: class, section, rollNo, previousSchool, previousClass, board,
+           lastPercent, attendance, stream, sessionYear
 */
 
 function AcademicTab({ inq, id }) {
@@ -955,9 +956,25 @@ function AcademicTab({ inq, id }) {
     board: inq.board ?? "CBSE",
     lastPercent: inq.last_aggregate_percentage ?? "",
     attendance: inq.attendance_percentage ?? "",
+    stream: inq.stream ?? "",
+    sessionYear: inq.session_year ?? "",
   });
 
   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
+  useEffect(() => {
+  setD({
+    class_uuid: inq.class_uuid ?? "",
+    section_uuid: inq.section_uuid ?? "",
+    rollNo: inq.roll_no ?? "",
+    previousSchool: inq.previous_school ?? "",
+    previousClass: inq.previous_class ?? "",
+    board: inq.board ?? "CBSE",
+    lastPercent: inq.last_aggregate_percentage ?? "",
+    attendance: inq.attendance_percentage ?? "",
+    stream: inq.stream ?? "",
+    sessionYear: inq.session_year ?? "",
+  });
+}, [inq]);
 
  const loadSections = async (classUuid) => {
   try {
@@ -997,18 +1014,35 @@ const loadClasses = async () => {
 
   const saveAll = async () => {
     try {
-      await updateAdmission(id, {
-        class_uuid: d.class_uuid,
-        section_uuid: d.section_uuid,
-        roll_no: d.rollNo,
-        previous_school: d.previousSchool,
-        previous_class: d.previousClass,
-        board: d.board,
-        last_aggregate_percentage: d.lastPercent,
-        attendance_percentage: d.attendance,
-      });
+    await updateAdmission(id, {
+  class_uuid: d.class_uuid,
+  section_uuid: d.section_uuid,
+  roll_no: d.rollNo,
+  previous_school: d.previousSchool,
+  previous_class: d.previousClass,
+  board: d.board,
+  last_aggregate_percentage: d.lastPercent,
+  attendance_percentage: d.attendance,
+  stream: d.stream,
+  session_year: d.sessionYear,
+});
 
-      toast.success("Academic details saved");
+const res = await getAdmissionByUuid(id);
+
+setD({
+  class_uuid: res.data.class_uuid ?? "",
+  section_uuid: res.data.section_uuid ?? "",
+  rollNo: res.data.roll_no ?? "",
+  previousSchool: res.data.previous_school ?? "",
+  previousClass: res.data.previous_class ?? "",
+  board: res.data.board ?? "CBSE",
+  lastPercent: res.data.last_aggregate_percentage ?? "",
+  attendance: res.data.attendance_percentage ?? "",
+  stream: res.data.stream ?? "",
+  sessionYear: res.data.session_year ?? "",
+});
+
+toast.success("Academic details saved");
 
     } catch (err) {
       toast.error("Save failed");
@@ -1023,10 +1057,29 @@ const loadClasses = async () => {
             <Select
               value={d.class_uuid}
               onValueChange={(v) => {
-                set("class_uuid", v);
-                set("section_uuid", "");
-                loadSections(v);
-              }}
+  set("class_uuid", v);
+  set("section_uuid", "");
+
+  const selectedClass = classes.find(
+    (c) => c.class_uuid === v
+  );
+
+  const className = (
+    selectedClass?.class_name || ""
+  ).toUpperCase();
+
+  const showStream =
+    className === "XI" ||
+    className === "XII" ||
+    className === "CLASS 11" ||
+    className === "CLASS 12";
+
+  if (!showStream) {
+    set("stream", "");
+  }
+
+  loadSections(v);
+}}
             >
               <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
               <SelectContent>
@@ -1068,6 +1121,49 @@ const loadClasses = async () => {
                 ))}
               </SelectContent>
             </Select>
+          </F>
+
+         {(() => {
+  const selectedClass = classes.find(
+    (c) => c.class_uuid === d.class_uuid
+  );
+
+  const className = (
+    selectedClass?.class_name || ""
+  ).toUpperCase();
+
+  const showStream =
+    className === "XI" ||
+    className === "XII" ||
+    className === "CLASS 11" ||
+    className === "CLASS 12";
+
+  return showStream ? (
+    <F label="Stream">
+      <Select
+        value={d.stream}
+        onValueChange={(v) => set("stream", v)}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Select stream" />
+        </SelectTrigger>
+
+        <SelectContent>
+          <SelectItem value="Science">Science</SelectItem>
+          <SelectItem value="Commerce">Commerce</SelectItem>
+          <SelectItem value="Arts">Arts</SelectItem>
+        </SelectContent>
+      </Select>
+    </F>
+  ) : null;
+})()}
+
+          <F label="Session year">
+            <Input
+              value={d.sessionYear}
+              onChange={(e) => set("sessionYear", e.target.value)}
+              placeholder="2026-2027"
+            />
           </F>
 
           <F label="Previous school">
@@ -1206,12 +1302,14 @@ const saveAll = async () => {
 /* ── SERVICES TAB
    Mirrors: NewInquiryDialog "services" tab
    Fields: feeStatus, transportRequired, hostelRequired
+   NOTE: transport_required / hostel_required come back from the API as
+   booleans, so we map boolean <-> "Yes"/"No" string on load and on save.
 */
 function ServicesTab({ inq, id }) {
   const [d, setD] = useState({
-    feeStatus: inq.fee_status  || "Pending",
-    transportRequired: inq.transport_required  || "No",
-    hostelRequired: inq.hostel_required  || "No",
+    feeStatus: inq.fee_status || "Pending",
+    transportRequired: inq.transport_required ? "Yes" : "No",
+    hostelRequired: inq.hostel_required ? "Yes" : "No",
   });
   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
@@ -1223,8 +1321,8 @@ function ServicesTab({ inq, id }) {
       id,
       {
         fee_status: d.feeStatus,
-        transport_required: d.transportRequired,
-        hostel_required: d.hostelRequired
+        transport_required: d.transportRequired === "Yes",
+        hostel_required: d.hostelRequired === "Yes"
       }
     );
 
@@ -1758,7 +1856,5 @@ function Stat({ icon, label, value }) {
     </div>
   );
 }
-
-
 
 
