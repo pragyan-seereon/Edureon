@@ -493,7 +493,7 @@ const openViewer = (slot) => {
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-5">
                 <VF label="Class" value={s.class_name} />
-                <VF label="Section" value={s.section} />
+                <VF label="Section" value={s.section_name} />
                 <VF label="Roll No" value={s.roll_no} />
                 <VF label="Board" value={s.board} />
                 <VF label="Previous School" value={s.previous_school} />
