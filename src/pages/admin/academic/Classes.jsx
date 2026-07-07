@@ -104,7 +104,7 @@ import {
   deleteClass,
   getClassByUUID,
 } from "../../../api/class";
-
+import { getStudents,assignStudentsToSection } from "../../../api/assignstudent.js";
 import {
   validateSubjectForm,
   mapApiErrorToFieldErrors,
@@ -150,7 +150,8 @@ export default function Classes() {
   const [subjects, setSubjects] = useState([]);
   const mappings = useSubjectMappings();
   const [calendar, setCalendar] = useState([]);
-  const students = useStudents();
+  const [students, setStudents] = useState([]);
+  const [studentLoading, setStudentLoading] = useState(false);
   const [teacherOptions, setTeacherOptions] = useState([]);
   const [subLoading, setSubLoading] = useState(false);
   const [rooms, setRooms] = useState([]);
@@ -180,6 +181,39 @@ export default function Classes() {
       toast.error("Failed to fetch subjects");
     }
   };
+  const fetchStudents = async () => {
+    try {
+      setStudentLoading(true);
+
+      const res = await getStudents();
+
+      const mapped = (res.data || []).map((student) => ({
+        id: student.student_uuid,
+        uuid: student.student_uuid,
+        name: student.full_name,
+        admissionNo: student.admission_no,
+        class: student.class_name,
+        section: student.section_name,
+        rollNo: student.roll_no,
+        parent: student.father_name,
+        phone: student.primary_phone,
+        session: student.session_year,
+        attendance: student.attendance_percentage,
+        feeStatus: student.fee_status,
+        gender: student.gender,
+        status: student.status,
+        email: student.email,
+        studentNo: student.student_no,
+      }));
+
+      setStudents(mapped);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch students");
+    } finally {
+      setStudentLoading(false);
+    }
+  };
   const fetchCalendar = async () => {
     try {
       const res = await getAcademicCalendar();
@@ -188,7 +222,25 @@ export default function Classes() {
       console.error(err);
     }
   };
+  const fetchAssignClasses = async () => {
+    try {
+      const res = await getClasses();
+      setAssignClasses(res.data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch classes");
+    }
+  };
 
+  const fetchAssignSections = async () => {
+    try {
+      const res = await getSections();
+      setAssignSections(res.data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch sections");
+    }
+  };
   const fetchFaculties = async () => {
     try {
       const res = await getAcademicFaculties();
@@ -244,7 +296,7 @@ export default function Classes() {
     }
   };
 
-const [activeTab, setActiveTab] = useState("subjects");
+  const [activeTab, setActiveTab] = useState("subjects");
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === "classes") {
@@ -258,13 +310,15 @@ const [activeTab, setActiveTab] = useState("subjects");
       fetchRooms();
     } else if (tab === "calendar") {
       fetchCalendar();
+    } else if (tab === "students") {
+      fetchStudents();
     }
   };
 
-useEffect(() => {
-  handleTabChange("subjects");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+  useEffect(() => {
+    handleTabChange("subjects");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [secOpen, setSecOpen] = useState(false);
 
@@ -283,6 +337,8 @@ useEffect(() => {
   const [stuSection, setStuSection] = useState("all");
   const [stuSelected, setStuSelected] = useState(new Set());
   const [assignOpen, setAssignOpen] = useState(false);
+  const [assignClasses, setAssignClasses] = useState([]);
+  const [assignSections, setAssignSections] = useState([]);
   const [assignTo, setAssignTo] = useState({
     class: "",
     section: "",
@@ -300,6 +356,18 @@ useEffect(() => {
     () => Array.from(new Set(students.map((s) => s.section))).sort(),
     [students],
   );
+
+  const filteredAssignSections = useMemo(() => {
+    const selectedClass = assignClasses.find(
+      (c) => c.class_name === assignTo.class,
+    );
+
+    if (!selectedClass) return [];
+
+    return assignSections.filter(
+      (s) => s.class_uuid === selectedClass.class_uuid,
+    );
+  }, [assignClasses, assignSections, assignTo.class]);
 
   const filteredStudents = useMemo(
     () =>
@@ -338,25 +406,48 @@ useEffect(() => {
       return n;
     });
 
-  const performAssign = () => {
-    if (!assignTo.class || !assignTo.section) {
-      toast.error("Pick a class and section to assign");
-      return;
+const performAssign = async () => {
+  if (!assignTo.class || !assignTo.section) {
+    toast.error("Pick a class and section to assign");
+    return;
+  }
+
+  const selectedClass = assignClasses.find(
+    (c) => c.class_name === assignTo.class,
+  );
+  const selectedSection = filteredAssignSections.find(
+    (s) => s.section_name === assignTo.section,
+  );
+
+  if (!selectedClass || !selectedSection) {
+    toast.error("Could not resolve the selected class/section");
+    return;
+  }
+
+  try {
+    const res = await assignStudentsToSection({
+      class_uuid: selectedClass.class_uuid,      // must be present
+      section_uuid: selectedSection.section_uuid,
+      student_uuids: Array.from(stuSelected),
+      session_year: assignTo.session,             // must be named session_year, not session
+    });
+
+    toast.success(res.message || `Assigned ${res.assigned_count} student(s)`);
+
+    if (res.skipped_count > 0) {
+      toast.warning(
+        `${res.skipped_count} student(s) skipped (capacity ${res.current_students}/${res.section_capacity})`,
+      );
     }
-    stuSelected.forEach((id) =>
-      studentsApi.update(id, {
-        class: assignTo.class,
-        section: assignTo.section,
-        session: assignTo.session,
-      }),
-    );
-    toast.success(
-      `Assigned ${stuSelected.size} student(s) to ${assignTo.class}-${assignTo.section} · ${assignTo.session}`,
-    );
+
     setStuSelected(new Set());
     setAssignOpen(false);
-  };
-
+    fetchStudents();
+  } catch (err) {
+    console.error(err);
+    toast.error(err?.response?.data?.message || "Failed to assign students");
+  }
+};
   const submitMapping = (d) => {
     const section =
       sections.find((s) => s.name === String(d.section)) ?? sections[0];
@@ -976,13 +1067,16 @@ useEffect(() => {
                   size="sm"
                   className="gradient-primary border-0"
                   disabled={stuSelected.size === 0}
-                  onClick={() => {
+                  onClick={async () => {
+                    await fetchAssignClasses();
+                    await fetchAssignSections();
+
                     setAssignTo((a) => ({
                       ...a,
                       class: a.class || (stuClass !== "all" ? stuClass : ""),
-                      section:
-                        a.section || (stuSection !== "all" ? stuSection : ""),
+                      section: "",
                     }));
+
                     setAssignOpen(true);
                   }}
                 >
@@ -1076,10 +1170,10 @@ useEffect(() => {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-display">Assign Students</DialogTitle>
-            <DialogDescription>
+            {/* <DialogDescription>
               {stuSelected.size} student(s) selected. Choose the target Class,
               Section and Session.
-            </DialogDescription>
+            </DialogDescription> */}
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -1092,24 +1186,9 @@ useEffect(() => {
                   <SelectValue placeholder="Select class" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[
-                    "Pre-KG",
-                    "KG",
-                    "I",
-                    "II",
-                    "III",
-                    "IV",
-                    "V",
-                    "VI",
-                    "VII",
-                    "VIII",
-                    "IX",
-                    "X",
-                    "XI",
-                    "XII",
-                  ].map((c) => (
-                    <SelectItem key={c} value={c}>
-                      Class {c}
+                  {assignClasses.map((cls) => (
+                    <SelectItem key={cls.class_uuid} value={cls.class_name}>
+                      {cls.class_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1117,19 +1196,22 @@ useEffect(() => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Section</Label>
-              <Select
-                value={assignTo.section}
-                onValueChange={(v) =>
-                  setAssignTo((a) => ({ ...a, section: v }))
-                }
-              >
+          <Select
+  value={assignTo.section}
+  onValueChange={(v) =>
+    setAssignTo((a) => ({
+      ...a,
+      section: v,
+    }))
+  }
+>
                 <SelectTrigger>
                   <SelectValue placeholder="Select section" />
                 </SelectTrigger>
                 <SelectContent>
-                  {["A", "B", "C", "D", "E", "F"].map((c) => (
-                    <SelectItem key={c} value={c}>
-                      Section {c}
+                  {filteredAssignSections.map((sec) => (
+                    <SelectItem key={sec.section_uuid} value={sec.section_name}>
+                      {sec.section_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1269,34 +1351,40 @@ useEffect(() => {
       />
 
       <CalendarEventDialog
-  open={calOpen}
-  onOpenChange={setCalOpen}
-  edit={calEdit}
-  calendar={calendar}
-  onSubmit={async (payload) => {
-    try {
-      if (calEdit) {
-        await updateAcademicCalendar(calEdit.calendar_uuid, payload);
-      } else {
-        await createAcademicCalendar(payload);
-      }
-      fetchCalendar();
-      toast.success(
-        calEdit ? "Calendar event updated" : "Calendar event added",
-      );
-      setCalOpen(false);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to save calendar event");
-      throw err; // let the dialog map field errors too
-    }
-  }}
-/>
+        open={calOpen}
+        onOpenChange={setCalOpen}
+        edit={calEdit}
+        calendar={calendar}
+        onSubmit={async (payload) => {
+          try {
+            if (calEdit) {
+              await updateAcademicCalendar(calEdit.calendar_uuid, payload);
+            } else {
+              await createAcademicCalendar(payload);
+            }
+            fetchCalendar();
+            toast.success(
+              calEdit ? "Calendar event updated" : "Calendar event added",
+            );
+            setCalOpen(false);
+          } catch (err) {
+            console.error(err);
+            toast.error("Failed to save calendar event");
+            throw err; // let the dialog map field errors too
+          }
+        }}
+      />
     </PageContainer>
   );
 }
 
-function CalendarEventDialog({ open, onOpenChange, edit, calendar = [], onSubmit }) {
+function CalendarEventDialog({
+  open,
+  onOpenChange,
+  edit,
+  calendar = [],
+  onSubmit,
+}) {
   const parseEditRange = (ed) => {
     if (!ed) return {};
     const a = ed.start_date ? new Date(ed.start_date) : undefined;
@@ -1451,11 +1539,11 @@ function CalendarEventDialog({ open, onOpenChange, edit, calendar = [], onSubmit
               }
             />
             {errors.event_name && (
-  <p className="text-xs text-destructive flex items-center gap-1">
-    <AlertTriangle className="h-3 w-3" />
-    {errors.event_name}
-  </p>
-)}
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                {errors.event_name}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
