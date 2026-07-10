@@ -7,14 +7,36 @@ import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue,} from "./ui/
 import { Bell, Search, Moon, Sun, HelpCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { UserMenu } from "./user-menu";
-
+import useSessionStore from "../store/sessionStore";
 export function Topbar() {
   const [dark, setDark] = useState(false);
-  const [academicYear, setAcademicYear] = useState("2026-2027");
+const sessionYear = useSessionStore((state) => state.sessionYear);
+const setSessionYear = useSessionStore((state) => state.setSessionYear);
+
+const currentYear = new Date().getFullYear();
+
+const academicYears = Array.from({ length: 6 }, (_, index) => {
+  const start = currentYear + 2 - index; // 2 future years
+  const end = String(start + 1).slice(-2);
+
+  return {
+    value: `${start}-${end}`,
+    label: `AY ${start}-${end}`,
+  };
+});
+// useEffect(() => {
+//   if (!sessionYear) {
+//     setSessionYear(academicYears[0].value);
+//   }
+// }, [sessionYear, setSessionYear]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
+
+useEffect(() => {
+  console.log("Current Active Session:", sessionYear);
+}, [sessionYear]);
 
   return (
     <header className="sticky top-0 z-30 h-14 border-b bg-background/80 backdrop-blur-md flex items-center gap-2 px-3 md:px-4">
@@ -31,17 +53,20 @@ export function Topbar() {
       </div>
       <div className="flex-1 md:hidden" />
       <div className="flex items-center gap-1.5 ml-auto ">
-       <Select value={academicYear} onValueChange={setAcademicYear}>
+ <Select
+  value={sessionYear}
+  onValueChange={setSessionYear}
+>
   <SelectTrigger className="w-[170px] h-9 hidden md:flex">
     <SelectValue />
   </SelectTrigger>
 
   <SelectContent>
-    <SelectItem value="2026-2027">AY 2026-2027</SelectItem>
-    <SelectItem value="2025-2026">AY 2025-2026</SelectItem>
-    <SelectItem value="2024-2025">AY 2024-2025</SelectItem>
-    <SelectItem value="2023-2024">AY 2023-2024</SelectItem>
-    <SelectItem value="2022-2023">AY 2022-2023</SelectItem>
+    {academicYears.map((year) => (
+      <SelectItem key={year.value} value={year.value}>
+        {year.label}
+      </SelectItem>
+    ))}
   </SelectContent>
 </Select>
         <Button
