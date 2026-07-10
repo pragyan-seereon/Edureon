@@ -79,3 +79,23 @@ export const deleteSection = async (sectionUUID) => {
 
   return data;
 };
+
+// api/class.js
+
+export const getStudentsBySection = async (classUUID, sectionUUID, sessionYear) => {
+  const { instituteUUID } = useAuthStore.getState();
+
+  const { data } = await api.get("/students/filter", {
+    headers: {
+      "X-Institute-UUID": instituteUUID,
+    },
+    params: {
+      institute_uuid: instituteUUID,
+      session_year: sessionYear,
+      class_uuid: classUUID,
+      section_uuid: sectionUUID,
+    },
+  });
+
+  return data;
+};

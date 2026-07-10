@@ -9,15 +9,19 @@ const getHeaders = () => {
   };
 };
 
+export const getUnassignedStudents = async (sessionYear) => {
+  const { instituteUUID } = useAuthStore.getState();
 
-export const getStudents = async () => {
-  const { data } = await api.get("/students", {
+  const { data } = await api.get("/students/session/unassigned", {
     headers: getHeaders(),
+    params: {
+      institute_uuid: instituteUUID,
+      session_year: sessionYear,
+    },
   });
 
   return data;
 };
-
 
 export const assignStudentsToSection = async (payload) => {
   const { data } = await api.post(
@@ -30,5 +34,16 @@ export const assignStudentsToSection = async (payload) => {
 
   return data;
 };
+export const getActiveStudents = async () => {
+  const { instituteUUID } = useAuthStore.getState();
 
+  const { data } = await api.get("/students/", {
+    headers: getHeaders(),
+    params: {
+      institute_uuid: instituteUUID,
+      status: "ACTIVE",
+    },
+  });
 
+  return data;
+};

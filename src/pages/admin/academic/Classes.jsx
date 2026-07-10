@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/immutability */
 /* eslint-disable no-unused-vars */
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
 import { KpiCard } from "../../../components/kpi-card";
 import {
@@ -104,7 +104,10 @@ import {
   deleteClass,
   getClassByUUID,
 } from "../../../api/class";
-import { getStudents,assignStudentsToSection } from "../../../api/assignstudent.js";
+import { getUnassignedStudents,assignStudentsToSection } from "../../../api/assignstudent.js";
+import { getPromotionStudents,promoteStudents, } from "../../../api/promotions";
+import {getSectionAssignmentStudents , moveStudentsToSection , getStreamAssignedStudents,applyStreamChange  } from "../../../api/transfer";
+
 import {
   validateSubjectForm,
   mapApiErrorToFieldErrors,
@@ -124,6 +127,7 @@ import {
   updateSection,
   deleteSection,
   getSectionByUUID,
+  getStudentsBySection,
 } from "../../../api/section";
 import {
   getAcademicCalendar,
@@ -142,9 +146,11 @@ import {
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
 import { format } from "date-fns";
+import useSessionStore from "../../../store/sessionStore";
 
 export default function Classes() {
   const navigate = useNavigate();
+   const [searchParams] = useSearchParams();
   const [sections, setSections] = useState([]);
   const [sectionLoading, setSectionLoading] = useState(false);
   const [subjects, setSubjects] = useState([]);
@@ -181,39 +187,39 @@ export default function Classes() {
       toast.error("Failed to fetch subjects");
     }
   };
-  const fetchStudents = async () => {
-    try {
-      setStudentLoading(true);
+ const fetchStudents = async () => {
+  try {
+    setStudentLoading(true);
 
-      const res = await getStudents();
+    const sessionYear =
+      String(new Date().getFullYear()) +
+      "-" +
+      String(new Date().getFullYear() + 1).slice(-2);
 
-      const mapped = (res.data || []).map((student) => ({
-        id: student.student_uuid,
-        uuid: student.student_uuid,
-        name: student.full_name,
-        admissionNo: student.admission_no,
-        class: student.class_name,
-        section: student.section_name,
-        rollNo: student.roll_no,
-        parent: student.father_name,
-        phone: student.primary_phone,
-        session: student.session_year,
-        attendance: student.attendance_percentage,
-        feeStatus: student.fee_status,
-        gender: student.gender,
-        status: student.status,
-        email: student.email,
-        studentNo: student.student_no,
-      }));
+    const res = await getUnassignedStudents(sessionYear);
 
-      setStudents(mapped);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to fetch students");
-    } finally {
-      setStudentLoading(false);
-    }
-  };
+    const mapped = (res.data || []).map((student) => ({
+      id: student.student_uuid,
+      uuid: student.student_uuid,
+      name: student.full_name,
+      admissionNo: student.admission_no,
+      class: student.class_name,
+      section: student.section_name,
+      session: student.session_year,
+      studentNo: student.student_no,
+      stream: student.stream,
+      class_uuid: student.class_uuid,
+      section_uuid: student.section_uuid,
+    }));
+
+    setStudents(mapped);
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to fetch unassigned students");
+  } finally {
+    setStudentLoading(false);
+  }
+};
   const fetchCalendar = async () => {
     try {
       const res = await getAcademicCalendar();
@@ -298,27 +304,35 @@ export default function Classes() {
 
   const [activeTab, setActiveTab] = useState("subjects");
   const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    if (tab === "classes") {
-      fetchSubjects();
-      fetchFaculties();
-    } else if (tab === "subjects") {
-      fetchSubjects();
-      fetchFaculties();
-    } else if (tab === "sections") {
-      fetchSections();
-      fetchRooms();
-    } else if (tab === "calendar") {
-      fetchCalendar();
-    } else if (tab === "students") {
-      fetchStudents();
-    }
-  };
+  setActiveTab(tab);
+  navigate(`/classes?tab=${tab}`, { replace: true }); // keep URL in sync
+  if (tab === "classes") {
+    fetchSubjects();
+    fetchFaculties();
+  } else if (tab === "subjects") {
+    fetchSubjects();
+    fetchFaculties();
+  } else if (tab === "sections") {
+    fetchSections();
+    fetchRooms();
+  } else if (tab === "calendar") {
+    fetchCalendar();
+  } else if (tab === "students") {
+    fetchStudents();
+    fetchAssignClasses();
+  }
+};
 
-  useEffect(() => {
-    handleTabChange("subjects");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+useEffect(() => {
+  const tabFromUrl = searchParams.get("tab");
+  handleTabChange(tabFromUrl || "subjects");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+// useEffect(() => {
+//   handleTabChange("subjects");
+//   // eslint-disable-next-line react-hooks/exhaustive-deps
+// }, []);
 
   const [secOpen, setSecOpen] = useState(false);
 
@@ -334,7 +348,7 @@ export default function Classes() {
   // Students tab state
   const [stuQ, setStuQ] = useState("");
   const [stuClass, setStuClass] = useState("all");
-  const [stuSection, setStuSection] = useState("all");
+  // const [stuSection, setStuSection] = useState("all");
   const [stuSelected, setStuSelected] = useState(new Set());
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignClasses, setAssignClasses] = useState([]);
@@ -348,15 +362,18 @@ export default function Classes() {
       String(new Date().getFullYear() + 1).slice(-2),
   });
 
-  const classOptions = useMemo(
-    () => Array.from(new Set(students.map((s) => s.class))).sort(),
-    [students],
-  );
-  const sectionOptions = useMemo(
-    () => Array.from(new Set(students.map((s) => s.section))).sort(),
-    [students],
-  );
-
+  // const classOptions = useMemo(
+  //   () => Array.from(new Set(students.map((s) => s.class))).sort(),
+  //   [students],
+  // );
+  // const sectionOptions = useMemo(
+  //   () => Array.from(new Set(students.map((s) => s.section))).sort(),
+  //   [students],
+  // );
+const classOptions = useMemo(
+  () => assignClasses,
+  [assignClasses]
+);
   const filteredAssignSections = useMemo(() => {
     const selectedClass = assignClasses.find(
       (c) => c.class_name === assignTo.class,
@@ -369,24 +386,25 @@ export default function Classes() {
     );
   }, [assignClasses, assignSections, assignTo.class]);
 
-  const filteredStudents = useMemo(
-    () =>
-      students.filter((s) => {
-        if (stuClass !== "all" && s.class !== stuClass) return false;
-        if (stuSection !== "all" && s.section !== stuSection) return false;
-        if (
-          stuQ &&
-          !(
-            s.name.toLowerCase().includes(stuQ.toLowerCase()) ||
-            s.admissionNo.toLowerCase().includes(stuQ.toLowerCase()) ||
-            s.parent.toLowerCase().includes(stuQ.toLowerCase())
-          )
+ const filteredStudents = useMemo(
+  () =>
+    students.filter((s) => {
+      if (stuClass !== "all" && s.class !== stuClass) return false;
+
+      if (
+        stuQ &&
+        !(
+          s.name.toLowerCase().includes(stuQ.toLowerCase()) ||
+          s.admissionNo.toLowerCase().includes(stuQ.toLowerCase())
         )
-          return false;
-        return true;
-      }),
-    [students, stuQ, stuClass, stuSection],
-  );
+      ) {
+        return false;
+      }
+
+      return true;
+    }),
+  [students, stuQ, stuClass],
+);
 
   const allStuSelected =
     filteredStudents.length > 0 &&
@@ -600,36 +618,32 @@ const performAssign = async () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {/* <DropdownMenuItem
-                              onClick={() =>
-                                toast.info(
-                                  `Class Teacher: ${s.teacher} · Room ${s.room?.room_name || s.room?.room_number || "—"}`,
-                                )
-                              }
-                            >
-                              <Eye className="h-4 w-4" />
-                              View
-                            </DropdownMenuItem> */}
-                            <DropdownMenuItem
-                              onClick={async () => {
-                                try {
-                                  setSectionLoading(true);
-                                  const res = await getSectionByUUID(
-                                    s.section_uuid,
-                                  );
-                                  setSecEdit(res.data);
-                                  setSecOpen(true);
-                                } catch (err) {
-                                  console.error(err);
-                                  toast.error("Failed to load section");
-                                } finally {
-                                  setSectionLoading(false);
-                                }
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
+  <DropdownMenuItem
+    onClick={() => navigate(`/classes/${s.section_uuid}`)}
+  >
+    <Eye className="h-4 w-4" />
+    View
+  </DropdownMenuItem>
+  <DropdownMenuItem
+    onClick={async () => {
+      try {
+        setSectionLoading(true);
+        const res = await getSectionByUUID(
+          s.section_uuid,
+        );
+        setSecEdit(res.data);
+        setSecOpen(true);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load section");
+      } finally {
+        setSectionLoading(false);
+      }
+    }}
+  >
+    <Pencil className="h-4 w-4" />
+    Edit
+  </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
@@ -1043,14 +1057,17 @@ const performAssign = async () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All classes</SelectItem>
-                    {classOptions.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        Class {c}
-                      </SelectItem>
-                    ))}
+                   {classOptions.map((cls) => (
+  <SelectItem
+    key={cls.class_uuid}
+    value={cls.class_name}
+  >
+    {cls.class_name}
+  </SelectItem>
+))}
                   </SelectContent>
                 </Select>
-                <Select value={stuSection} onValueChange={setStuSection}>
+                {/* <Select value={stuSection} onValueChange={setStuSection}>
                   <SelectTrigger className="h-9 w-32">
                     <SelectValue placeholder="Section" />
                   </SelectTrigger>
@@ -1062,7 +1079,7 @@ const performAssign = async () => {
                       </SelectItem>
                     ))}
                   </SelectContent>
-                </Select>
+                </Select> */}
                 <Button
                   size="sm"
                   className="gradient-primary border-0"
@@ -1098,8 +1115,8 @@ const performAssign = async () => {
                     <TableHead>Admission No</TableHead>
                     <TableHead>Class</TableHead>
                     <TableHead>Roll</TableHead>
-                    <TableHead>Parent</TableHead>
-                    <TableHead>Phone</TableHead>
+                    {/* <TableHead>Parent</TableHead> */}
+                    {/* <TableHead>Phone</TableHead> */}
                     <TableHead>Session</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1135,11 +1152,11 @@ const performAssign = async () => {
                           {s.class}-{s.section}
                         </Badge>
                       </TableCell>
-                      <TableCell>{s.rollNo}</TableCell>
-                      <TableCell className="text-sm">{s.parent}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+<TableCell>{s.studentNo}</TableCell>
+                      {/* <TableCell className="text-sm">{s.parent}</TableCell> */}
+                      {/* <TableCell className="text-xs text-muted-foreground">
                         {s.phone}
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell className="text-xs">
                         {s.session ?? "—"}
                       </TableCell>
@@ -2159,17 +2176,24 @@ function nextClass(c) {
   return i >= 0 && i < ROMAN_ORDER.length - 1 ? ROMAN_ORDER[i + 1] : c;
 }
 function PromotionsTab() {
-  const students = useStudents();
+  const [students, setStudents] = useState([]);
+  const [errors, setErrors] = useState({});
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [classList, setClassList] = useState([]);
   const [sectionList, setSectionList] = useState([]);
-  const [fromClass, setFromClass] = useState("");
+  const [fromClass, setFromClass] = useState("I");
   const [fromSection, setFromSection] = useState("all");
   const [toClass, setToClass] = useState("");
   const [toSection, setToSection] = useState("same");
+const sessionYear = useSessionStore((state) => state.sessionYear);
+ 
+
+  // destination session — user-editable "New Session" field
   const [session, setSession] = useState(() => {
     const y = new Date().getFullYear() + 1;
     return `${y}-${String(y + 1).slice(-2)}`;
   });
+
   const [selected, setSelected] = useState(new Set());
 
   const classes = classList;
@@ -2196,22 +2220,56 @@ function PromotionsTab() {
     [students, fromClass, fromSection],
   );
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const classRes = await getClasses();
-        setClassList(classRes.data || []);
+const fetchPromotionStudents = async () => {
+  try {
+    setLoadingStudents(true);
 
-        const sectionRes = await getSections();
-        setSectionList(sectionRes.data || []);
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to load classes and sections");
-      }
-    };
+    const res = await getPromotionStudents(sessionYear);
 
-    loadData();
-  }, []);
+    const mapped = (res.data || []).map((student) => ({
+      id: student.student_uuid,
+      uuid: student.student_uuid,
+      name: student.full_name,
+      admissionNo: student.student_no,
+      studentNo: student.student_no,
+      class: student.class_name,
+      class_uuid: student.class_uuid,
+      section: student.section_name,
+      section_uuid: student.section_uuid,
+      rollNo: student.roll_no,
+      session: student.session_year,
+      stream: student.stream,
+    }));
+
+    setStudents(mapped);
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to fetch students");
+  } finally {
+    setLoadingStudents(false);
+  }
+};
+useEffect(() => {
+  fetchPromotionStudents();
+}, [sessionYear]);
+useEffect(() => {
+  const loadData = async () => {
+    try {
+      const classRes = await getClasses();
+      setClassList(classRes.data || []);
+
+      const sectionRes = await getSections();
+      setSectionList(sectionRes.data || []);
+
+await fetchPromotionStudents();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load data");
+    }
+  };
+
+  loadData();
+}, []);
   // Auto-select all candidates whenever the filter changes
   useEffect(() => {
     setSelected(new Set(candidates.map((s) => s.id)));
@@ -2250,21 +2308,67 @@ function PromotionsTab() {
       return n;
     });
 
-  const promote = () => {
-    const list = candidates.filter((s) => selected.has(s.id));
-    if (list.length === 0)
-      return toast.error("Select at least one student to promote");
-    list.forEach((s) =>
-      studentsApi.update(s.id, {
-        class: toClass,
-        section: toSection === "same" ? s.section : toSection,
-        session,
-      }),
-    );
-    toast.success(
-      `Promoted ${list.length} student(s) → ${toClass}-${toSection === "same" ? "(same)" : toSection} · ${session}`,
-    );
-  };
+const promote = async () => {
+  const list = candidates.filter((s) => selected.has(s.id));
+
+  if (list.length === 0) {
+    toast.error("Select at least one student to promote");
+    return;
+  }
+
+  const toClassObj = classList.find((c) => c.class_name === toClass);
+  const keepSameSection = toSection === "same";
+  const toSectionObj = keepSameSection
+    ? null
+    : toClassSections.find((s) => s.section_name === toSection);
+
+  if (!toClassObj) {
+    toast.error("Could not resolve the target class");
+    return;
+  }
+
+  if (!keepSameSection && !toSectionObj) {
+    toast.error("Could not resolve the target section");
+    return;
+  }
+
+  if (toClassObj.class_uuid === list[0].class_uuid) {
+    setErrors({ toClass: "From class and To class cannot be same." });
+    toast.error("From class and To class cannot be same.");
+    return;
+  }
+  setErrors({});
+
+  try {
+    const payload = {
+      student_uuids: list.map((s) => s.uuid),
+      from_class_uuid: list[0].class_uuid,
+      from_section_uuid: list[0].section_uuid,
+      to_class_uuid: toClassObj.class_uuid,
+      keep_same_section: keepSameSection,
+      to_section_uuid: keepSameSection ? null : toSectionObj.section_uuid,
+      session_year: session, // destination session, unchanged
+    };
+
+    const res = await promoteStudents(payload);
+
+    toast.success(res.message || `Promoted ${res.promoted_count ?? list.length} student(s)`);
+
+    if (res.skipped_count > 0) {
+      toast.warning(`${res.skipped_count} student(s) were skipped`);
+    }
+
+    fetchPromotionStudents(fromSession); // 👈 refresh using the current FROM filter
+    setSelected(new Set());
+  } catch (err) {
+    console.error(err);
+    const detail = err?.response?.data?.detail;
+    const msg = Array.isArray(detail)
+      ? detail.map((d) => d.msg).join(", ")
+      : detail || err?.response?.data?.message || "Failed to promote students";
+    toast.error(msg);
+  }
+};
 
   return (
     <Card className="border-border/60">
@@ -2277,19 +2381,40 @@ function PromotionsTab() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-3 rounded-md border p-3">
-            <div className="text-xs font-semibold uppercase text-muted-foreground">
-              From
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Class</Label>
-              <Select
-                value={fromClass}
-                onValueChange={(v) => {
-                  setFromClass(v);
-                  setToClass(nextClass(v));
-                }}
-              >
+         <div className="space-y-3 rounded-md border p-3">
+  <div className="text-xs font-semibold uppercase text-muted-foreground">
+    From
+  </div>
+  {/* <div className="space-y-1.5">
+    <Label className="text-xs">Session</Label>
+    <Select value={fromSession} onValueChange={setFromSession}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {(() => {
+          const y = new Date().getFullYear();
+          return [y - 1, y, y + 1].map((yr) => {
+            const label = `${yr}-${String(yr + 1).slice(-2)}`;
+            return (
+              <SelectItem key={label} value={label}>
+                {label}
+              </SelectItem>
+            );
+          });
+        })()}
+      </SelectContent>
+    </Select>
+  </div> */}
+  <div className="space-y-1.5">
+    <Label className="text-xs">Class</Label>
+    <Select
+      value={fromClass}
+      onValueChange={(v) => {
+        setFromClass(v);
+        setToClass(nextClass(v));
+      }}
+    >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -2324,20 +2449,26 @@ function PromotionsTab() {
               To
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Class</Label>
-              <Select value={toClass} onValueChange={setToClass}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {classes.map((c) => (
-                    <SelectItem key={c.class_uuid} value={c.class_name}>
-                      {c.class_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+  <Label className="text-xs">Class</Label>
+  <Select value={toClass} onValueChange={(v) => { setToClass(v); setErrors({}); }}>
+    <SelectTrigger className={errors.toClass ? "border-destructive focus-visible:ring-destructive" : ""}>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      {classes.map((c) => (
+        <SelectItem key={c.class_uuid} value={c.class_name}>
+          {c.class_name}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+  {errors.toClass && (
+    <p className="text-xs text-destructive flex items-center gap-1">
+      <AlertTriangle className="h-3 w-3" />
+      {errors.toClass}
+    </p>
+  )}
+</div>
             <div className="space-y-1.5">
               <Label className="text-xs">Section</Label>
               <Select value={toSection} onValueChange={setToSection}>
@@ -2370,9 +2501,9 @@ function PromotionsTab() {
               <span className="font-semibold">{selected.size}</span> of{" "}
               {candidates.length} selected
             </div>
-            <div className="text-[11px] text-muted-foreground">
+            {/* <div className="text-[11px] text-muted-foreground">
               Uncheck any student who should not be promoted (e.g. failed).
-            </div>
+            </div> */}
           </div>
           <div className="max-h-[360px] overflow-y-auto">
             <Table>
@@ -2446,9 +2577,9 @@ function PromotionsTab() {
               {toSection !== "same" ? `-${toSection}` : ""}
             </Badge>
           </div>
-          <Button className="gradient-primary border-0" onClick={promote}>
-            <Trophy className="h-4 w-4" /> Promote Selected
-          </Button>
+         <Button className="gradient-primary border-0" onClick={promote}>
+  <Trophy className="h-4 w-4" /> Promote Selected
+</Button>
         </div>
       </CardContent>
     </Card>
@@ -2457,14 +2588,121 @@ function PromotionsTab() {
 
 // ================= Transfers Tab (Section + Stream + Archive + Requests) =================
 function TransfersTab() {
-  const students = useStudents();
-  const classes = useClasses();
+  // const students = useStudents();
+  const [students, setStudents] = useState([]);
+  const secFiltered = students;
   const requests = useSectionChangeRequests();
   const activeStudents = useMemo(
     () => students.filter((s) => !s.archived),
     [students],
   );
+  const sessionYear = useSessionStore((state) => state.sessionYear);
 
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  // ----- Real class/section data for the Section Change card -----
+  const [classList, setClassList] = useState([]);
+  const [sectionList, setSectionList] = useState([]);
+  const [classSectionLoading, setClassSectionLoading] = useState(false);
+
+ // ---- Stream Change: separate student list ----
+  const [streamStudents, setStreamStudents] = useState([]);
+  const [loadingStreamStudents, setLoadingStreamStudents] = useState(false);
+
+  const fetchStreamStudents = async () => {
+    try {
+      setLoadingStreamStudents(true);
+      const res = await getStreamAssignedStudents(sessionYear);
+
+      const mapped = (res.data || []).map((student) => {
+        const cls = classList.find((c) => c.class_uuid === student.class_uuid);
+        const sec = sectionList.find((s) => s.section_uuid === student.section_uuid);
+        return {
+          id: student.student_uuid,
+          uuid: student.student_uuid,
+          name: student.full_name,
+          admissionNo: student.student_no,
+          studentNo: student.student_no,
+          class: cls?.class_name ?? "—",
+          class_uuid: student.class_uuid,
+          section: sec?.section_name ?? "—",
+          section_uuid: student.section_uuid,
+          rollNo: student.roll_no,
+          stream: student.stream,
+          session: student.session_year,
+        };
+      });
+
+      setStreamStudents(mapped);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch stream-assigned students");
+    } finally {
+      setLoadingStreamStudents(false);
+    }
+  };
+
+ useEffect(() => {
+    fetchStreamStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionYear, classList, sectionList]);
+
+  const fetchClassesAndSections = async () => {
+    try {
+      setClassSectionLoading(true);
+      const [classRes, sectionRes] = await Promise.all([
+        getClasses(),
+        getSections(),
+      ]);
+      setClassList(classRes.data || []);
+      setSectionList(sectionRes.data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch classes/sections");
+    } finally {
+      setClassSectionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClassesAndSections();
+  }, []);
+
+  const fetchTransferStudents = async (search = "") => {
+  try {
+    setLoadingStudents(true);
+
+    const res = await getSectionAssignmentStudents(
+      sessionYear,
+      search
+    );
+
+    const mapped = (res.data || []).map((student) => ({
+      id: student.student_uuid,
+      uuid: student.student_uuid,
+      name: student.full_name,
+      admissionNo: student.student_no,
+      studentNo: student.student_no,
+      class: student.class_name,
+      class_uuid: student.class_uuid,
+      section: student.section_name,
+      section_uuid: student.section_uuid,
+      rollNo: student.roll_no,
+      stream: student.stream,
+      session: student.session_year,
+    }));
+
+    setStudents(mapped);
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to fetch students");
+  } finally {
+    setLoadingStudents(false);
+  }
+};
+useEffect(() => {
+  fetchTransferStudents();
+}, [sessionYear]);
   // ----- Section change (multi-select) -----
   const [secQ, setSecQ] = useState("");
   const [secSelected, setSecSelected] = useState(new Set());
@@ -2472,69 +2710,121 @@ function TransfersTab() {
   const [secNewSection, setSecNewSection] = useState("");
   const [secReason, setSecReason] = useState("");
 
-  const secFiltered = useMemo(
-    () =>
-      activeStudents.filter(
-        (s) =>
-          !secQ ||
-          s.name.toLowerCase().includes(secQ.toLowerCase()) ||
-          s.admissionNo.toLowerCase().includes(secQ.toLowerCase()) ||
-          `${s.class}-${s.section}`.toLowerCase().includes(secQ.toLowerCase()),
-      ),
-    [activeStudents, secQ],
-  );
+  // sections available for the chosen "New Class"
+  const secNewClassSections = useMemo(() => {
+    const selectedClass = classList.find((c) => c.class_name === secNewClass);
+    if (!selectedClass) return [];
+    return sectionList.filter((s) => s.class_uuid === selectedClass.class_uuid);
+  }, [classList, sectionList, secNewClass]);
+  
+  // const secFiltered = useMemo(
+  //   () =>
+  //     activeStudents.filter(
+  //       (s) =>
+  //         !secQ ||
+  //         s.name.toLowerCase().includes(secQ.toLowerCase()) ||
+  //         s.admissionNo.toLowerCase().includes(secQ.toLowerCase()) ||
+  //         `${s.class}-${s.section}`.toLowerCase().includes(secQ.toLowerCase()),
+  //     ),
+  //   [activeStudents, secQ],
+  // );
+useEffect(() => {
+  const timer = setTimeout(() => {
+    fetchTransferStudents(secQ);
+  }, 300);
 
+  return () => clearTimeout(timer);
+}, [secQ, sessionYear]);
   const toggleSec = (id) =>
     setSecSelected((p) => {
       const n = new Set(p);
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
+const handleSecNewClassChange = (v) => {
+  setSecNewClass(v);
+  setSecNewSection(""); // clear stale section from a different class
+};
 
-  const moveSectionBulk = () => {
-    if (secSelected.size === 0)
-      return toast.error("Select at least one student");
-    if (!secNewSection && !secNewClass)
-      return toast.error("Choose a new class or section");
-    let count = 0;
-    secSelected.forEach((id) => {
-      const s = students.find((x) => x.id === id);
-      if (!s) return;
-      const targetClass = secNewClass || s.class;
-      const targetSection = secNewSection || s.section;
-      studentsApi.update(s.id, { class: targetClass, section: targetSection });
-      sectionChangeApi.add({
-        studentId: s.id,
-        studentName: s.name,
-        fromClass: s.class,
-        fromSection: s.section,
-        toClass: targetClass,
-        toSection: targetSection,
-        reason: secReason || "Admin transfer",
-        status: "Approved",
-      });
-      count++;
-    });
-    toast.success(`${count} student(s) moved`);
+ const moveSectionBulk = async () => {
+  if (secSelected.size === 0) {
+    toast.error("Select at least one student");
+    return;
+  }
+  if (!secNewClass && !secNewSection) {
+    toast.error("Choose a new class or section");
+    return;
+  }
+
+  const targetClass = secNewClass
+    ? classList.find((c) => c.class_name === secNewClass)
+    : null;
+  const targetSection = secNewSection
+    ? secNewClassSections.find((s) => s.section_name === secNewSection)
+    : null;
+
+  if (secNewClass && !targetClass) {
+    toast.error("Could not resolve the selected class");
+    return;
+  }
+  if (secNewSection && !targetSection) {
+    toast.error("Could not resolve the selected section");
+    return;
+  }
+
+  const selectedStudents = students.filter((s) => secSelected.has(s.id));
+  if (selectedStudents.length === 0) {
+    toast.error("Could not resolve the selected students");
+    return;
+  }
+
+  try {
+   const payload = {
+  student_uuids: selectedStudents.map((s) => s.uuid),
+  new_class_uuid: targetClass
+    ? targetClass.class_uuid
+    : selectedStudents[0].class_uuid,
+  new_section_uuid: targetSection
+    ? targetSection.section_uuid
+    : selectedStudents[0].section_uuid,
+  session_year: sessionYear,
+  reason: secReason || "Admin transfer",
+};
+
+    const res = await moveStudentsToSection(payload);
+
+    toast.success(
+      res.message || `${res.moved_count ?? selectedStudents.length} student(s) moved`,
+    );
+
+    if (res.skipped_count > 0) {
+      toast.warning(`${res.skipped_count} student(s) were skipped`);
+    }
+
     setSecSelected(new Set());
     setSecNewClass("");
     setSecNewSection("");
     setSecReason("");
-  };
+    fetchTransferStudents(secQ); // refresh the list from the server
+  } catch (err) {
+    console.error(err);
+    toast.error(err?.response?.data?.message || "Failed to move students");
+  }
+};
 
   // ----- Stream change (multi-select) -----
   const [strQ, setStrQ] = useState("");
   const [strSelected, setStrSelected] = useState(new Set());
   const [strNew, setStrNew] = useState("Commerce");
-  const strFiltered = useMemo(
+ const strFiltered = useMemo(
     () =>
-      activeStudents.filter(
+      streamStudents.filter(
         (s) =>
           !strQ ||
           s.name.toLowerCase().includes(strQ.toLowerCase()) ||
           s.admissionNo.toLowerCase().includes(strQ.toLowerCase()),
       ),
-    [activeStudents, strQ],
+    [streamStudents, strQ],
   );
   const toggleStr = (id) =>
     setStrSelected((p) => {
@@ -2543,48 +2833,46 @@ function TransfersTab() {
       return n;
     });
 
-  const changeStreamBulk = () => {
-    if (strSelected.size === 0)
-      return toast.error("Select at least one student");
-    let credits = 0,
-      debits = 0,
-      done = 0;
-    strSelected.forEach((id) => {
-      const s = students.find((x) => x.id === id);
-      if (!s) return;
-      const oldFee = classesApi.feeFor(s.class, s.stream);
-      const newFee = classesApi.feeFor(s.class, strNew);
-      if (!newFee) return;
-      studentsApi.update(s.id, { stream: strNew });
-      const diff = oldFee - newFee;
-      if (diff > 0) {
-        walletApi.add({
-          studentId: s.id,
-          type: "Credit",
-          amount: diff,
-          reason: `Stream change ${s.stream ?? "—"} → ${strNew}`,
-        });
-        credits += diff;
-      } else if (diff < 0) {
-        walletApi.add({
-          studentId: s.id,
-          type: "Debit",
-          amount: -diff,
-          reason: `Stream change ${s.stream ?? "—"} → ${strNew}`,
-        });
-        debits += -diff;
-      }
-      done++;
-    });
-    if (done === 0)
-      return toast.error(
-        `No fee mapping for target ${strNew}. Add it in Classes tab.`,
-      );
+ const changeStreamBulk = async () => {
+  if (strSelected.size === 0) {
+    toast.error("Select at least one student");
+    return;
+  }
+
+  const selectedStudents = streamStudents.filter((s) =>
+    strSelected.has(s.id),
+  );
+
+  if (selectedStudents.length === 0) {
+    toast.error("Could not resolve the selected students");
+    return;
+  }
+
+  try {
+    const payload = {
+      student_uuids: selectedStudents.map((s) => s.uuid),
+      new_stream: strNew,
+      session_year: sessionYear,
+    };
+
+    const res = await applyStreamChange(payload);
+
     toast.success(
-      `${done} switched to ${strNew}. Credits ₹${credits.toLocaleString("en-IN")}, Additional dues ₹${debits.toLocaleString("en-IN")}.`,
+      res.message ||
+        `Stream changed for ${res.changed_count ?? selectedStudents.length} student(s).`,
     );
+
+    if (res.skipped_count > 0) {
+      toast.warning(`${res.skipped_count} student(s) were skipped`);
+    }
+
     setStrSelected(new Set());
-  };
+    fetchStreamStudents();
+  } catch (err) {
+    console.error(err);
+    toast.error(err?.response?.data?.message || "Failed to change stream");
+  }
+};
 
   // ----- Archive student -----
   const [archOpen, setArchOpen] = useState(false);
@@ -2620,17 +2908,15 @@ function TransfersTab() {
   return (
     <div className="grid lg:grid-cols-2 gap-4">
       {/* Section Change */}
-      <Card className="border-border/60">
+      <Card className="border-border/60 ">
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle className="text-base">Section Change</CardTitle>
-            <CardDescription>
-              Move one or many students to a different class/section.
-            </CardDescription>
           </div>
           <Badge variant="secondary">{secSelected.size} selected</Badge>
         </CardHeader>
         <CardContent className="space-y-3">
+          
           <div className="relative">
             <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-muted-foreground" />
             <Input
@@ -2640,6 +2926,7 @@ function TransfersTab() {
               className="pl-8"
             />
           </div>
+ 
           <div className="max-h-[240px] overflow-y-auto rounded-md border">
             <Table>
               <TableHeader className="sticky top-0 bg-background">
@@ -2647,7 +2934,7 @@ function TransfersTab() {
                   <TableHead className="w-8"></TableHead>
                   <TableHead>Student</TableHead>
                   <TableHead>Current Class</TableHead>
-                  <TableHead>Stream</TableHead>
+                  {/* <TableHead>Stream</TableHead> */}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2669,44 +2956,44 @@ function TransfersTab() {
                         {s.class}-{s.section}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs">{s.stream ?? "—"}</TableCell>
+                    {/* <TableCell className="text-xs">{s.stream ?? "—"}</TableCell> */}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">New Class (optional)</Label>
-              <Select value={secNewClass} onValueChange={setSecNewClass}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Keep same" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROMAN_ORDER.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">New Section</Label>
-              <Select value={secNewSection} onValueChange={setSecNewSection}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick section" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sectionOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      Section {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                   <div className="grid grid-cols-2 gap-3">
+  <div className="space-y-1.5">
+    <Label className="text-xs">New Class (optional)</Label>
+    <Select value={secNewClass} onValueChange={handleSecNewClassChange}>
+      <SelectTrigger>
+        <SelectValue placeholder={classSectionLoading ? "Loading…" : "Keep same"} />
+      </SelectTrigger>
+      <SelectContent>
+        {classList.map((c) => (
+          <SelectItem key={c.class_uuid} value={c.class_name}>
+            {c.class_name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+  <div className="space-y-1.5">
+    <Label className="text-xs">New Section</Label>
+    <Select value={secNewSection} onValueChange={setSecNewSection}>
+      <SelectTrigger>
+        <SelectValue placeholder={secNewClass ? "Pick section" : "Pick a class first"} />
+      </SelectTrigger>
+      <SelectContent>
+        {secNewClassSections.map((s) => (
+          <SelectItem key={s.section_uuid} value={s.section_name}>
+            Section {s.section_name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+</div>
           <div className="space-y-1.5">
             <Label className="text-xs">Reason (optional)</Label>
             <Textarea
@@ -2725,14 +3012,14 @@ function TransfersTab() {
       </Card>
 
       {/* Stream Change */}
-      <Card className="border-border/60">
+       <Card className="border-border/60">
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle className="text-base">Stream Change</CardTitle>
-            <CardDescription>
+            {/* <CardDescription>
               Bulk stream switch. Fee differential is auto-credited to each
               student's wallet.
-            </CardDescription>
+            </CardDescription> */}
           </div>
           <Badge variant="secondary">{strSelected.size} selected</Badge>
         </CardHeader>
@@ -2804,22 +3091,22 @@ function TransfersTab() {
           >
             Apply Stream Change ({strSelected.size})
           </Button>
-          <div className="text-[11px] text-muted-foreground">
-            Available streams in Classes:{" "}
-            {Array.from(new Set(classes.map((c) => c.stream))).join(", ")}
-          </div>
+          {/* <div className="text-[11px] text-muted-foreground">
+           Available streams in Classes:{" "}
+           {Array.from(new Set(classList.map((c) => c.stream))).join(", ")}
+          </div> */}
         </CardContent>
-      </Card>
+      </Card> 
 
       {/* Archive Students */}
       <Card className="border-border/60 lg:col-span-2">
         <CardHeader className="flex-row items-center justify-between space-y-0 gap-3 flex-wrap">
           <div>
             <CardTitle className="text-base">Archived Students</CardTitle>
-            <CardDescription>
+            {/* <CardDescription>
               Mark students as left the school or transferred to another branch.
               Archived students are hidden from active lists.
-            </CardDescription>
+            </CardDescription> */}
           </div>
           <Button
             size="sm"
@@ -2896,12 +3183,9 @@ function TransfersTab() {
       </Card>
 
       {/* Student Requests */}
-      <Card className="border-border/60 lg:col-span-2">
+      {/* <Card className="border-border/60 lg:col-span-2">
         <CardHeader>
           <CardTitle className="text-base">Student Requests</CardTitle>
-          <CardDescription>
-            Section change requests raised from the student portal.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -3000,7 +3284,7 @@ function TransfersTab() {
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Archive Dialog */}
       <Dialog open={archOpen} onOpenChange={setArchOpen}>
