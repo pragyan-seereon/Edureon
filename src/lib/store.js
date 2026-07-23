@@ -2688,3 +2688,178 @@ export const sectionChangeApi = {
   remove: (id) =>
     sectionChangeStore.set((arr) => arr.filter((x) => x.id !== id)),
 };
+
+// ============ Departments ============
+const initDepartments = [
+  { id: "DEP001", name: "Mathematics", head: "Mr. R. Verma", description: "Pure & applied math across VI–XII." },
+  { id: "DEP002", name: "Science", head: "Ms. A. Iyer", description: "Physics, Chemistry, Biology and combined science." },
+  { id: "DEP003", name: "Languages", head: "Ms. P. Sen", description: "English, Hindi and second languages." },
+  { id: "DEP004", name: "Humanities", head: "Mr. V. Rao", description: "History, Geography, Political Science, Economics." },
+  { id: "DEP005", name: "Computer Sci", head: "Ms. K. Nair", description: "CS, Informatics Practices and IT skills." },
+  { id: "DEP006", name: "Commerce", head: "Mr. S. Gupta", description: "Accountancy, Business Studies, Economics." },
+  { id: "DEP007", name: "Sports", head: "Coach D. Singh", description: "PE, sports and co-curricular activities." },
+];
+const departmentStore = createStore(initDepartments);
+export const useDepartments = () => useStore(departmentStore);
+let _depN = 100;
+export const departmentsApi = {
+  list: () => departmentStore.get(),
+  add: (d) => {
+    const id = "DEP" + String(++_depN).padStart(3, "0");
+    departmentStore.set((arr) => [{ ...d, id }, ...arr]);
+    activityApi.log("department", id, "Created");
+    return id;
+  },
+  update: (id, patch) => {
+    departmentStore.set((arr) => arr.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    activityApi.log("department", id, "Updated");
+  },
+  remove: (id) => {
+    departmentStore.set((arr) => arr.filter((x) => x.id !== id));
+    activityApi.log("department", id, "Deleted");
+  },
+  archive: (id, archived = true) => {
+    departmentStore.set((arr) => arr.map((x) => (x.id === id ? { ...x, archived } : x)));
+    activityApi.log("department", id, archived ? "Archived" : "Restored");
+  },
+  assignSubjects: (id, subjectIds) =>
+    departmentStore.set((arr) => arr.map((x) => (x.id === id ? { ...x, subjectIds } : x))),
+};
+
+// ============================================================
+// Academic Correlation / Data Health
+// Cross-module reconciliation: Students ↔ Classes ↔ Sections ↔
+// Subjects ↔ SubjectMappings ↔ FeeStructures.
+// ============================================================
+
+export const derivedApi = {
+  activeStudents: () => studentStore.get().filter((s) => !s.archived),
+  studentsInClass: (className) =>
+    derivedApi.activeStudents().filter((s) => s.class === className),
+  studentsInSection: (className, section) =>
+    derivedApi.activeStudents().filter((s) => s.class === className && s.section === section),
+  sectionActualCount: (sec) =>
+    derivedApi.studentsInSection(sec.class, sec.name.split("-").pop() || sec.name).length,
+  subjectMappingsFor: (sectionId) =>
+    subjectMappingStore.get().filter((m) => m.sectionId === sectionId && !m.archived),
+  facultiesFor: (subjectId) => {
+    const s = new Set();
+    subjectMappingStore
+      .get()
+      .filter((m) => m.subjectId === subjectId && !m.archived)
+      .forEach((m) => s.add(m.teacher));
+    return s;
+  },
+};
+
+export function academicHealth() {
+  const checks = [];
+  const classes = classStore.get();
+  const classNames = new Set(classes.filter((c) => c.status === "Active").map((c) => c.name));
+  const sections = sectionStore.get().filter((s) => !s.archived);
+  const subjects = subjectStore.get().filter((s) => !s.archived);
+  const mappings = subjectMappingStore.get().filter((m) => !m.archived);
+  const fees = structureStore.get();
+  const students = derivedApi.activeStudents();
+
+  const orphanStudents = students.filter((s) => !classNames.has(s.class));
+  checks.push({
+    id: "stu-cls", category: "Students",
+    label: "Students mapped to an active Class",
+    level: orphanStudents.length === 0 ? "pass" : "fail",
+    expected: students.length, actual: students.length - orphanStudents.length,
+    details: orphanStudents.slice(0, 5).map((s) => `${s.name} · class="${s.class}"`),
+  });
+
+  const validSectionKeys = new Set(sections.map((s) => `${s.class}::${s.name.split("-").pop()}`));
+  const orphanSec = students.filter((s) => !validSectionKeys.has(`${s.class}::${s.section}`));
+  checks.push({
+    id: "stu-sec", category: "Students",
+    label: "Students mapped to an existing Section",
+    level: orphanSec.length === 0 ? "pass" : "warn",
+    expected: students.length, actual: students.length - orphanSec.length,
+    details: orphanSec.slice(0, 5).map((s) => `${s.name} · ${s.class}-${s.section}`),
+  });
+
+  const secMismatch = [];
+  sections.forEach((sec) => {
+    const actual = derivedApi.sectionActualCount(sec);
+    if (actual !== sec.students) secMismatch.push(`${sec.name}: stored=${sec.students}, actual=${actual}`);
+  });
+  checks.push({
+    id: "sec-count", category: "Sections",
+    label: "Section student count matches live roster",
+    level: secMismatch.length === 0 ? "pass" : "warn",
+    expected: sections.length, actual: sections.length - secMismatch.length,
+    details: secMismatch.slice(0, 8),
+  });
+
+  const overCap = sections.filter((s) => s.students > s.cap);
+  checks.push({
+    id: "sec-cap", category: "Rooms",
+    label: "Sections within room capacity",
+    level: overCap.length === 0 ? "pass" : "fail",
+    expected: sections.length, actual: sections.length - overCap.length,
+    details: overCap.map((s) => `${s.name} @ ${s.room}: ${s.students}/${s.cap}`),
+  });
+
+  const subMismatch = [];
+  subjects.forEach((sub) => {
+    const actual = derivedApi.facultiesFor(sub.id).size;
+    if (actual > 0 && actual !== sub.faculty)
+      subMismatch.push(`${sub.name}: stored=${sub.faculty}, actual=${actual}`);
+  });
+  checks.push({
+    id: "sub-fac", category: "Subjects",
+    label: "Subject faculty count matches assignments",
+    level: subMismatch.length === 0 ? "pass" : "warn",
+    expected: subjects.length, actual: subjects.length - subMismatch.length,
+    details: subMismatch.slice(0, 8),
+  });
+
+  const secSubMismatch = [];
+  sections.forEach((sec) => {
+    const actual = derivedApi.subjectMappingsFor(sec.id).length;
+    if (actual > 0 && actual !== sec.subjects)
+      secSubMismatch.push(`${sec.name}: stored=${sec.subjects}, mappings=${actual}`);
+  });
+  checks.push({
+    id: "sec-sub", category: "Sections",
+    label: "Section subject count matches SubjectMappings",
+    level: secSubMismatch.length === 0 ? "pass" : "warn",
+    expected: sections.length, actual: sections.length - secSubMismatch.length,
+    details: secSubMismatch.slice(0, 8),
+  });
+
+  const orphanFees = fees.filter((f) => !classNames.has(f.class));
+  checks.push({
+    id: "fee-cls", category: "Fees",
+    label: "Fee Structures reference an active Class",
+    level: orphanFees.length === 0 ? "pass" : "fail",
+    expected: fees.length, actual: fees.length - orphanFees.length,
+    details: orphanFees.map((f) => `${f.name} · class="${f.class}"`),
+  });
+
+  const feeClasses = new Set(fees.map((f) => f.class));
+  const missingFees = [...classNames].filter((c) => !feeClasses.has(c));
+  checks.push({
+    id: "cls-fee", category: "Fees",
+    label: "Every active Class has a Fee Structure",
+    level: missingFees.length === 0 ? "pass" : "warn",
+    expected: classNames.size, actual: classNames.size - missingFees.length,
+    details: missingFees.map((c) => `Class ${c}`),
+  });
+
+  const subIds = new Set(subjects.map((s) => s.id));
+  const secIds = new Set(sections.map((s) => s.id));
+  const badMaps = mappings.filter((m) => !subIds.has(m.subjectId) || !secIds.has(m.sectionId));
+  checks.push({
+    id: "map-fk", category: "Subjects",
+    label: "SubjectMappings link to live Subjects & Sections",
+    level: badMaps.length === 0 ? "pass" : "fail",
+    expected: mappings.length, actual: mappings.length - badMaps.length,
+    details: badMaps.slice(0, 6).map((m) => `${m.id} → sec=${m.sectionId}, sub=${m.subjectId}`),
+  });
+
+  return checks;
+}

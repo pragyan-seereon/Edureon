@@ -199,8 +199,8 @@ export function validateSectionForm(form, existingSections = [], editUuid = null
   // ---- Required checks ----
   if (!name) errors.name = SECTION_VALIDATION_MESSAGES.NAME_REQUIRED;
   if (!classUuid) errors.class_uuid = SECTION_VALIDATION_MESSAGES.CLASS_REQUIRED;
-  if (!teacher) errors.teacher = SECTION_VALIDATION_MESSAGES.TEACHER_REQUIRED;
   if (!total || total <= 0) errors.total = SECTION_VALIDATION_MESSAGES.CAPACITY_REQUIRED;
+  // teacher required check removed
 
   const others = existingSections.filter((s) => s.section_uuid !== editUuid);
 
@@ -215,7 +215,8 @@ export function validateSectionForm(form, existingSections = [], editUuid = null
   }
 
   // ---- Same teacher can't be class teacher of another section ----
-  if (!errors.teacher && teacher) {
+  // Only check for duplicate teacher if one was actually selected
+  if (teacher) {
     const teacherTaken = others.some(
       (s) => String(s.class_teacher_user_id ?? "") === String(teacher),
     );
