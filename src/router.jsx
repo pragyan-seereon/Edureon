@@ -55,6 +55,7 @@ import AssignmentDetail from "./pages/admin/academic/AssignmentsDetail";
 import Notifications from "./pages/admin/Notifications";
 import TimeTable from "./pages/admin/academic/TimeTable";
 import FeesPage from "./pages/admin/modules/Fees";
+import FeeAccount from "./pages/admin/modules/fee-account";
 import Transport from "./pages/admin/modules/Transport";
 import Hostel from "./pages/admin/modules/Hostel";
 import LibraryPage from "./pages/admin/modules/Library";
@@ -69,6 +70,8 @@ import TransactionsPage from "./pages/superadmin/TransactionsPage";
 import FeeCollection from "./pages/admin/modules/FeeCollection";
 import SubjectDetail from "./pages/admin/academic/SubjectDetail";// const defaultPrivatePath = "/super/institutes";
 import SectionDetail from "./pages/admin/academic/SectionDetail";
+import StudentArchive from "./pages/admin/academic/Studentarchive"
+
 
 const router = createBrowserRouter([
   {
@@ -145,6 +148,10 @@ const router = createBrowserRouter([
       { path: "/timetable", element: <TimeTable /> },
       { path: "/subjects/:id", element: <SubjectDetail /> },
       { path: "/classes/:sectionUUID", element: <SectionDetail /> },
+      { path: "/sudents/archive", element: <StudentArchive /> },
+
+
+      
       //admin modules routes
       { path: "/fees", element: <FeesPage /> },
       { path: "/admin/dms", element: <Dms /> },
@@ -164,6 +171,8 @@ const router = createBrowserRouter([
       { path: "/roles", element: <RolesPage /> },
 
       { path: "*",element: <NotFoundPage />  },
+      {
+    path: "/fee-account/:studentUuid",element: <FeeAccount />,},
     ],
   },
 ]);

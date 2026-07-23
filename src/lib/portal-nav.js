@@ -54,6 +54,8 @@ const adminGroups = [
       { title: "Attendance", url: "/attendance", icon: FileText },
       { title: "Examinations", url: "/exams", icon: BookOpen },
       { title: "Notices", url: "/notices", icon: Megaphone },
+      { title: "Studentarchive", url: "/sudents/archive", icon: Megaphone },
+
     ],
   },
   {
@@ -114,6 +116,7 @@ const superGroups = [
     items: [
       { title: "Admissions", url: "/admin/admissions", icon: KanbanSquare },
       { title: "Students", url: "/students", icon: GraduationCap },
+      { title: "Studentarchive", url: "/sudents/archive", icon: Megaphone },
       { title: "Teachers", url: "/teachers", icon: UserCog },
       { title: "Classes & Sections", url: "/classes", icon: School },
       { title: "Attendance", url: "/attendance", icon: CalendarCheck },

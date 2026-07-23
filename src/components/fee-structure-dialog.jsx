@@ -11,10 +11,13 @@ import {
   createFeeStructure,
   updateFeeStructure,
 } from "../api/feeStructure";
+import { getClasses } from "../api/class";
+import useAuthStore from "../store/authStore";
 import { toast } from "sonner";
 
-const CLASSES = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
+
 const COURSES = ["CBSE", "ICSE", "State Board", "IB", "Cambridge"];
+
 const FREQ = [
   "MONTHLY",
   "QUARTERLY",
@@ -38,16 +41,16 @@ const newComp = (name = "", freq = "MONTHLY") => ({
 });
 
 export function FeeStructureDialog({ open, onOpenChange, structure }) {
+const instituteUUID = useAuthStore((state) => state.instituteUUID);
+const [classes, setClasses] = useState([]);
 const [f, setF] = useState({
   academic_year: "2025-26",
-  class_name: "VI",
+  class_uuid: "",
   course_name: "CBSE",
   structure_name: "",
-
   due_day: 10,
   late_fee_amount: 500,
   grace_days: 0,
-
   components: [newComp("Base Fee")],
 });
 
@@ -57,7 +60,7 @@ useEffect(() => {
 
     setF({
       academic_year: structure.academic_year,
-      class_name: structure.class_name,
+      class_uuid: structure.class_uuid,
       course_name: structure.course_name,
       structure_name: structure.structure_name,
       due_day: structure.due_day,
@@ -78,7 +81,7 @@ useEffect(() => {
 
     setF({
       academic_year: "2025-26",
-      class_name: "VI",
+      class_uuid:"",
       course_name: "CBSE",
       structure_name: "",
       due_day: 10,
@@ -94,6 +97,19 @@ useEffect(() => {
 
 }, [structure, open]); 
 
+const fetchClasses = async () => {
+  try {
+    const response = await getClasses();
+
+    setClasses(response.data || []);
+
+  } catch (error) {
+    console.log(error);
+  }
+};
+useEffect(() => {
+    fetchClasses();
+}, []);
 
   const addComp = (label = "") =>
     setF((p) => ({ ...p, components: [...p.components, newComp(label)] }));
@@ -119,34 +135,43 @@ useEffect(() => {
 
   try {
 
-    const user = JSON.parse(localStorage.getItem("user"));
+    if (!instituteUUID) {
+      toast.error("Institute context missing. Please re-login and try again.");
+      return;
+    }
 
     const payload = {
 
-      institute_id: 12,
+          institute_uuid: instituteUUID,
 
-      institute_uuid: "fbad5628-a9c4-4377-8c2a-cf84eeb4f024",
+          academic_year:f.academic_year,
 
-      academic_year: f.academic_year,
+          class_uuid:f.class_uuid,
 
-      class_name: f.class_name,
+          course_name:f.course_name,
 
-      course_name: f.course_name,
+          structure_name:f.structure_name,
 
-      structure_name: f.structure_name,
+          collection_type:"MONTHLY",
 
-      due_day: Number(f.due_day),
+          due_day:Number(f.due_day),
 
-      late_fee_amount: Number(f.late_fee_amount),
+          late_fee_amount:Number(f.late_fee_amount),
 
-      grace_days: Number(f.grace_days),
+          grace_days:Number(f.grace_days),
 
-      components: f.components.map((item, index) => ({
-        component_name: item.component_name,
-        amount: Number(item.amount),
-        frequency: item.frequency,
-        display_order: index + 1,
-        is_optional: item.is_optional,
+          components: f.components.map((item, index) => ({
+
+          component_name: item.component_name,
+
+          amount: Number(item.amount),
+
+          frequency: item.frequency,
+
+          display_order: index + 1,
+
+          is_optional: item.is_optional,
+
       })),
     };
 
@@ -217,14 +242,33 @@ useEffect(() => {
               placeholder="Class 6 — Standard 2025-26"
             />
           </Field>
+
           <Field label="Class">
-            <Select value={f.class_name} onValueChange={(v) => setF({ ...f, class_name: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={f.class_uuid}
+              onValueChange={(value) =>
+                setF({
+                  ...f,
+                  class_uuid: value,
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select Class" />
+              </SelectTrigger>
               <SelectContent>
-                {CLASSES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {classes.map((item) => (
+                  <SelectItem
+                    key={item.class_uuid}
+                    value={item.class_uuid}
+                  >
+                    {item.class_name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
+
           <Field label="Course / Board">
             <Select value={f.course_name} onValueChange={(v) => setF({ ...f, course_name: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
