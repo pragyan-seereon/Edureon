@@ -12,8 +12,6 @@ import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { Textarea } from "../../components/ui/textarea";
-import { Checkbox } from "../../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -30,36 +28,20 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import {
-  BookOpen,
-  Briefcase,
-  Building2,
-  CheckCircle2,
   Copy,
-  CreditCard,
-  Eye,
-  FilePen,
-  FileText,
-  GraduationCap,
-  Library,
   Lock,
   Pencil,
   Plus,
-  Save,
   Search,
   Shield,
   Trash2,
   Users,
 } from "lucide-react";
-import {
-  customRolesApi,
-  permOverridesApi,
-  useAppUsers,
-  useCustomRoles,
-  usePermOverrides,
-} from "../../lib/store";
+import { customRolesApi, useAppUsers, useCustomRoles } from "../../lib/store";
 import { useAuth } from "../../lib/auth";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
+import { RoleWizard, MODULE_CATALOG } from "../../components/role-wizard";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -114,21 +96,6 @@ const SYSTEM_ROLES = [
   },
 ];
 
-const MODULES = [
-  { key: "Dashboard",     desc: "Overview, analytics & quick actions",         icon: Building2     },
-  { key: "Students",      desc: "Profiles, admissions & documents",             icon: GraduationCap },
-  { key: "Employees",     desc: "Staff records, HR details & payroll",          icon: Briefcase     },
-  { key: "Fees",          desc: "Collections, receipts, concessions & dues",    icon: CreditCard    },
-  { key: "Attendance",    desc: "Student and staff attendance workflows",        icon: CheckCircle2  },
-  { key: "Exams",         desc: "Exam setup, marks entry & result publishing",  icon: BookOpen      },
-  { key: "Library",       desc: "Books, lending, returns & fines",              icon: Library       },
-  { key: "Reports",       desc: "Academic, finance & custom reports",           icon: FileText      },
-  { key: "Communication", desc: "Notices, messages & announcements",            icon: Users         },
-  { key: "Settings",      desc: "Institute settings & security controls",       icon: Shield        },
-];
-
-const ACTIONS = ["view", "create", "edit", "delete"];
-
 const SCOPES = [
   "Own Records Only",
   "Own Class / Department",
@@ -137,66 +104,92 @@ const SCOPES = [
   "All Institutes",
 ];
 
-// Action column header metadata
-const ACTION_META = {
-  view:   { label: "View",   colorClass: "text-blue-600",  dotClass: "bg-blue-500",   icon: Eye     },
-  create: { label: "Create", colorClass: "text-green-600", dotClass: "bg-green-500",  icon: Plus    },
-  edit:   { label: "Edit",   colorClass: "text-amber-600", dotClass: "bg-amber-500",  icon: FilePen },
-  delete: { label: "Delete", colorClass: "text-red-600",   dotClass: "bg-red-500",    icon: Trash2  },
+// ─── System role default permissions ──────────────────────────────────────────
+// System roles don't go through the wizard, but we still want their "Module
+// permissions" panel to look and read exactly like a wizard-created role's.
+// These profiles are expressed in the same module/tab/action language as
+// MODULE_CATALOG so both role types render through the same component.
+
+const FULL_ACTIONS  = ["view", "create", "update", "delete", "export", "approve"];
+const RW_ACTIONS    = ["view", "create", "update", "export"];
+const BASIC_ACTIONS = ["view", "create", "update"];
+const VIEW_ONLY     = ["view"];
+const VIEW_UPDATE   = ["view", "update"];
+
+const SYSTEM_ROLE_PROFILES = {
+  "Super Admin": Object.fromEntries(MODULE_CATALOG.map((m) => [m.key, FULL_ACTIONS])),
+
+  "Institute Admin": Object.fromEntries(
+    MODULE_CATALOG.map((m) => [m.key, m.key === "settings" ? VIEW_UPDATE : RW_ACTIONS]),
+  ),
+
+  "Principal": {
+    admissions: RW_ACTIONS,
+    students: RW_ACTIONS,
+    classes: RW_ACTIONS,
+    timetable: RW_ACTIONS,
+    attendance: RW_ACTIONS,
+    assignments: RW_ACTIONS,
+    exams: RW_ACTIONS,
+    communication: RW_ACTIONS,
+    reports: RW_ACTIONS,
+    fees: VIEW_ONLY,
+    employees: VIEW_ONLY,
+    settings: VIEW_ONLY,
+  },
+
+  "Teacher": {
+    students: VIEW_ONLY,
+    classes: BASIC_ACTIONS,
+    timetable: VIEW_ONLY,
+    attendance: BASIC_ACTIONS,
+    assignments: [...BASIC_ACTIONS, "approve"],
+    exams: BASIC_ACTIONS,
+    communication: BASIC_ACTIONS,
+  },
+
+  "Accountant": {
+    fees: RW_ACTIONS,
+    payroll: RW_ACTIONS,
+    reports: RW_ACTIONS,
+    students: VIEW_ONLY,
+    employees: VIEW_ONLY,
+  },
+
+  "Librarian": {
+    library: RW_ACTIONS,
+    communication: VIEW_ONLY,
+    reports: VIEW_ONLY,
+  },
+
+  "Student": {
+    attendance: VIEW_ONLY,
+    exams: VIEW_ONLY,
+    library: VIEW_ONLY,
+    communication: VIEW_ONLY,
+  },
+
+  "Parent": {
+    students: VIEW_ONLY,
+    attendance: VIEW_ONLY,
+    fees: VIEW_ONLY,
+    exams: VIEW_ONLY,
+    communication: VIEW_ONLY,
+  },
 };
 
-// ─── Default permissions ──────────────────────────────────────────────────────
-
-function defaultPerms(roleName, moduleName) {
-  const none     = { view: false, create: false, edit: false, delete: false };
-  const viewOnly = { view: true,  create: false, edit: false, delete: false };
-  const noDelete = { view: true,  create: true,  edit: true,  delete: false };
-  const full     = { view: true,  create: true,  edit: true,  delete: true  };
-
-  if (roleName === "Super Admin") return full;
-
-  if (roleName === "Institute Admin") {
-    if (moduleName === "Settings") return { view: true, create: false, edit: true, delete: false };
-    return noDelete;
-  }
-
-  if (roleName === "Principal") {
-    if (["Fees", "Settings"].includes(moduleName)) return viewOnly;
-    return noDelete;
-  }
-
-  if (roleName === "Teacher") {
-    const allowed = ["Dashboard", "Students", "Attendance", "Exams", "Communication"];
-    if (!allowed.includes(moduleName)) return none;
-    if (moduleName === "Dashboard") return viewOnly;
-    return noDelete;
-  }
-
-  if (roleName === "Accountant") {
-    if (moduleName === "Fees" || moduleName === "Reports") return noDelete;
-    if (["Dashboard", "Students", "Employees"].includes(moduleName)) return viewOnly;
-    return none;
-  }
-
-  if (roleName === "Librarian") {
-    if (moduleName === "Library")       return noDelete;
-    if (moduleName === "Dashboard")     return viewOnly;
-    if (moduleName === "Reports")       return viewOnly;
-    if (moduleName === "Communication") return viewOnly;
-    return none;
-  }
-
-  if (roleName === "Student") {
-    const allowed = ["Dashboard", "Attendance", "Exams", "Library", "Communication"];
-    return allowed.includes(moduleName) ? viewOnly : none;
-  }
-
-  if (roleName === "Parent") {
-    const allowed = ["Dashboard", "Students", "Attendance", "Fees", "Exams", "Communication"];
-    return allowed.includes(moduleName) ? viewOnly : none;
-  }
-
-  return viewOnly;
+function buildSystemWizardPerms(roleName) {
+  const profile = SYSTEM_ROLE_PROFILES[roleName] ?? {};
+  const perms = {};
+  MODULE_CATALOG.forEach((m) => {
+    const actions = profile[m.key];
+    if (!actions) return;
+    perms[m.key] = {
+      enabled: true,
+      tabs: Object.fromEntries(m.tabs.map((t) => [t.key, [...actions]])),
+    };
+  });
+  return perms;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -214,16 +207,6 @@ function roleKey(name = "") {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
-function accessForRole(roleName, overrides, draft = {}) {
-  return Object.fromEntries(
-    MODULES.map((m) => {
-      const saved = overrides[`${roleName}:${m.key}`];
-      const base  = saved ?? defaultPerms(roleName, m.key);
-      return [m.key, draft[m.key] ?? base];
-    }),
-  );
-}
-
 function countAssigned(users, roleName) {
   const target = roleKey(roleName);
   return users.filter((u) => {
@@ -232,194 +215,75 @@ function countAssigned(users, roleName) {
   }).length;
 }
 
-function accessibleModuleCount(access) {
-  return Object.values(access).filter((p) => Object.values(p).some(Boolean)).length;
+// Single source of truth for "what can this role actually do", for both
+// System roles (generated profile) and Custom roles (saved by the wizard).
+function getEffectivePerms(role, customRoles) {
+  if (role.type === "Custom") {
+    const raw = customRoles.find((r) => r.id === role.id);
+    return raw?.perms ?? {};
+  }
+  return buildSystemWizardPerms(role.name);
 }
 
-function totalGrantedActions(access) {
-  return Object.values(access).reduce(
-    (sum, p) => sum + ACTIONS.filter((a) => p[a]).length,
-    0,
-  );
+function countWizardModules(perms) {
+  return Object.values(perms || {}).filter((v) => v?.enabled).length;
 }
 
-function validateRole({ name, desc }, roles, currentName = "") {
-  const clean = name.trim();
-  if (clean.length < 3)           return "Role name must be at least 3 characters.";
-  if (clean.length > 60)          return "Role name is too long.";
-  if (!/^[A-Za-z0-9 -]+$/.test(clean)) return "Use only letters, numbers, spaces, and hyphens.";
-  if (desc.length > 180)          return "Description must be 180 characters or less.";
-  const duplicate = roles.some(
-    (r) =>
-      r.name.toLowerCase() === clean.toLowerCase() &&
-      r.name.toLowerCase() !== currentName.toLowerCase(),
-  );
-  return duplicate ? "A role with this name already exists." : "";
+function countWizardActions(perms) {
+  return Object.values(perms || {}).reduce((sum, m) => {
+    if (!m?.enabled) return sum;
+    return sum + Object.values(m.tabs ?? {}).reduce((s, acts) => s + acts.length, 0);
+  }, 0);
 }
 
-// ─── RoleDialog ──────────────────────────────────────────────────────────────
+// ─── ModulePermissionsSummary ─────────────────────────────────────────────────
+// Renders module → tab → action permissions for ANY role (system or custom) in
+// one consistent format, sourced from getEffectivePerms().
 
-function RoleDialog({ open, mode, role, roles, onClose, onSubmit }) {
-  const [name, setName] = useState(role?.name ?? "");
-  const [desc, setDesc] = useState(role?.desc ?? "");
-  const error = validateRole({ name, desc }, roles, mode === "edit" ? role?.name : "");
+function ModulePermissionsSummary({ perms }) {
+  const enabledModules = Object.entries(perms || {}).filter(([, v]) => v?.enabled);
+
+  if (enabledModules.length === 0) {
+    return (
+      <div className="p-6 text-center text-sm text-muted-foreground">
+        No modules configured for this role yet.
+      </div>
+    );
+  }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{mode === "edit" ? "Edit role" : "Create role"}</DialogTitle>
-          <DialogDescription>
-            Keep the name simple. You can set module access after saving.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Role name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Branch Admin"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Description</Label>
-            <Textarea
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              rows={3}
-              maxLength={180}
-              placeholder="Shortly explain who should get this role."
-            />
-            <p className="text-[11px] text-muted-foreground text-right">{desc.length}/180</p>
-          </div>
-          {error && (
-            <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
+    <div className="divide-y divide-border/60">
+      {enabledModules.map(([key, modPerms]) => {
+        const spec = MODULE_CATALOG.find((m) => m.key === key);
+        if (!spec) return null;
+        const tabEntries = Object.entries(modPerms.tabs ?? {});
+
+        return (
+          <div key={key} className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold">{spec.label}</p>
+              <Badge variant="outline" className="text-[10px]">
+                {tabEntries.length}/{spec.tabs.length} tabs
+              </Badge>
             </div>
-          )}
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            className="gradient-primary border-0"
-            disabled={Boolean(error)}
-            onClick={() => onSubmit({ name: name.trim(), desc: desc.trim() })}
-          >
-            {mode === "edit" ? "Save role" : "Create role"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── PermissionsMatrix ────────────────────────────────────────────────────────
-
-function PermissionsMatrix({ access, onToggle }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        {/* Header */}
-        <thead>
-          <tr className="bg-muted/40 border-b border-border/60">
-            <th className="py-3 px-4 text-left font-medium text-muted-foreground w-64">
-              Module
-            </th>
-            {ACTIONS.map((action) => {
-              const meta = ACTION_META[action];
-              return (
-                <th
-                  key={action}
-                  className="py-3 px-4 text-center font-medium w-24"
-                >
-                  <div className="flex flex-col items-center gap-1.5">
-                    <span className={cn("h-2 w-2 rounded-full", meta.dotClass)} />
-                    <span className={cn("text-[11px]", meta.colorClass)}>{meta.label}</span>
-                  </div>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-
-        {/* Body */}
-        <tbody>
-          {MODULES.map((module, idx) => {
-            const Icon  = module.icon;
-            const perms = access[module.key];
-            const anyOn = ACTIONS.some((a) => perms[a]);
-
-            return (
-              <tr
-                key={module.key}
-                className={cn(
-                  "border-b border-border/50 transition-colors hover:bg-muted/30",
-                  idx % 2 === 0 ? "" : "bg-muted/10",
-                )}
-              >
-                {/* Module info */}
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "h-9 w-9 rounded-md flex items-center justify-center shrink-0 transition-colors",
-                        anyOn ? "bg-primary/10" : "bg-muted/50",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "h-4 w-4",
-                          anyOn ? "text-primary" : "text-muted-foreground",
-                        )}
-                      />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-[13px]">{module.key}</p>
-                      <p className="text-[11px] text-muted-foreground">{module.desc}</p>
-                    </div>
-                  </div>
-                </td>
-
-                {/* Checkboxes */}
-                {ACTIONS.map((action) => {
-                  const isDisabledByView = action !== "view" && !perms.view;
+            {tabEntries.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No tabs enabled.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {tabEntries.map(([tabKey, actions]) => {
+                  const tabSpec = spec.tabs.find((t) => t.key === tabKey);
                   return (
-                    <td key={action} className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center">
-                        <Checkbox
-                          checked={perms[action]}
-                          disabled={isDisabledByView}
-                          title={
-                            isDisabledByView
-                              ? "Enable View first"
-                              : `Toggle ${ACTION_META[action].label}`
-                          }
-                          onCheckedChange={(checked) =>
-                            onToggle(module.key, action, Boolean(checked))
-                          }
-                          className={cn(
-                            "h-[18px] w-[18px] rounded transition-all",
-                            isDisabledByView && "cursor-not-allowed opacity-35",
-                            !isDisabledByView && perms[action] &&
-                              action === "view"   && "border-blue-500 bg-blue-500 text-white",
-                            !isDisabledByView && perms[action] &&
-                              action === "create" && "border-green-500 bg-green-500 text-white",
-                            !isDisabledByView && perms[action] &&
-                              action === "edit"   && "border-amber-500 bg-amber-500 text-white",
-                            !isDisabledByView && perms[action] &&
-                              action === "delete" && "border-red-500 bg-red-500 text-white",
-                          )}
-                        />
-                      </div>
-                    </td>
+                    <Badge key={tabKey} variant="secondary" className="text-[10px] font-normal">
+                      {tabSpec?.label ?? tabKey}:{" "}
+                      <span className="ml-1 font-semibold">{actions.join(", ")}</span>
+                    </Badge>
                   );
                 })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -430,13 +294,12 @@ export default function RolesPage() {
   const { user }    = useAuth();
   const users       = useAppUsers();
   const customRoles = useCustomRoles();
-  const overrides   = usePermOverrides();
 
   const [query, setQuery]               = useState("");
   const [activeRoleId, setActiveRoleId] = useState("sys-institute-admin");
-  const [drafts, setDrafts]             = useState({});
   const [scopes, setScopes]             = useState({});
-  const [dialog, setDialog]             = useState(null);
+  const [wizardOpen, setWizardOpen]     = useState(false);  // controls RoleWizard for both create + edit
+  const [editingRole, setEditingRole]   = useState(null);   // raw custom role passed to RoleWizard when editing
   const [deleteRole, setDeleteRole]     = useState(null);
 
   const roles = useMemo(
@@ -449,71 +312,42 @@ export default function RolesPage() {
     return q ? roles.filter((r) => `${r.name} ${r.desc}`.toLowerCase().includes(q)) : roles;
   }, [query, roles]);
 
-  const activeRole    = roles.find((r) => r.id === activeRoleId) ?? roles[0];
-  const access        = accessForRole(activeRole.name, overrides, drafts[activeRole.name]);
-  const assignedCount = countAssigned(users, activeRole.name);
-  const canEditRole   = activeRole.type === "Custom";
-  const activeScope   = scopes[activeRole.name] ?? (activeRole.name === "Super Admin" ? "All Institutes" : "Assigned Branch");
-  const hasChanges    = Boolean(drafts[activeRole.name]);
-
-  // ── Toggle a single action ────────────────────────────────────────────────
-  const toggleAction = (moduleName, action, value) => {
-    setDrafts((cur) => {
-      const prev       = cur[activeRole.name] ?? {};
-      const prevModule = prev[moduleName] ?? access[moduleName];
-      let next         = { ...prevModule, [action]: value };
-
-      if (action === "view" && !value) {
-        next = { view: false, create: false, edit: false, delete: false };
-      }
-      if (action !== "view" && value) {
-        next.view = true;
-      }
-
-      return { ...cur, [activeRole.name]: { ...prev, [moduleName]: next } };
-    });
-  };
-
-  // ── Save permissions ──────────────────────────────────────────────────────
-  const savePermissions = () => {
-    const nextAccess = drafts[activeRole.name] ?? access;
-    MODULES.forEach((m) => {
-      permOverridesApi.set(activeRole.name, m.key, nextAccess[m.key]);
-    });
-    setDrafts((cur) => {
-      const next = { ...cur };
-      delete next[activeRole.name];
-      return next;
-    });
-    toast.success(`${activeRole.name} permissions saved`);
-  };
+  const activeRole     = roles.find((r) => r.id === activeRoleId) ?? roles[0];
+  const assignedCount  = countAssigned(users, activeRole.name);
+  const canEditRole    = activeRole.type === "Custom";
+  const activeScope    = scopes[activeRole.name] ?? (activeRole.name === "Super Admin" ? "All Institutes" : "Assigned Branch");
+  const activePerms    = getEffectivePerms(activeRole, customRoles);
+  const moduleCount    = countWizardModules(activePerms);
+  const rawCustomRole  = canEditRole ? customRoles.find((r) => r.id === activeRole.id) : null;
 
   // ── Duplicate role ────────────────────────────────────────────────────────
+  // Carries over the source role's actual module/tab/action permissions
+  // (whether it's a System role's generated profile or a Custom role's saved
+  // perms) into a brand-new custom role.
   const duplicateRole = () => {
     const name = `${activeRole.name} Copy`;
     customRolesApi.add({
       name,
       desc: `Copy of ${activeRole.name}`,
+      scope: rawCustomRole?.scope ?? "Institute",
+      perms: JSON.parse(JSON.stringify(activePerms)),
       createdBy: user?.name ?? "Admin",
       lastModified: "Just now",
     });
-    setDrafts((cur) => ({ ...cur, [name]: { ...access } }));
     toast.success(`${name} created`);
   };
 
-  // ── Create / edit role ────────────────────────────────────────────────────
-  const saveRole = (payload) => {
-    if (dialog?.mode === "edit") {
-      customRolesApi.update(dialog.role.id, payload);
-    } else {
-      customRolesApi.add({
-        ...payload,
-        createdBy: user?.name ?? "Admin",
-        lastModified: "Just now",
-      });
-    }
-    setDialog(null);
-    toast.success(dialog?.mode === "edit" ? "Role updated" : "Role created");
+  // ── Open wizard for a brand-new role ──────────────────────────────────────
+  const openCreateWizard = () => {
+    setEditingRole(null);
+    setWizardOpen(true);
+  };
+
+  // ── Open wizard pre-filled for the active custom role ─────────────────────
+  const openEditWizard = () => {
+    const raw = customRoles.find((r) => r.id === activeRole.id) ?? activeRole;
+    setEditingRole(raw);
+    setWizardOpen(true);
   };
 
   // ── Delete role ───────────────────────────────────────────────────────────
@@ -534,7 +368,7 @@ export default function RolesPage() {
           <Button
             size="sm"
             className="gradient-primary border-0"
-            onClick={() => setDialog({ mode: "create" })}
+            onClick={openCreateWizard}
           >
             <Plus className="h-4 w-4" />
             New Role
@@ -544,10 +378,10 @@ export default function RolesPage() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Roles"        value={String(roles.length)}       icon={<Shield className="h-5 w-5" />} tone="primary" />
-        <KpiCard label="Custom Roles" value={String(customRoles.length)} icon={<Pencil className="h-5 w-5" />} tone="info"    />
-        <KpiCard label="Users"        value={String(users.length)}       icon={<Users  className="h-5 w-5" />} tone="success" />
-        <KpiCard label="Modules"      value={String(MODULES.length)}     icon={<Lock   className="h-5 w-5" />} tone="warning" />
+        <KpiCard label="Roles"        value={String(roles.length)}         icon={<Shield className="h-5 w-5" />} tone="primary" />
+        <KpiCard label="Custom Roles" value={String(customRoles.length)}   icon={<Pencil className="h-5 w-5" />} tone="info"    />
+        <KpiCard label="Users"        value={String(users.length)}         icon={<Users  className="h-5 w-5" />} tone="success" />
+        <KpiCard label="Modules"      value={String(MODULE_CATALOG.length)} icon={<Lock  className="h-5 w-5" />} tone="warning" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
@@ -571,7 +405,7 @@ export default function RolesPage() {
           <CardContent className="space-y-2 pb-3">
             {filteredRoles.map((role) => {
               const isActive   = role.id === activeRole.id;
-              const roleAccess = accessForRole(role.name, overrides, drafts[role.name]);
+              const roleAccess = getEffectivePerms(role, customRoles);
 
               return (
                 <button
@@ -599,8 +433,8 @@ export default function RolesPage() {
                   <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>{countAssigned(users, role.name)} user(s)</span>
                     <span>
-                      {accessibleModuleCount(roleAccess)}/{MODULES.length} modules ·{" "}
-                      {totalGrantedActions(roleAccess)} actions
+                      {countWizardModules(roleAccess)}/{MODULE_CATALOG.length} modules ·{" "}
+                      {countWizardActions(roleAccess)} actions
                     </span>
                   </div>
                 </button>
@@ -620,11 +454,6 @@ export default function RolesPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <CardTitle className="text-lg">{activeRole.name}</CardTitle>
                     <Badge variant="outline">{activeRole.type}</Badge>
-                    {hasChanges && (
-                      <Badge className="bg-warning/10 text-warning border-warning/20">
-                        Unsaved
-                      </Badge>
-                    )}
                   </div>
                   <CardDescription className="mt-1">{activeRole.desc}</CardDescription>
                 </div>
@@ -640,7 +469,7 @@ export default function RolesPage() {
                         variant="outline"
                         size="sm"
                         className="gap-1.5"
-                        onClick={() => setDialog({ mode: "edit", role: activeRole })}
+                        onClick={openEditWizard}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         Edit
@@ -671,7 +500,7 @@ export default function RolesPage() {
               <div className="rounded-md border border-border/60 bg-muted/20 p-3">
                 <p className="text-xs text-muted-foreground">Modules accessible</p>
                 <p className="text-2xl font-semibold mt-1">
-                  {accessibleModuleCount(access)}/{MODULES.length}
+                  {moduleCount}/{MODULE_CATALOG.length}
                 </p>
               </div>
 
@@ -697,64 +526,50 @@ export default function RolesPage() {
             </CardContent>
           </Card>
 
-          {/* Permissions matrix */}
+          {/* Module permissions — same format for System and Custom roles */}
           <Card className="border-border/60">
             <CardHeader className="pb-3">
-              <div className="flex flex-col gap-1">
-                <CardTitle className="text-base">Module permissions</CardTitle>
-              </div>
-
-              {/* Legend */}
-              <div className="flex items-center gap-4 flex-wrap pt-2">
-                {ACTIONS.map((a) => {
-                  const meta = ACTION_META[a];
-                  return (
-                    <span
-                      key={a}
-                      className={cn("inline-flex items-center gap-1.5 text-[11px]", meta.colorClass)}
-                    >
-                      <span className={cn("h-2 w-2 rounded-full", meta.dotClass)} />
-                      {meta.label}
-                    </span>
-                  );
-                })}
-                <span className="text-[11px] text-muted-foreground ml-1">
-                  — check to grant, uncheck to revoke
-                </span>
-              </div>
+              <CardTitle className="text-base">Module permissions</CardTitle>
+              <CardDescription>
+                {canEditRole
+                  ? "Set via the role wizard — module, tab, and action level."
+                  : "Default access for this system role, shown at module, tab, and action level."}
+              </CardDescription>
             </CardHeader>
 
             <CardContent className="p-0 pb-1">
-              <PermissionsMatrix access={access} onToggle={toggleAction} />
+              <ModulePermissionsSummary perms={activePerms} />
             </CardContent>
           </Card>
 
-          {/* Sticky save bar */}
-        <div className="flex justify-end">
-  <Button
-    className="gradient-primary border-0 gap-1.5"
-    disabled={!hasChanges}
-    onClick={savePermissions}
-  >
-    <Save className="h-4 w-4" />
-    Save Permissions
-  </Button>
-</div>
+          {/* Action bar */}
+          <div className="flex items-center justify-end gap-3">
+            {canEditRole ? (
+              <Button className="gradient-primary border-0 gap-1.5" onClick={openEditWizard}>
+                <Pencil className="h-4 w-4" />
+                Edit Permissions
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                System role permissions are managed by the platform and can't be edited here.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Create / Edit dialog */}
-      {dialog && (
-        <RoleDialog
-          key={`${dialog.mode}-${dialog.role?.id ?? "new"}`}
-          open={Boolean(dialog)}
-          mode={dialog.mode}
-          role={dialog.role}
-          roles={roles}
-          onClose={() => setDialog(null)}
-          onSubmit={saveRole}
-        />
-      )}
+      {/* Create / Edit dialog — same multi-step RoleWizard for both flows */}
+      <RoleWizard
+        open={wizardOpen}
+        onOpenChange={(v) => {
+          setWizardOpen(v);
+          if (!v) setEditingRole(null);
+        }}
+        edit={editingRole}
+        onDeleted={(id) => {
+          if (activeRoleId === id) setActiveRoleId("sys-teacher");
+        }}
+      />
 
       {/* Delete confirmation */}
       <Dialog open={Boolean(deleteRole)} onOpenChange={(v) => !v && setDeleteRole(null)}>

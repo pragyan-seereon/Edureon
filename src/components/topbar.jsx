@@ -4,14 +4,20 @@ import { Button } from "./ui/button";
 // import { Badge } from "./ui/badge";
 import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue,} from "./ui/select";
 // eslint-disable-next-line no-unused-vars
-import { Bell, Search, Moon, Sun, HelpCircle } from "lucide-react";
+import { Bell, Search, Moon, Sun, HelpCircle, Building2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { UserMenu } from "./user-menu";
 import useSessionStore from "../store/sessionStore";
+import useInstituteStore, { INSTITUTES } from "../store/instituteStore";
+import { toast } from "sonner";
+
 export function Topbar() {
   const [dark, setDark] = useState(false);
 const sessionYear = useSessionStore((state) => state.sessionYear);
 const setSessionYear = useSessionStore((state) => state.setSessionYear);
+
+const activeInstituteId = useInstituteStore((state) => state.activeInstituteId);
+const setActiveInstitute = useInstituteStore((state) => state.setActiveInstitute);
 
 const currentYear = new Date().getFullYear();
 
@@ -53,6 +59,31 @@ useEffect(() => {
       </div>
       <div className="flex-1 md:hidden" />
       <div className="flex items-center gap-1.5 ml-auto ">
+        {/* School / institute switcher — super admin only */}
+        <Select
+          value={activeInstituteId}
+          onValueChange={(v) => {
+            setActiveInstitute(v);
+            if (v === "__all__") {
+              toast.success("Viewing global data — all schools");
+            } else {
+              const inst = INSTITUTES.find((i) => i.id === v);
+              if (inst) toast.success(`Switched to ${inst.name}`);
+            }
+          }}
+        >
+          <SelectTrigger className="h-9 w-[190px] hidden md:flex gap-1.5 bg-muted/40 border-border/60 text-xs font-medium">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <SelectValue placeholder="All Schools" />
+          </SelectTrigger>
+          <SelectContent align="end">
+            <SelectItem value="__all__" className="text-xs">All Schools (Global)</SelectItem>
+            {INSTITUTES.map((i) => (
+              <SelectItem key={i.id} value={i.id} className="text-xs">{i.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
  <Select
   value={sessionYear}
   onValueChange={setSessionYear}

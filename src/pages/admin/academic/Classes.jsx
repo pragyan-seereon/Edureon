@@ -86,8 +86,11 @@ import {
   walletApi,
   useSectionChangeRequests,
   sectionChangeApi,
+  useDepartments,        
+  departmentsApi,        
   SUBJECT_TYPES,
 } from "../../../lib/store";
+import { DataHealth } from "../../../components/data-health";
 import {
   getSubject,
   getSubjects,
@@ -542,11 +545,13 @@ const performAssign = async () => {
           <TabsTrigger value="subjects">Subjects</TabsTrigger>
           <TabsTrigger value="classes">Classes</TabsTrigger>
           <TabsTrigger value="sections">Sections</TabsTrigger>
+          <TabsTrigger value="departments">Departments</TabsTrigger>
           {/* <TabsTrigger value="mapping">Subject Mapping</TabsTrigger> */}
           <TabsTrigger value="calendar">Academic Calendar</TabsTrigger>
           <TabsTrigger value="students">Students</TabsTrigger>
           <TabsTrigger value="promote">Promotions</TabsTrigger>
           <TabsTrigger value="transfers">Transfers</TabsTrigger>
+          <TabsTrigger value="health">Data Health</TabsTrigger>   
         </TabsList>
 
         <TabsContent value="classes" className="mt-4">
@@ -690,6 +695,9 @@ const performAssign = async () => {
               );
             })}
           </div>
+        </TabsContent>
+          <TabsContent value="departments" className="mt-4">
+          <DepartmentsTab />
         </TabsContent>
 
         <TabsContent value="subjects" className="mt-4">
@@ -1180,6 +1188,10 @@ const performAssign = async () => {
 
         <TabsContent value="transfers" className="mt-4">
           <TransfersTab />
+        </TabsContent>
+
+         <TabsContent value="health" className="mt-4">
+          <DataHealth />
         </TabsContent>
       </Tabs>
 
@@ -3369,6 +3381,226 @@ const handleSecNewClassChange = (v) => {
     </div>
   );
 }
+// ================= Departments Tab =================
+function DepartmentsTab() {
+  const departments = useDepartments();
+  const [open, setOpen] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const [name, setName] = useState("");
+  const [head, setHead] = useState("");
+  const [description, setDescription] = useState("");
+  const [subjectIds, setSubjectIds] = useState([]);
+  const [subjectList, setSubjectList] = useState([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await getSubjects();
+        setSubjectList(res.data || []);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    load();
+  }, []);
+
+  const reset = () => {
+    setName("");
+    setHead("");
+    setDescription("");
+    setSubjectIds([]);
+    setEdit(null);
+  };
+  const openNew = () => {
+    reset();
+    setOpen(true);
+  };
+  const openEdit = (d) => {
+    setEdit(d);
+    setName(d.name);
+    setHead(d.head ?? "");
+    setDescription(d.description ?? "");
+    setSubjectIds(d.subjectIds ?? []);
+    setOpen(true);
+  };
+  const toggleSubject = (id) =>
+    setSubjectIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  const save = () => {
+    if (!name.trim()) return toast.error("Department name is required");
+    if (edit) {
+      departmentsApi.update(edit.id, { name, head, description, subjectIds });
+      toast.success(`${name} updated`);
+    } else {
+      departmentsApi.add({ name, head, description, subjectIds });
+      toast.success(`${name} created`);
+    }
+    setOpen(false);
+    reset();
+  };
+
+  const subjectsForDept = (d) => {
+    const byId = subjectList.filter((s) => (d.subjectIds ?? []).includes(s.subject_uuid));
+    if (byId.length > 0) return byId;
+    return subjectList.filter((s) => s.department === d.name);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/60">
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle className="text-base">Departments</CardTitle>
+            <CardDescription>
+              Group subjects and faculty under academic departments. One department can own many subjects.
+            </CardDescription>
+          </div>
+          <Button size="sm" className="gradient-primary border-0" onClick={openNew}>
+            <Plus className="h-4 w-4" /> New Department
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Department</TableHead>
+                <TableHead>Head</TableHead>
+                <TableHead>Subjects</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="w-24 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {departments.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
+                    No departments yet.
+                  </TableCell>
+                </TableRow>
+              )}
+              {departments
+                .filter((d) => !d.archived)
+                .map((d) => {
+                  const subs = subjectsForDept(d);
+                  return (
+                    <TableRow key={d.id}>
+                      <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell className="text-sm">{d.head || "—"}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 max-w-md">
+                          {subs.length === 0 && (
+                            <span className="text-xs text-muted-foreground">No subjects assigned</span>
+                          )}
+                          {subs.slice(0, 6).map((s) => (
+                            <Badge key={s.subject_uuid} variant="secondary" className="text-[10px]">
+                              {s.subject_name}
+                            </Badge>
+                          ))}
+                          {subs.length > 6 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              +{subs.length - 6} more
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell
+                        className="text-xs text-muted-foreground max-w-xs truncate"
+                        title={d.description}
+                      >
+                        {d.description || "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(d)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => {
+                            departmentsApi.remove(d.id);
+                            toast.success(`${d.name} removed`);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) reset();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{edit ? "Edit Department" : "New Department"}</DialogTitle>
+            <DialogDescription>Assign one or many subjects to this department.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-xs">Name *</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Department Head</Label>
+                <Input value={head} onChange={(e) => setHead(e.target.value)} placeholder="e.g. Mr. R. Verma" />
+              </div>
+              <div>
+                <Label className="text-xs">Subjects selected</Label>
+                <Input disabled value={`${subjectIds.length} subject${subjectIds.length === 1 ? "" : "s"}`} />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Description</Label>
+              <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Assign Subjects</Label>
+              <div className="rounded-md border max-h-56 overflow-y-auto p-2 space-y-1">
+                {subjectList.length === 0 && (
+                  <div className="text-xs text-muted-foreground py-4 text-center">
+                    No subjects available. Add subjects first.
+                  </div>
+                )}
+                {subjectList.map((s) => (
+                  <label
+                    key={s.subject_uuid}
+                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1.5 py-1"
+                  >
+                    <Checkbox
+                      checked={subjectIds.includes(s.subject_uuid)}
+                      onCheckedChange={() => toggleSubject(s.subject_uuid)}
+                    />
+                    <span className="flex-1">{s.subject_name}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">{s.subject_code}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="gradient-primary border-0" onClick={save}>
+              {edit ? "Save" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
 // ================= Section Dialog =================
 // ================= Section Dialog =================
@@ -3471,15 +3703,15 @@ function SectionDialog({ open, onOpenChange, edit, sections = [], onSubmit }) {
     }
     setErrors({});
 
-    const payload = {
-      section_name: form.name.trim(),
-      class_uuid: form.class_uuid,
-      class_teacher_user_id: Number(form.teacher),
-      room_uuid: form.room_uuid,
-      students: form.present,
-      capacity: form.total,
-      subjects: edit?.subjects ?? 8,
-    };
+  const payload = {
+  section_name: form.name.trim(),
+  class_uuid: form.class_uuid,
+  class_teacher_user_id: form.teacher ? Number(form.teacher) : null,
+  room_uuid: form.room_uuid,
+  students: form.present,
+  capacity: form.total,
+  subjects: edit?.subjects ?? 8,
+};
 
     setSubmitting(true);
     try {
@@ -3564,7 +3796,7 @@ function SectionDialog({ open, onOpenChange, edit, sections = [], onSubmit }) {
 
           <div className="space-y-1.5">
             <Label className="text-xs">
-              Class Teacher <span className="text-destructive">*</span>
+              Class Teacher 
             </Label>
             <Select
               value={form.teacher}
