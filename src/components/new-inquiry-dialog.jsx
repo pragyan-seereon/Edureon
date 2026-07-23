@@ -1,4 +1,6 @@
-﻿// import {
+﻿
+
+// import {
 //   createAdmission,
 //   getAdmissionSources,
 //   getSections,
@@ -102,6 +104,94 @@
 //   medicalNotes: "",
 // };
 
+// // Maps a field's state key to the tab it lives on, so we can jump the user
+// // straight to the first invalid field on submit.
+// const TAB_OF_FIELD = {
+//   name: "personal",
+//   aadhar: "personal",
+//   dob: "personal",
+//   sessionYear: "academic",
+//   lastPercent: "academic",
+//   attendance: "academic",
+//   phone: "guardian",
+//   email: "guardian",
+//   parentIncome: "guardian",
+//   pin: "guardian",
+// };
+
+// // Mirrors the Pydantic field_validators in AdmissionCreate exactly —
+// // same regexes, same ranges, same error copy — so the user sees the
+// // same rejection reason on the frontend that the backend would give.
+// function validateInquiry(d) {
+//   const errs = {};
+
+//   // full_name — required, min 3 chars (trimmed)
+//   if (!d.name || d.name.trim().length < 3) {
+//     errs.name = "Full name must be at least 3 characters";
+//   }
+
+//   // primary_phone — [6-9]\d{9}
+//   if (d.phone && !/^[6-9]\d{9}$/.test(d.phone)) {
+//     errs.phone = "Phone number must be 10 digits";
+//   }
+
+//   // email
+//   if (d.email && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(d.email)) {
+//     errs.email = "Invalid email address";
+//   }
+
+//   // aadhaar_no — 12 digits
+//   if (d.aadhar && !/^\d{12}$/.test(d.aadhar)) {
+//     errs.aadhar = "Aadhaar number must be 12 digits";
+//   }
+
+//   // pin_code — 6 digits
+//   if (d.pin && !/^\d{6}$/.test(d.pin)) {
+//     errs.pin = "PIN code must be 6 digits";
+//   }
+
+//   // attendance_percentage — 0-100
+//   if (d.attendance !== "" && d.attendance !== null && d.attendance !== undefined) {
+//     const a = Number(d.attendance);
+//     if (Number.isNaN(a) || a < 0 || a > 100) {
+//       errs.attendance = "Attendance must be between 0 and 100";
+//     }
+//   }
+
+//   // last_aggregate_percentage — 0-100
+//   if (d.lastPercent !== "" && d.lastPercent !== null && d.lastPercent !== undefined) {
+//     const p = Number(d.lastPercent);
+//     if (Number.isNaN(p) || p < 0 || p > 100) {
+//       errs.lastPercent = "Aggregate percentage must be between 0 and 100";
+//     }
+//   }
+
+//   // annual_income — >= 0
+//   if (d.parentIncome !== "" && d.parentIncome !== null && d.parentIncome !== undefined) {
+//     const income = Number(d.parentIncome);
+//     if (Number.isNaN(income) || income < 0) {
+//       errs.parentIncome = "Annual income cannot be negative";
+//     }
+//   }
+
+//   // dob — cannot be a future date
+//   if (d.dob) {
+//     const dobDate = new Date(d.dob);
+//     const today = new Date();
+//     today.setHours(23, 59, 59, 999);
+//     if (dobDate > today) {
+//       errs.dob = "DOB cannot be a future date";
+//     }
+//   }
+
+//   // session_year — must look like 2026-27
+//   if (d.sessionYear && !/^\d{4}-\d{2}$/.test(d.sessionYear)) {
+//     errs.sessionYear = "Session year must be like 2026-27";
+//   }
+
+//   return errs;
+// }
+
 // export function NewInquiryDialog({ trigger, onCreate }) {
 //   const [open, setOpen] = useState(false);
 //   const [tab, setTab] = useState("personal");
@@ -115,6 +205,7 @@
 //   const [loadingSections, setLoadingSections] = useState(false);
 //   const [saving, setSaving] = useState(false);
 //   const [d, setD] = useState(initialState);
+//   const [fieldErrors, setFieldErrors] = useState({});
 //   const instituteUUID = useAuthStore((state) => state.instituteUUID);
 
 //   // Load sources + classes once when the dialog mounts
@@ -183,7 +274,16 @@
 //     };
 //   }, [d.class_uuid]);
 
-//   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
+//   const set = (k, v) => {
+//     setD((p) => ({ ...p, [k]: v }));
+//     // Clear that field's error as soon as the user edits it
+//     setFieldErrors((prev) => {
+//       if (!prev[k]) return prev;
+//       const next = { ...prev };
+//       delete next[k];
+//       return next;
+//     });
+//   };
 
 //   const handleFileUpload = (slotId, files) => {
 //     const file = files?.[0];
@@ -202,10 +302,22 @@
 //     setUploaded(emptyDocs());
 //     setD(initialState);
 //     setSections([]);
+//     setFieldErrors({});
 //   };
 
 //   const save = async () => {
 //     if (saving) return;
+
+//     // Run frontend validation first — mirrors backend Pydantic validators
+//     const errs = validateInquiry(d);
+//     if (Object.keys(errs).length > 0) {
+//       setFieldErrors(errs);
+//       const firstField = Object.keys(errs)[0];
+//       setTab(TAB_OF_FIELD[firstField] || "personal");
+//       toast.error(errs[firstField]);
+//       return; // stop — don't call the API with invalid data
+//     }
+//     setFieldErrors({});
 
 //     try {
 //       if (!instituteUUID) {
@@ -335,7 +447,7 @@
 
 //           {/* ── PERSONAL ── */}
 //           <TabsContent value="personal" className="grid sm:grid-cols-2 gap-3 mt-4">
-//             <F label="Full name">
+//             <F label="Full name" error={fieldErrors.name}>
 //               <Input
 //                 value={d.name}
 //                 onChange={(e) => set("name", e.target.value)}
@@ -370,11 +482,12 @@
 //               />
 //             </F>
 
-//             <F label="Date of birth">
+//             <F label="Date of birth" error={fieldErrors.dob}>
 //               <Input
 //                 type="date"
 //                 value={d.dob}
 //                 onChange={(e) => set("dob", e.target.value)}
+//                 max={new Date().toISOString().split("T")[0]}
 //               />
 //             </F>
 //             <F label="Gender">
@@ -397,11 +510,13 @@
 //                 </SelectContent>
 //               </Select>
 //             </F>
-//             <F label="Student Aadhar">
+//             <F label="Student Aadhar" error={fieldErrors.aadhar}>
 //               <Input
 //                 value={d.aadhar}
 //                 onChange={(e) => set("aadhar", e.target.value)}
-//                 placeholder="XXXX-XXXX-1234"
+//                 placeholder="123456789012"
+//                 maxLength={12}
+//                 inputMode="numeric"
 //               />
 //             </F>
 //             <F label="Nationality">
@@ -481,40 +596,39 @@
 //             </F>
 
 //             {(() => {
-//           const selectedClass = classes.find(
-//             (c) => c.class_uuid === d.class_uuid
-//           );
+//               const selectedClass = classes.find(
+//                 (c) => c.class_uuid === d.class_uuid
+//               );
 
-//           const className = selectedClass?.class_name || "";
+//               const className = selectedClass?.class_name || "";
 
-//           const showStream =
-           
-//             className.includes("XI") ||
-//             className.includes("11") ||
-//             className.includes("XII") ||
-//             className.includes("12");
+//               const showStream =
+//                 className.includes("XI") ||
+//                 className.includes("11") ||
+//                 className.includes("XII") ||
+//                 className.includes("12");
 
-//           return showStream ? (
-//             <F label="Stream">
-//               <Select
-//                 value={d.stream}
-//                 onValueChange={(v) => set("stream", v)}
-//               >
-//                 <SelectTrigger>
-//                   <SelectValue placeholder="Select Stream" />
-//                 </SelectTrigger>
+//               return showStream ? (
+//                 <F label="Stream">
+//                   <Select
+//                     value={d.stream}
+//                     onValueChange={(v) => set("stream", v)}
+//                   >
+//                     <SelectTrigger>
+//                       <SelectValue placeholder="Select Stream" />
+//                     </SelectTrigger>
 
-//                 <SelectContent>
-//                   <SelectItem value="Science">Science</SelectItem>
-//                   <SelectItem value="Commerce">Commerce</SelectItem>
-//                   <SelectItem value="Arts">Arts</SelectItem>
-//                 </SelectContent>
-//               </Select>
-//             </F>
-//           ) : null;
-// })()}
+//                     <SelectContent>
+//                       <SelectItem value="Science">Science</SelectItem>
+//                       <SelectItem value="Commerce">Commerce</SelectItem>
+//                       <SelectItem value="Arts">Arts</SelectItem>
+//                     </SelectContent>
+//                   </Select>
+//                 </F>
+//               ) : null;
+//             })()}
 
-//             <F label="Session Year">
+//             <F label="Session Year" error={fieldErrors.sessionYear}>
 //               <Select
 //                 value={d.sessionYear}
 //                 onValueChange={(v) => set("sessionYear", v)}
@@ -563,21 +677,23 @@
 //                 </SelectContent>
 //               </Select>
 //             </F>
-//             <F label="Last aggregate %">
+//             <F label="Last aggregate %" error={fieldErrors.lastPercent}>
 //               <Input
 //                 type="number"
+//                 min={0}
+//                 max={100}
 //                 value={d.lastPercent}
 //                 onChange={(e) => set("lastPercent", e.target.value)}
 //                 placeholder="87"
 //               />
 //             </F>
-//             <F label="Attendance %">
+//             <F label="Attendance %" error={fieldErrors.attendance}>
 //               <Input
 //                 type="number"
 //                 min={0}
 //                 max={100}
 //                 value={d.attendance}
-//                 onChange={(e) => set("attendance", parseInt(e.target.value) || 0)}
+//                 onChange={(e) => set("attendance", e.target.value)}
 //               />
 //             </F>
 //           </TabsContent>
@@ -597,14 +713,16 @@
 //                 onChange={(e) => set("motherName", e.target.value)}
 //               />
 //             </F>
-//             <F label="Primary phone">
+//             <F label="Primary phone" error={fieldErrors.phone}>
 //               <Input
 //                 value={d.phone}
 //                 onChange={(e) => set("phone", e.target.value)}
-//                 placeholder="+91 ..."
+//                 placeholder="9876543210"
+//                 maxLength={10}
+//                 inputMode="numeric"
 //               />
 //             </F>
-//             <F label="Email">
+//             <F label="Email" error={fieldErrors.email}>
 //               <Input
 //                 type="email"
 //                 value={d.email}
@@ -619,9 +737,10 @@
 //                 placeholder="Business / Service"
 //               />
 //             </F>
-//             <F label="Annual income">
+//             <F label="Annual income" error={fieldErrors.parentIncome}>
 //               <Input
 //                 type="number"
+//                 min={0}
 //                 value={d.parentIncome}
 //                 onChange={(e) => set("parentIncome", e.target.value)}
 //                 placeholder="1200000"
@@ -661,11 +780,13 @@
 //                 onChange={(e) => set("state", e.target.value)}
 //               />
 //             </F>
-//             <F label="PIN">
+//             <F label="PIN" error={fieldErrors.pin}>
 //               <Input
 //                 value={d.pin}
 //                 onChange={(e) => set("pin", e.target.value)}
 //                 placeholder="110001"
+//                 maxLength={6}
+//                 inputMode="numeric"
 //               />
 //             </F>
 //           </TabsContent>
@@ -955,7 +1076,7 @@
 //   );
 // }
 
-// function F({ label, children, wide }) {
+// function F({ label, children, wide, error }) {
 //   const required = typeof label === "string" && label.trim().endsWith("*");
 //   const text = required ? label.replace(/\s*\*$/, "") : label;
 //   return (
@@ -965,6 +1086,7 @@
 //         {required && <span className="text-destructive"> *</span>}
 //       </Label>
 //       {children}
+//       {error && <p className="text-[11px] text-destructive">{error}</p>}
 //     </div>
 //   );
 // }
@@ -1008,14 +1130,14 @@ import { Eye, FileCheck2, FileUp, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 const DOC_SLOTS = [
-  { id: "aadhar", label: "Aadhar Card", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
-  { id: "birth_certificate", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
-  { id: "transfer_certificate", label: "Previous School TC", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
-  { id: "last_marksheet", label: "Last Marksheet", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
-  { id: "passport_photo", label: "Passport Photo", accept: ".jpg,.jpeg,.png", acceptLabel: "JPG / PNG", badge: "Optional" },
-  { id: "parent_id", label: "Parent ID (PAN/Aadhar)", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
-  { id: "address_proof", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
-  { id: "caste_certificate", label: "Caste / EWS Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "student_aadhaar_file", label: "Student Aadhar", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "birth_certificate_file", label: "Birth Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "transfer_certificate_file", label: "Previous School TC", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
+  { id: "previous_marksheet_file", label: "Last Marksheet", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Recommended" },
+  { id: "passport_photo_file", label: "Passport Photo", accept: ".jpg,.jpeg,.png", acceptLabel: "JPG / PNG", badge: "Optional" },
+  { id: "parent_id_file", label: "Parent ID (PAN/Aadhar)", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "address_proof_file", label: "Address Proof", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
+  { id: "caste_certificate_file", label: "Caste / EWS Certificate", accept: ".pdf,.jpg,.jpeg,.png", acceptLabel: "PDF / JPG / PNG", badge: "Optional" },
 ];
 
 const emptyDocs = () => Object.fromEntries(DOC_SLOTS.map((slot) => [slot.id, null]));
@@ -1031,78 +1153,166 @@ function formatBytes(bytes) {
 }
 
 const initialState = {
-  // personal
-  name: "",
+  // Institute Details
   source_id: "",
-  counselors: "",
-  dob: "",
-  gender: "Male",
-  blood: "",
-  nationality: "Indian",
-  category: "General",
-  aadhar: "",
+  counselor_name: "",
 
-  // academic
+  // Personal Details
+  full_name: "",
+  dob: "",
+  gender: "",
+  blood_group: "",
+  aadhaar_no: "",
+  nationality: "",
+  category: "",
+  admission_date: "",
+  joining_date: "",
+  religion: "",
+  siblings: "",
+  rfid_card_no: "",
+  gps_tracker_id: "",
+
+  // Academic Details
   class_uuid: "",
   section_uuid: "",
   stream: "",
-  sessionYear: "2026-27",
-  rollNo: 1,
-  previousSchool: "",
-  previousClass: "",
-  board: "CBSE",
-  lastPercent: "",
-  attendance: 95,
-  // guardian
-  parent: "",
-  motherName: "",
-  phone: "",
+  session_year: "",
+  roll_no: "",
+  previous_school: "",
+  previous_class: "",
+  board: "",
+  attendance_percentage: "",
+  last_aggregate_percentage: "",
+
+  // Father Details
+  father_name: "",
+  father_profession: "",
+  father_dob: "",
+  father_aadhaar_no: "",
+
+  // Mother Details
+  mother_name: "",
+  mother_profession: "",
+  mother_dob: "",
+  mother_aadhaar_no: "",
+
+  // Guardian Details
+  guardian_name: "",
+  guardian_profession: "",
+  guardian_dob: "",
+  guardian_mobile_no: "",
+
+  // Contact Details
+  primary_phone: "",
+  alternate_mobile_no: "",
   email: "",
-  parentOccupation: "",
-  parentIncome: "",
-  emergencyContact: "",
-  birthCertificateNo: "",
-  address: "",
+  alternate_email: "",
+
+  // Address Details
+  residential_address: "",
+  permanent_address: "",
   city: "",
   state: "",
-  pin: "",
-  // services
-  feeStatus: "Pending",
-  transportRequired: "No",
-  hostelRequired: "No",
-  // medical
-  medicalNotes: "",
+  pin_code: "",
+  birth_certificate_no: "",
+
+  // Fee & Services
+  fee_status: "",
+  transport_required: "",
+  mode_of_conveyance: "",
+  hostel_required: "",
+
+  // Medical Details
+  medical_notes: "",
 };
 
-// Maps a field's state key to the tab it lives on, so we can jump the user
-// straight to the first invalid field on submit.
+// Tab mapping for field validation
 const TAB_OF_FIELD = {
-  name: "personal",
-  aadhar: "personal",
+  full_name: "personal",
   dob: "personal",
-  sessionYear: "academic",
-  lastPercent: "academic",
-  attendance: "academic",
-  phone: "guardian",
+  gender: "personal",
+  blood_group: "personal",
+  aadhaar_no: "personal",
+  nationality: "personal",
+  category: "personal",
+  admission_date: "personal",
+  joining_date: "personal",
+  religion: "personal",
+  siblings: "personal",
+  rfid_card_no: "personal",
+  gps_tracker_id: "personal",
+
+  class_uuid: "academic",
+  section_uuid: "academic",
+  stream: "academic",
+  session_year: "academic",
+  roll_no: "academic",
+  previous_school: "academic",
+  previous_class: "academic",
+  board: "academic",
+  attendance_percentage: "academic",
+  last_aggregate_percentage: "academic",
+
+  father_name: "guardian",
+  father_profession: "guardian",
+  father_dob: "guardian",
+  father_aadhaar_no: "guardian",
+  mother_name: "guardian",
+  mother_profession: "guardian",
+  mother_dob: "guardian",
+  mother_aadhaar_no: "guardian",
+  guardian_name: "guardian",
+  guardian_profession: "guardian",
+  guardian_dob: "guardian",
+  guardian_mobile_no: "guardian",
+  primary_phone: "guardian",
+  alternate_mobile_no: "guardian",
   email: "guardian",
-  parentIncome: "guardian",
-  pin: "guardian",
+  alternate_email: "guardian",
+
+  residential_address: "guardian",
+  permanent_address: "guardian",
+  city: "guardian",
+  state: "guardian",
+  pin_code: "guardian",
+  birth_certificate_no: "guardian",
+
+  fee_status: "services",
+  transport_required: "services",
+  mode_of_conveyance: "services",
+  hostel_required: "services",
+
+  medical_notes: "medical",
 };
 
-// Mirrors the Pydantic field_validators in AdmissionCreate exactly —
-// same regexes, same ranges, same error copy — so the user sees the
-// same rejection reason on the frontend that the backend would give.
-function validateInquiry(d) {
+// Backend-aligned validation
+function validateAdmission(d) {
   const errs = {};
 
-  // full_name — required, min 3 chars (trimmed)
-  if (!d.name || d.name.trim().length < 3) {
-    errs.name = "Full name must be at least 3 characters";
+  // Required: full_name
+  if (!d.full_name || d.full_name.trim().length < 2) {
+    errs.full_name = "Full name must be at least 2 characters";
+  }
+  if (d.full_name && d.full_name.trim().length > 150) {
+    errs.full_name = "Full name cannot exceed 150 characters";
+  }
+  if (d.full_name && !/^[A-Za-z ]+$/.test(d.full_name.trim())) {
+    errs.full_name = "Only letters and spaces are allowed";
   }
 
   // primary_phone — [6-9]\d{9}
-  if (d.phone && !/^[6-9]\d{9}$/.test(d.phone)) {
-    errs.phone = "Phone number must be 10 digits";
+  if (d.primary_phone && !/^[6-9]\d{9}$/.test(d.primary_phone)) {
+    errs.primary_phone = "Phone number must be 10 digits and start with 6-9";
+  }
+
+  // alternate_mobile_no — [6-9]\d{9}
+  if (d.alternate_mobile_no && !/^[6-9]\d{9}$/.test(d.alternate_mobile_no)) {
+    errs.alternate_mobile_no = "Phone number must be 10 digits and start with 6-9";
+  }
+
+  // guardian_mobile_no — [6-9]\d{9}
+  if (d.guardian_mobile_no && !/^[6-9]\d{9}$/.test(d.guardian_mobile_no)) {
+    errs.guardian_mobile_no = "Phone number must be 10 digits and start with 6-9";
   }
 
   // email
@@ -1110,37 +1320,52 @@ function validateInquiry(d) {
     errs.email = "Invalid email address";
   }
 
+  // alternate_email
+  if (d.alternate_email && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(d.alternate_email)) {
+    errs.alternate_email = "Invalid email address";
+  }
+
   // aadhaar_no — 12 digits
-  if (d.aadhar && !/^\d{12}$/.test(d.aadhar)) {
-    errs.aadhar = "Aadhaar number must be 12 digits";
+  if (d.aadhaar_no && !/^\d{12}$/.test(d.aadhaar_no)) {
+    errs.aadhaar_no = "Aadhaar number must be 12 digits";
+  }
+
+  // father_aadhaar_no — 12 digits
+  if (d.father_aadhaar_no && !/^\d{12}$/.test(d.father_aadhaar_no)) {
+    errs.father_aadhaar_no = "Aadhaar number must be 12 digits";
+  }
+
+  // mother_aadhaar_no — 12 digits
+  if (d.mother_aadhaar_no && !/^\d{12}$/.test(d.mother_aadhaar_no)) {
+    errs.mother_aadhaar_no = "Aadhaar number must be 12 digits";
   }
 
   // pin_code — 6 digits
-  if (d.pin && !/^\d{6}$/.test(d.pin)) {
-    errs.pin = "PIN code must be 6 digits";
+  if (d.pin_code && !/^\d{6}$/.test(d.pin_code)) {
+    errs.pin_code = "PIN code must be 6 digits";
   }
 
   // attendance_percentage — 0-100
-  if (d.attendance !== "" && d.attendance !== null && d.attendance !== undefined) {
-    const a = Number(d.attendance);
+  if (d.attendance_percentage !== "" && d.attendance_percentage !== null && d.attendance_percentage !== undefined) {
+    const a = Number(d.attendance_percentage);
     if (Number.isNaN(a) || a < 0 || a > 100) {
-      errs.attendance = "Attendance must be between 0 and 100";
+      errs.attendance_percentage = "Attendance must be between 0 and 100";
     }
   }
 
   // last_aggregate_percentage — 0-100
-  if (d.lastPercent !== "" && d.lastPercent !== null && d.lastPercent !== undefined) {
-    const p = Number(d.lastPercent);
+  if (d.last_aggregate_percentage !== "" && d.last_aggregate_percentage !== null && d.last_aggregate_percentage !== undefined) {
+    const p = Number(d.last_aggregate_percentage);
     if (Number.isNaN(p) || p < 0 || p > 100) {
-      errs.lastPercent = "Aggregate percentage must be between 0 and 100";
+      errs.last_aggregate_percentage = "Aggregate percentage must be between 0 and 100";
     }
   }
 
-  // annual_income — >= 0
-  if (d.parentIncome !== "" && d.parentIncome !== null && d.parentIncome !== undefined) {
-    const income = Number(d.parentIncome);
-    if (Number.isNaN(income) || income < 0) {
-      errs.parentIncome = "Annual income cannot be negative";
+  // siblings — >= 0
+  if (d.siblings !== "" && d.siblings !== null && d.siblings !== undefined) {
+    const s = Number(d.siblings);
+    if (Number.isNaN(s) || s < 0) {
+      errs.siblings = "Siblings cannot be negative";
     }
   }
 
@@ -1154,9 +1379,106 @@ function validateInquiry(d) {
     }
   }
 
+  // father_dob — cannot be a future date
+  if (d.father_dob) {
+    const dobDate = new Date(d.father_dob);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (dobDate > today) {
+      errs.father_dob = "DOB cannot be a future date";
+    }
+  }
+
+  // mother_dob — cannot be a future date
+  if (d.mother_dob) {
+    const dobDate = new Date(d.mother_dob);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (dobDate > today) {
+      errs.mother_dob = "DOB cannot be a future date";
+    }
+  }
+
+  // guardian_dob — cannot be a future date
+  if (d.guardian_dob) {
+    const dobDate = new Date(d.guardian_dob);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (dobDate > today) {
+      errs.guardian_dob = "DOB cannot be a future date";
+    }
+  }
+
+  // admission_date — cannot be a future date
+  if (d.admission_date) {
+    const dateVal = new Date(d.admission_date);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (dateVal > today) {
+      errs.admission_date = "Admission date cannot be a future date";
+    }
+  }
+
+  // joining_date — cannot be a future date
+  if (d.joining_date) {
+    const dateVal = new Date(d.joining_date);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (dateVal > today) {
+      errs.joining_date = "Joining date cannot be a future date";
+    }
+  }
+
   // session_year — must look like 2026-27
-  if (d.sessionYear && !/^\d{4}-\d{2}$/.test(d.sessionYear)) {
-    errs.sessionYear = "Session year must be like 2026-27";
+  if (d.session_year && !/^\d{4}-\d{2}$/.test(d.session_year)) {
+    errs.session_year = "Session year must be like 2026-27";
+  }
+
+  // gender validation
+  if (d.gender && !["Male", "Female", "Other"].includes(d.gender)) {
+    errs.gender = "Invalid gender";
+  }
+
+  // blood_group validation
+  if (d.blood_group && !["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].includes(d.blood_group)) {
+    errs.blood_group = "Invalid blood group";
+  }
+
+  // category validation
+  if (d.category && !["General", "OBC", "SC", "ST", "EWS"].includes(d.category)) {
+    errs.category = "Invalid category";
+  }
+
+  // fee_status validation
+  if (d.fee_status && !["PAID", "PARTIAL", "PENDING"].includes(d.fee_status)) {
+    errs.fee_status = "Invalid fee status";
+  }
+
+  // profession validations
+  if (d.father_profession && d.father_profession.trim().length < 2) {
+    errs.father_profession = "Profession is too short";
+  }
+  if (d.mother_profession && d.mother_profession.trim().length < 2) {
+    errs.mother_profession = "Profession is too short";
+  }
+  if (d.guardian_profession && d.guardian_profession.trim().length < 2) {
+    errs.guardian_profession = "Profession is too short";
+  }
+
+  // name validations
+  if (d.father_name && d.father_name.trim().length < 2) {
+    errs.father_name = "Minimum 2 characters required";
+  }
+  if (d.mother_name && d.mother_name.trim().length < 2) {
+    errs.mother_name = "Minimum 2 characters required";
+  }
+  if (d.guardian_name && d.guardian_name.trim().length < 2) {
+    errs.guardian_name = "Minimum 2 characters required";
+  }
+
+  // birth_certificate_no
+  if (d.birth_certificate_no && d.birth_certificate_no.trim().length < 3) {
+    errs.birth_certificate_no = "Invalid birth certificate number";
   }
 
   return errs;
@@ -1178,7 +1500,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const instituteUUID = useAuthStore((state) => state.instituteUUID);
 
-  // Load sources + classes once when the dialog mounts
   useEffect(() => {
     if (!open) return;
 
@@ -1190,10 +1511,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
           getClasses(),
         ]);
 
-        // getClasses destructures `{ data }` internally and returns the
-        // body directly, so classesRes.data is the array.
-        // getAdmissionSources' implementation hasn't been confirmed, so
-        // this handles either convention (raw axios response or body).
         setSources(sourcesRes?.data?.data ?? sourcesRes?.data ?? []);
         setClasses(classesRes?.data ?? []);
       } catch (error) {
@@ -1207,7 +1524,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
     fetchLookups();
   }, [open]);
 
-  // Load sections whenever the selected class changes
   useEffect(() => {
     if (!d.class_uuid) {
       setSections([]);
@@ -1219,11 +1535,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
     const fetchSections = async () => {
       setLoadingSections(true);
       try {
-        // Unlike getClasses (which destructures `{ data }` internally and
-        // returns just the body), getSections returns the raw axios
-        // response. So response.data is the body { success, data: [...] }
-        // and response.data.data is the actual array — two `.data` hops
-        // is correct here, not a bug.
         const response = await getSections(d.class_uuid);
         if (!cancelled) setSections(response?.data?.data ?? []);
       } catch (error) {
@@ -1246,7 +1557,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
   const set = (k, v) => {
     setD((p) => ({ ...p, [k]: v }));
-    // Clear that field's error as soon as the user edits it
     setFieldErrors((prev) => {
       if (!prev[k]) return prev;
       const next = { ...prev };
@@ -1278,14 +1588,13 @@ export function NewInquiryDialog({ trigger, onCreate }) {
   const save = async () => {
     if (saving) return;
 
-    // Run frontend validation first — mirrors backend Pydantic validators
-    const errs = validateInquiry(d);
+    const errs = validateAdmission(d);
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       const firstField = Object.keys(errs)[0];
       setTab(TAB_OF_FIELD[firstField] || "personal");
       toast.error(errs[firstField]);
-      return; // stop — don't call the API with invalid data
+      return;
     }
     setFieldErrors({});
 
@@ -1297,90 +1606,38 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
       setSaving(true);
 
-      // Keys here that already match the backend field name 1:1
-      // (e.g. class_uuid, section_uuid, source_id, dob, gender, ...)
-      // don't need an entry — fieldMap only covers renamed keys.
-      const fieldMap = {
-        counselors: "counselor_name",
-        name: "full_name",
-        blood: "blood_group",
-        aadhar: "aadhaar_no",
-
-        sessionYear: "session_year",
-
-        rollNo: "roll_no",
-        previousSchool: "previous_school",
-        previousClass: "previous_class",
-        lastPercent: "last_aggregate_percentage",
-        attendance: "attendance_percentage",
-
-        parent: "father_name",
-        motherName: "mother_name",
-        phone: "primary_phone",
-        parentOccupation: "occupation",
-        parentIncome: "annual_income",
-        emergencyContact: "emergency_contact",
-        birthCertificateNo: "birth_certificate_no",
-        address: "residential_address",
-        pin: "pin_code",
-
-        feeStatus: "fee_status",
-
-        medicalNotes: "medical_notes",
-      };
-
-      // These two are booleans on the backend and are handled explicitly
-      // below instead of through the generic loop, so exclude them here.
-      const excludedKeys = ["transportRequired", "hostelRequired"];
-
       const formData = new FormData();
-
-      // institute_uuid comes from the auth store — it's the same value
-      // getHeaders() sends as X-Institute-UUID, never hardcode it here.
       formData.append("institute_uuid", instituteUUID);
 
-      // Dynamic form fields
+      // All fields now match backend exactly
       Object.entries(d).forEach(([key, value]) => {
-        if (excludedKeys.includes(key)) return;
-
         if (value !== null && value !== undefined && value !== "") {
-          formData.append(fieldMap[key] || key, value);
+          formData.append(key, value);
         }
       });
 
-      // Explicit boolean coercion for the Yes/No selects
-      formData.append("transport_required", d.transportRequired === "Yes");
-      formData.append("hostel_required", d.hostelRequired === "Yes");
+      // Boolean fields - convert from string to boolean
+      if (d.transport_required) {
+        formData.append("transport_required", d.transport_required === "Yes");
+      }
+      if (d.hostel_required) {
+        formData.append("hostel_required", d.hostel_required === "Yes");
+      }
 
-      const documentFieldMap = {
-        aadhar: "student_aadhaar_file",
-        birth_certificate: "birth_certificate_file",
-        transfer_certificate: "transfer_certificate_file",
-        last_marksheet: "previous_marksheet_file",
-        passport_photo: "passport_photo_file",
-        parent_id: "parent_id_file",
-        address_proof: "address_proof_file",
-        caste_certificate: "caste_certificate_file",
-      };
-
-      // Dynamic documents
+      // Documents
       Object.entries(uploaded).forEach(([key, file]) => {
         if (file) {
-          formData.append(documentFieldMap[key] || key, file);
+          formData.append(key, file);
         }
       });
 
       const result = await createAdmission(formData);
-
       toast.success("Admission created successfully");
-
       onCreate?.(result?.data ?? result);
-
       setOpen(false);
       resetForm();
     } catch (error) {
       console.log(error);
-
       toast.error(
         error?.response?.data?.detail || "Failed to create admission"
       );
@@ -1417,10 +1674,10 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
           {/* ── PERSONAL ── */}
           <TabsContent value="personal" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Full name" error={fieldErrors.name}>
+            <F label="Full name *" error={fieldErrors.full_name}>
               <Input
-                value={d.name}
-                onChange={(e) => set("name", e.target.value)}
+                value={d.full_name}
+                onChange={(e) => set("full_name", e.target.value)}
                 placeholder="Riya Mehra"
               />
             </F>
@@ -1433,7 +1690,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 <SelectTrigger>
                   <SelectValue placeholder="Select Source" />
                 </SelectTrigger>
-
                 <SelectContent>
                   {sources.map((item) => (
                     <SelectItem key={item.id} value={String(item.id)}>
@@ -1446,8 +1702,8 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
             <F label="Counselor">
               <Input
-                value={d.counselors}
-                onChange={(e) => set("counselors", e.target.value)}
+                value={d.counselor_name}
+                onChange={(e) => set("counselor_name", e.target.value)}
                 placeholder="Enter counselor name"
               />
             </F>
@@ -1460,18 +1716,20 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 max={new Date().toISOString().split("T")[0]}
               />
             </F>
-            <F label="Gender">
+
+            <F label="Gender" error={fieldErrors.gender}>
               <Select value={d.gender} onValueChange={(v) => set("gender", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
                 <SelectContent>
-                  {["Male", "Female", "Other"].map((x) => (
-                    <SelectItem key={x} value={x}>{x}</SelectItem>
-                  ))}
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </F>
-            <F label="Blood group">
-              <Select value={d.blood} onValueChange={(v) => set("blood", v)}>
+
+            <F label="Blood group" error={fieldErrors.blood_group}>
+              <Select value={d.blood_group} onValueChange={(v) => set("blood_group", v)}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   {["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((x) => (
@@ -1480,30 +1738,86 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 </SelectContent>
               </Select>
             </F>
-            <F label="Student Aadhar" error={fieldErrors.aadhar}>
+
+            <F label="Student Aadhaar" error={fieldErrors.aadhaar_no}>
               <Input
-                value={d.aadhar}
-                onChange={(e) => set("aadhar", e.target.value)}
+                value={d.aadhaar_no}
+                onChange={(e) => set("aadhaar_no", e.target.value)}
                 placeholder="123456789012"
                 maxLength={12}
                 inputMode="numeric"
               />
             </F>
+
             <F label="Nationality">
               <Input
                 value={d.nationality}
                 onChange={(e) => set("nationality", e.target.value)}
+                placeholder="Indian"
               />
             </F>
-            <F label="Category">
+
+            <F label="Category" error={fieldErrors.category}>
               <Select value={d.category} onValueChange={(v) => set("category", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
                   {["General", "OBC", "SC", "ST", "EWS"].map((x) => (
                     <SelectItem key={x} value={x}>{x}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </F>
+
+            <F label="Admission Date" error={fieldErrors.admission_date}>
+              <Input
+                type="date"
+                value={d.admission_date}
+                onChange={(e) => set("admission_date", e.target.value)}
+                max={new Date().toISOString().split("T")[0]}
+              />
+            </F>
+
+            <F label="Joining Date" error={fieldErrors.joining_date}>
+              <Input
+                type="date"
+                value={d.joining_date}
+                onChange={(e) => set("joining_date", e.target.value)}
+                max={new Date().toISOString().split("T")[0]}
+              />
+            </F>
+
+            <F label="Religion">
+              <Input
+                value={d.religion}
+                onChange={(e) => set("religion", e.target.value)}
+                placeholder="Hindu / Muslim / Sikh / Christian"
+              />
+            </F>
+
+            <F label="Siblings" error={fieldErrors.siblings}>
+              <Input
+                type="number"
+                min={0}
+                value={d.siblings}
+                onChange={(e) => set("siblings", e.target.value)}
+                placeholder="0"
+              />
+            </F>
+
+            <F label="RFID Card No">
+              <Input
+                value={d.rfid_card_no}
+                onChange={(e) => set("rfid_card_no", e.target.value)}
+                placeholder="RFID-123456"
+              />
+            </F>
+
+            <F label="GPS Tracker ID">
+              <Input
+                value={d.gps_tracker_id}
+                onChange={(e) => set("gps_tracker_id", e.target.value)}
+                placeholder="GPS-123456"
+              />
             </F>
           </TabsContent>
 
@@ -1514,7 +1828,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 value={d.class_uuid}
                 onValueChange={(v) => {
                   set("class_uuid", v);
-                  set("section_uuid", ""); // reset section when class changes
+                  set("section_uuid", "");
                   set("stream", "");
                 }}
               >
@@ -1532,6 +1846,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 </SelectContent>
               </Select>
             </F>
+
             <F label="Section">
               <Select
                 value={d.section_uuid}
@@ -1569,9 +1884,7 @@ export function NewInquiryDialog({ trigger, onCreate }) {
               const selectedClass = classes.find(
                 (c) => c.class_uuid === d.class_uuid
               );
-
               const className = selectedClass?.class_name || "";
-
               const showStream =
                 className.includes("XI") ||
                 className.includes("11") ||
@@ -1587,7 +1900,6 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                     <SelectTrigger>
                       <SelectValue placeholder="Select Stream" />
                     </SelectTrigger>
-
                     <SelectContent>
                       <SelectItem value="Science">Science</SelectItem>
                       <SelectItem value="Commerce">Commerce</SelectItem>
@@ -1598,15 +1910,14 @@ export function NewInquiryDialog({ trigger, onCreate }) {
               ) : null;
             })()}
 
-            <F label="Session Year" error={fieldErrors.sessionYear}>
+            <F label="Session Year" error={fieldErrors.session_year}>
               <Select
-                value={d.sessionYear}
-                onValueChange={(v) => set("sessionYear", v)}
+                value={d.session_year}
+                onValueChange={(v) => set("session_year", v)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Session" />
                 </SelectTrigger>
-
                 <SelectContent>
                   <SelectItem value="2025-26">2025-26</SelectItem>
                   <SelectItem value="2026-27">2026-27</SelectItem>
@@ -1615,31 +1926,36 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 </SelectContent>
               </Select>
             </F>
+
             <F label="Roll No">
               <Input
                 type="number"
                 min={1}
-                value={d.rollNo}
-                onChange={(e) => set("rollNo", parseInt(e.target.value) || 1)}
+                value={d.roll_no}
+                onChange={(e) => set("roll_no", e.target.value)}
+                placeholder="1"
               />
             </F>
-            <F label="Previous school">
+
+            <F label="Previous School">
               <Input
-                value={d.previousSchool}
-                onChange={(e) => set("previousSchool", e.target.value)}
+                value={d.previous_school}
+                onChange={(e) => set("previous_school", e.target.value)}
                 placeholder="DAV Public School"
               />
             </F>
-            <F label="Previous class">
+
+            <F label="Previous Class">
               <Input
-                value={d.previousClass}
-                onChange={(e) => set("previousClass", e.target.value)}
+                value={d.previous_class}
+                onChange={(e) => set("previous_class", e.target.value)}
                 placeholder="Class IX"
               />
             </F>
+
             <F label="Board">
               <Select value={d.board} onValueChange={(v) => set("board", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select board" /></SelectTrigger>
                 <SelectContent>
                   {["CBSE", "ICSE", "State Board", "IB", "IGCSE", "Other"].map((x) => (
                     <SelectItem key={x} value={x}>{x}</SelectItem>
@@ -1647,51 +1963,157 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 </SelectContent>
               </Select>
             </F>
-            <F label="Last aggregate %" error={fieldErrors.lastPercent}>
+
+            <F label="Attendance %" error={fieldErrors.attendance_percentage}>
               <Input
                 type="number"
                 min={0}
                 max={100}
-                value={d.lastPercent}
-                onChange={(e) => set("lastPercent", e.target.value)}
-                placeholder="87"
+                value={d.attendance_percentage}
+                onChange={(e) => set("attendance_percentage", e.target.value)}
+                placeholder="95"
               />
             </F>
-            <F label="Attendance %" error={fieldErrors.attendance}>
+
+            <F label="Last Aggregate %" error={fieldErrors.last_aggregate_percentage}>
               <Input
                 type="number"
                 min={0}
                 max={100}
-                value={d.attendance}
-                onChange={(e) => set("attendance", e.target.value)}
+                value={d.last_aggregate_percentage}
+                onChange={(e) => set("last_aggregate_percentage", e.target.value)}
+                placeholder="87"
               />
             </F>
           </TabsContent>
 
           {/* ── GUARDIAN ── */}
           <TabsContent value="guardian" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Father / Guardian">
+            <F label="Father's Name" error={fieldErrors.father_name}>
               <Input
-                value={d.parent}
-                onChange={(e) => set("parent", e.target.value)}
+                value={d.father_name}
+                onChange={(e) => set("father_name", e.target.value)}
                 placeholder="Anil Mehra"
               />
             </F>
-            <F label="Mother's name">
+
+            <F label="Father's Profession" error={fieldErrors.father_profession}>
               <Input
-                value={d.motherName}
-                onChange={(e) => set("motherName", e.target.value)}
+                value={d.father_profession}
+                onChange={(e) => set("father_profession", e.target.value)}
+                placeholder="Business / Service"
               />
             </F>
-            <F label="Primary phone" error={fieldErrors.phone}>
+
+            <F label="Father's DOB" error={fieldErrors.father_dob}>
               <Input
-                value={d.phone}
-                onChange={(e) => set("phone", e.target.value)}
+                type="date"
+                value={d.father_dob}
+                onChange={(e) => set("father_dob", e.target.value)}
+                max={new Date().toISOString().split("T")[0]}
+              />
+            </F>
+
+            <F label="Father's Aadhaar" error={fieldErrors.father_aadhaar_no}>
+              <Input
+                value={d.father_aadhaar_no}
+                onChange={(e) => set("father_aadhaar_no", e.target.value)}
+                placeholder="123456789012"
+                maxLength={12}
+                inputMode="numeric"
+              />
+            </F>
+
+            <F label="Mother's Name" error={fieldErrors.mother_name}>
+              <Input
+                value={d.mother_name}
+                onChange={(e) => set("mother_name", e.target.value)}
+                placeholder="Sunita Mehra"
+              />
+            </F>
+
+            <F label="Mother's Profession" error={fieldErrors.mother_profession}>
+              <Input
+                value={d.mother_profession}
+                onChange={(e) => set("mother_profession", e.target.value)}
+                placeholder="Homemaker / Teacher"
+              />
+            </F>
+
+            <F label="Mother's DOB" error={fieldErrors.mother_dob}>
+              <Input
+                type="date"
+                value={d.mother_dob}
+                onChange={(e) => set("mother_dob", e.target.value)}
+                max={new Date().toISOString().split("T")[0]}
+              />
+            </F>
+
+            <F label="Mother's Aadhaar" error={fieldErrors.mother_aadhaar_no}>
+              <Input
+                value={d.mother_aadhaar_no}
+                onChange={(e) => set("mother_aadhaar_no", e.target.value)}
+                placeholder="123456789012"
+                maxLength={12}
+                inputMode="numeric"
+              />
+            </F>
+
+            <F label="Guardian Name" error={fieldErrors.guardian_name}>
+              <Input
+                value={d.guardian_name}
+                onChange={(e) => set("guardian_name", e.target.value)}
+                placeholder="Emergency contact"
+              />
+            </F>
+
+            <F label="Guardian Profession" error={fieldErrors.guardian_profession}>
+              <Input
+                value={d.guardian_profession}
+                onChange={(e) => set("guardian_profession", e.target.value)}
+                placeholder="Service / Business"
+              />
+            </F>
+
+            <F label="Guardian DOB" error={fieldErrors.guardian_dob}>
+              <Input
+                type="date"
+                value={d.guardian_dob}
+                onChange={(e) => set("guardian_dob", e.target.value)}
+                max={new Date().toISOString().split("T")[0]}
+              />
+            </F>
+
+            <F label="Guardian Mobile" error={fieldErrors.guardian_mobile_no}>
+              <Input
+                value={d.guardian_mobile_no}
+                onChange={(e) => set("guardian_mobile_no", e.target.value)}
                 placeholder="9876543210"
                 maxLength={10}
                 inputMode="numeric"
               />
             </F>
+
+            <F label="Primary Phone" error={fieldErrors.primary_phone}>
+              <Input
+                value={d.primary_phone}
+                onChange={(e) => set("primary_phone", e.target.value)}
+                placeholder="9876543210"
+                maxLength={10}
+                inputMode="numeric"
+              />
+            </F>
+
+            <F label="Alternate Phone" error={fieldErrors.alternate_mobile_no}>
+              <Input
+                value={d.alternate_mobile_no}
+                onChange={(e) => set("alternate_mobile_no", e.target.value)}
+                placeholder="9876543210"
+                maxLength={10}
+                inputMode="numeric"
+              />
+            </F>
+
             <F label="Email" error={fieldErrors.email}>
               <Input
                 type="email"
@@ -1700,43 +2122,34 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 placeholder="parent@mail.com"
               />
             </F>
-            <F label="Occupation">
+
+            <F label="Alternate Email" error={fieldErrors.alternate_email}>
               <Input
-                value={d.parentOccupation}
-                onChange={(e) => set("parentOccupation", e.target.value)}
-                placeholder="Business / Service"
+                type="email"
+                value={d.alternate_email}
+                onChange={(e) => set("alternate_email", e.target.value)}
+                placeholder="alt@mail.com"
               />
             </F>
-            <F label="Annual income" error={fieldErrors.parentIncome}>
-              <Input
-                type="number"
-                min={0}
-                value={d.parentIncome}
-                onChange={(e) => set("parentIncome", e.target.value)}
-                placeholder="1200000"
-              />
-            </F>
-            <F label="Emergency contact">
-              <Input
-                value={d.emergencyContact}
-                onChange={(e) => set("emergencyContact", e.target.value)}
-                placeholder="+91 ..."
-              />
-            </F>
-            <F label="Birth certificate no.">
-              <Input
-                value={d.birthCertificateNo}
-                onChange={(e) => set("birthCertificateNo", e.target.value)}
-              />
-            </F>
-            <F label="Residential address" wide>
+
+            <F label="Residential Address" wide>
               <Textarea
                 rows={2}
-                value={d.address}
-                onChange={(e) => set("address", e.target.value)}
+                value={d.residential_address}
+                onChange={(e) => set("residential_address", e.target.value)}
                 placeholder="House no, street, locality"
               />
             </F>
+
+            <F label="Permanent Address" wide>
+              <Textarea
+                rows={2}
+                value={d.permanent_address}
+                onChange={(e) => set("permanent_address", e.target.value)}
+                placeholder="House no, street, locality"
+              />
+            </F>
+
             <F label="City">
               <Input
                 value={d.city}
@@ -1744,47 +2157,72 @@ export function NewInquiryDialog({ trigger, onCreate }) {
                 placeholder="Delhi"
               />
             </F>
+
             <F label="State">
               <Input
                 value={d.state}
                 onChange={(e) => set("state", e.target.value)}
+                placeholder="Delhi"
               />
             </F>
-            <F label="PIN" error={fieldErrors.pin}>
+
+            <F label="PIN" error={fieldErrors.pin_code}>
               <Input
-                value={d.pin}
-                onChange={(e) => set("pin", e.target.value)}
+                value={d.pin_code}
+                onChange={(e) => set("pin_code", e.target.value)}
                 placeholder="110001"
                 maxLength={6}
                 inputMode="numeric"
+              />
+            </F>
+
+            <F label="Birth Certificate No" error={fieldErrors.birth_certificate_no}>
+              <Input
+                value={d.birth_certificate_no}
+                onChange={(e) => set("birth_certificate_no", e.target.value)}
+                placeholder="BC-12345"
               />
             </F>
           </TabsContent>
 
           {/* ── SERVICES ── */}
           <TabsContent value="services" className="grid sm:grid-cols-2 gap-3 mt-4">
-            <F label="Fee status">
-              <Select value={d.feeStatus} onValueChange={(v) => set("feeStatus", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+            <F label="Fee Status" error={fieldErrors.fee_status}>
+              <Select value={d.fee_status} onValueChange={(v) => set("fee_status", v)}>
+                <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Paid">Paid</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Overdue">Overdue</SelectItem>
+                  <SelectItem value="PAID">Paid</SelectItem>
+                  <SelectItem value="PARTIAL">Partial</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
                 </SelectContent>
               </Select>
             </F>
-            <F label="Transport required">
-              <Select value={d.transportRequired} onValueChange={(v) => set("transportRequired", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+
+            <F label="Transport Required">
+              <Select value={d.transport_required} onValueChange={(v) => set("transport_required", v)}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="No">No</SelectItem>
                   <SelectItem value="Yes">Yes</SelectItem>
                 </SelectContent>
               </Select>
             </F>
-            <F label="Hostel required">
-              <Select value={d.hostelRequired} onValueChange={(v) => set("hostelRequired", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+
+            <F label="Mode of Conveyance">
+              <Select value={d.mode_of_conveyance} onValueChange={(v) => set("mode_of_conveyance", v)}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="School Bus">School Bus</SelectItem>
+                  <SelectItem value="Personal Vehicle">Personal Vehicle</SelectItem>
+                  <SelectItem value="Public Transport">Public Transport</SelectItem>
+                  <SelectItem value="Walking">Walking</SelectItem>
+                </SelectContent>
+              </Select>
+            </F>
+
+            <F label="Hostel Required">
+              <Select value={d.hostel_required} onValueChange={(v) => set("hostel_required", v)}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="No">No</SelectItem>
                   <SelectItem value="Yes">Yes</SelectItem>
@@ -1795,11 +2233,11 @@ export function NewInquiryDialog({ trigger, onCreate }) {
 
           {/* ── MEDICAL ── */}
           <TabsContent value="medical" className="mt-4">
-            <F label="Medical notes / allergies / special care" wide>
+            <F label="Medical Notes / Allergies / Special Care" wide>
               <Textarea
                 rows={6}
-                value={d.medicalNotes}
-                onChange={(e) => set("medicalNotes", e.target.value)}
+                value={d.medical_notes}
+                onChange={(e) => set("medical_notes", e.target.value)}
                 placeholder="Allergies, medication, special care instructions"
               />
             </F>
@@ -1878,6 +2316,9 @@ export function NewInquiryDialog({ trigger, onCreate }) {
     </Dialog>
   );
 }
+
+// Helper components (InquiryDocSlot, InquiryFilePreview, DocViewerModal, F)
+// remain the same as in your original code...
 
 function InquiryDocSlot({ slot, file, dragOver, onUpload, onView, onRemove, onDragOver, onDragLeave, onDrop }) {
   const inputId = `inquiry-file-${slot.id}`;

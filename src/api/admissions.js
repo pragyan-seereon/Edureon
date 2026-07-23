@@ -228,12 +228,25 @@ export const updateAdmission = (uuid, data) => {
 // Archive Admission
 // =========================
 
-export const archiveAdmission = (uuid) => {
-  return api.put(`/admissions/${uuid}/archive`, null, {
-    headers: getHeaders(),
-  });
-};
+// export const archiveAdmission = (uuid) => {
+//   return api.put(`/admissions/${uuid}/archive`, null, {
+//     headers: getHeaders(),
+//   });
+// };
 
+// =========================
+// Archive Admission
+// =========================
+
+export const archiveAdmission = (uuid, data) => {
+  return api.put(
+    `/admissions/${uuid}/archive`,
+    data,
+    {
+      headers: getHeaders(),
+    }
+  );
+};
 // =========================
 // Restore Admission
 // =========================
@@ -297,3 +310,38 @@ export const getSections = (classUuid) => {
     },
   });
 };
+
+
+
+// =========================
+// Reject Admission
+// =========================
+
+export const rejectAdmission = (uuid, reason) => {
+  return api.put(
+    `/admissions/${uuid}/reject`,
+    {
+      reason,
+    },
+    {
+      headers: getHeaders(),
+    }
+  );
+};
+
+
+// =========================
+// Reinstate Admission
+// =========================
+
+export const reinstateAdmission = (uuid) => {
+  return api.put(
+    `/admissions/${uuid}/reinstate`,
+    null,
+    {
+      headers: getHeaders(),
+    }
+  );
+};
+
+
