@@ -68,11 +68,12 @@ import NotificationsPage from "./pages/superadmin/NotificationsPage";
 import SendNotificationPage from "./pages/superadmin/send-notification";
 import TransactionsPage from "./pages/superadmin/TransactionsPage";
 import FeeCollection from "./pages/admin/modules/FeeCollection";
-import SubjectDetail from "./pages/admin/academic/SubjectDetail";// const defaultPrivatePath = "/super/institutes";
+import SubjectDetail from "./pages/admin/academic/SubjectDetail";
 import SectionDetail from "./pages/admin/academic/SectionDetail";
-import StudentArchive from "./pages/admin/academic/Studentarchive"
-
-
+import StudentArchive from "./pages/admin/academic/Studentarchive";
+import IdCardPage from "./pages/superadmin/Idcarddesigner";
+import GatePassPage from "./pages/superadmin/GatePass";
+import AdminMaintenance from "./pages/superadmin/AdminMaintenance";
 const router = createBrowserRouter([
   {
     element: <AppLayout />,
@@ -110,7 +111,7 @@ const router = createBrowserRouter([
       { path: "/account", element: <Account />},
       { path: "/settings", element: <Settings />},
       //student routes
-      { path: "//dashboard", element: <Dashboard /> },
+      { path: "/dashboard", element: <Dashboard /> },
       { path: "/student/timetable", element: <Timetable /> },
       { path: "/student/attendance", element: <Attendance /> },
       { path: "/student/assignments", element: <Assignments /> },
@@ -139,6 +140,9 @@ const router = createBrowserRouter([
       { path: "/admin/admissions/:id", element: <AdmissionsDetails /> },
       { path: "/students", element: <Students /> },
       { path: "/students/:id", element: <StudentDetails /> },
+      { path: "/id-cards", element: <IdCardPage /> },
+      { path: "/gate-pass", element: <GatePassPage /> },
+      { path: "/maintenance", element: <AdminMaintenance /> },
       { path: "/classes", element: <Classes /> },
       { path: "/attendance", element: <AdminAttendance /> },
       { path: "/exams", element: <Exams /> },
@@ -149,7 +153,7 @@ const router = createBrowserRouter([
       { path: "/subjects/:id", element: <SubjectDetail /> },
       { path: "/classes/:sectionUUID", element: <SectionDetail /> },
       { path: "/sudents/archive", element: <StudentArchive /> },
-
+      
 
       
       //admin modules routes

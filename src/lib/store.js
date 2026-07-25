@@ -2863,3 +2863,78 @@ export function academicHealth() {
 
   return checks;
 }
+
+// ============ Classroom Maintenance ============
+const initMaintenance = [
+  {
+    id: "MT-001",
+    title: "AC not cooling",
+    location: "R-104",
+    kind: "Electrical",
+    priority: "High",
+    raisedBy: "A. Mehta",
+    description: "Classroom AC blowing warm air since Monday.",
+    status: "Requested",
+    assignedTo: undefined,
+    vendor: undefined,
+    estCost: undefined,
+    actualCost: undefined,
+    timeline: [
+      { status: "Requested", at: new Date().toISOString(), by: "A. Mehta" },
+    ],
+  },
+];
+const maintenanceStore = createStore(initMaintenance);
+export const useMaintenance = () => useStore(maintenanceStore);
+
+let _mtN = 100;
+export const maintenanceApi = {
+  list: () => maintenanceStore.get(),
+  get: (id) => maintenanceStore.get().find((x) => x.id === id),
+  add: (m) => {
+    const id = "MT-" + String(++_mtN).padStart(3, "0");
+    maintenanceStore.set((arr) => [
+      {
+        ...m,
+        id,
+        status: "Requested",
+        timeline: [{ status: "Requested", at: new Date().toISOString(), by: m.raisedBy || "You" }],
+      },
+      ...arr,
+    ]);
+    activityApi.log("maintenance", id, "Requested");
+    return id;
+  },
+  setStatus: (id, status, note, by = "You", patch = {}) => {
+    maintenanceStore.set((arr) =>
+      arr.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              ...patch,
+              status,
+              timeline: [...x.timeline, { status, at: new Date().toISOString(), by, note }],
+            }
+          : x,
+      ),
+    );
+    activityApi.log("maintenance", id, `Status → ${status}`);
+  },
+  resolve: (id, actualCost, vendor, note, by = "You") => {
+    maintenanceStore.set((arr) =>
+      arr.map((x) =>
+        x.id === id
+          ? {
+              ...x,
+              status: "Resolved",
+              actualCost,
+              vendor,
+              timeline: [...x.timeline, { status: "Resolved", at: new Date().toISOString(), by, note }],
+            }
+          : x,
+      ),
+    );
+    activityApi.log("maintenance", id, `Resolved · ₹${actualCost} → OpEx`);
+  },
+  remove: (id) => maintenanceStore.set((arr) => arr.filter((x) => x.id !== id)),
+};

@@ -32,6 +32,8 @@ import {
   Megaphone,
   FileBox,
   Wallet,
+  IdCard,
+  ShieldCheck
 } from "lucide-react";
 const adminGroups = [
   {
@@ -123,6 +125,7 @@ const superGroups = [
       { title: "Assignments", url: "assignments", icon: ClipboardList },
       { title: "Examinations", url: "/exams", icon: BookOpen },
       { title: "Timetable", url: "/timetable", icon: CalendarDays },
+      
     ],
   },
    {
@@ -153,6 +156,12 @@ const superGroups = [
     items: [
       { title: "Notices", url: "/notices", icon: Megaphone },
       { title: "Communication", url: "/communication", icon: MessageSquare },
+      { title: "Class maintenance", url: "/maintenance", icon: GraduationCap },
+      { title: "Id Cards", url: "/id-cards", icon: IdCard },
+      { title: "Get Pass", url: "/gate-pass", icon: ShieldCheck },
+
+
+
     ],
   },
 
