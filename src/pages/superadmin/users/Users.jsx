@@ -31,7 +31,6 @@ import {
   Building2,
   Eye,
   FilePenLine,
-  Pencil,
   KeyRound,
   Trash2,
   UserX,
@@ -44,27 +43,15 @@ import {
   AlertCircle,
   AlertTriangle,
 } from "lucide-react";
-import { useAppUsers, useInstitutes, appUsersApi } from "../../../lib/store";
-import { useState, useMemo, useRef } from "react";
+import { useAppUsers, appUsersApi } from "../../../lib/store";
+import { getRoles,createUser,getInstitutes,getUsers,getUserById,updateUser,suspendUser, unsuspendUser,deleteUser  } from "../../../api/user";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ALL_ROLES = [
-  "Super Admin",
-  "Institute Admin",
-  "Principal",
-  "HOD",
-  "Teacher",
-  "Accountant",
-  "Librarian",
-  "Receptionist",
-  "Non-Academic",
-  "Student",
-  "Parent",
-];
-
-const LEGACY_ROLES = ["admin", "principal", "accountant", "hr", "teacher"];
+// const LEGACY_ROLES = ["admin", "principal", "accountant", "hr", "teacher"];
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
@@ -141,6 +128,70 @@ function getUserRoles(u) {
   return Array.isArray(u.role) ? u.role : u.role ? [u.role] : [];
 }
 
+function normalizeUser(u) {
+  const roleName = u.legacy_role?.role_name || u.legacy_role?.role_code || "Unknown";
+
+  const membership = Array.isArray(u.institute_memberships) ? u.institute_memberships[0] : null;
+  const instituteId = membership?.institute_id ?? membership?.institute_uuid ?? null;
+
+  let status = "Active";
+  if (u.is_locked) status = "Locked";
+  else if (u.status === "SUSPENDED") status = "Suspended";
+  else if (!u.is_active || u.status === "INACTIVE") status = "Inactive";
+
+  return {
+    id: u.user_uuid,
+    uuid: u.user_uuid,
+    userId: u.user_id,
+    name: u.display_name || u.email?.split("@")[0] || "Unnamed User",
+    email: u.email,
+    phone: u.phone,
+    role: [roleName],
+    instituteId,
+    status,
+    lastLogin: u.last_login_at ? new Date(u.last_login_at).toLocaleString() : null,
+    createdAt: u.created_at ? u.created_at.slice(0, 10) : null,
+    createdBy: u.created_by,
+    department: u.job_title,
+  };
+}
+
+function exportUsersToExcel(users, instMap) {
+  const rows = users.map((u) => ({
+    "User ID":     u.userId ?? u.id ?? "",
+    "Full Name":   u.name ?? "",
+    "Email":       u.email ?? "",
+    "Phone":       u.phone ?? "",
+    "Role(s)":     getUserRoles(u).join(", "),
+    "Institute":   getUserRoles(u).includes("Super Admin")
+                     ? "All Institutes"
+                     : (instMap[u.instituteId] ?? u.instituteId ?? ""),
+    "Status":      u.status ?? "Active",
+    "Last Login":  u.lastLogin ?? "",
+    "Created At":  u.createdAt ?? "",
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+
+  // Reasonable column widths
+  worksheet["!cols"] = [
+    { wch: 12 }, // User ID
+    { wch: 22 }, // Full Name
+    { wch: 28 }, // Email
+    { wch: 16 }, // Phone
+    { wch: 20 }, // Role(s)
+    { wch: 24 }, // Institute
+    { wch: 12 }, // Status
+    { wch: 20 }, // Last Login
+    { wch: 12 }, // Created At
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Users");
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(workbook, `users_export_${dateStr}.xlsx`);
+}
 function passwordScore(pw = "") {
   let s = 0;
   if (pw.length >= 8)           s += 25;
@@ -186,13 +237,15 @@ function RoleBadgeList({ roles }) {
 }
 
 // Multi-select dropdown for assigning one or more roles to a user
-function RoleMultiSelect({ value, onChange }) {
+function RoleMultiSelect({ roles, value, onChange }) {
   const [open, setOpen] = useState(false);
-  const roles = Array.isArray(value) ? value : value ? [value] : [];
+  const selectedRoles = Array.isArray(value) ? value : value ? [value] : [];
 
-  const toggle = (role) => {
+  const toggle = (roleName) => {
     onChange(
-      roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]
+      selectedRoles.includes(roleName)
+        ? selectedRoles.filter((r) => r !== roleName)
+        : [...selectedRoles, roleName]
     );
   };
 
@@ -204,9 +257,9 @@ function RoleMultiSelect({ value, onChange }) {
         className="w-full min-h-9 flex items-center justify-between gap-2 px-3 py-1.5 rounded-md border bg-background text-sm text-left"
       >
         <div className="flex flex-wrap gap-1 flex-1 min-w-0">
-          {roles.length === 0
+          {selectedRoles.length === 0
             ? <span className="text-muted-foreground">Select roles…</span>
-            : roles.map((r) => <RoleBadge key={r} role={r} />)}
+            : selectedRoles.map((r) => <RoleBadge key={r} role={r} />)}
         </div>
         <span className="text-muted-foreground text-xs shrink-0">▾</span>
       </button>
@@ -214,15 +267,27 @@ function RoleMultiSelect({ value, onChange }) {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-lg max-h-60 overflow-y-auto p-1">
-            {ALL_ROLES.map((r) => (
-              <label
-                key={r}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 text-sm cursor-pointer"
-              >
-                <Checkbox checked={roles.includes(r)} onCheckedChange={() => toggle(r)} />
-                {r}
-              </label>
-            ))}
+            {roles.length === 0 && (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">No roles available</p>
+            )}
+            {roles.map((role) => {
+              const checked = selectedRoles.includes(role.role_name);
+              return (
+                <button
+                  key={role.role_uuid}
+                  type="button"
+                  onClick={() => toggle(role.role_name)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 text-left text-sm"
+                >
+                  <span className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center ${
+                    checked ? "bg-primary border-primary" : "border-muted-foreground/40"
+                  }`}>
+                    {checked && <Check className="h-3 w-3 text-white" />}
+                  </span>
+                  {role.role_name}
+                </button>
+              );
+            })}
           </div>
         </>
       )}
@@ -378,8 +443,8 @@ function IconButton({ label, children, onClick, danger = false }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Users() {
-  const users      = useAppUsers();
-  const institutes = useInstitutes();
+  const [rawUsers, setRawUsers] = useState([]);
+  const [institutes, setInstitutes] = useState([]);
   const instMap    = Object.fromEntries(institutes.map((i) => [i.id, i.name]));
 
   // Filters
@@ -395,6 +460,7 @@ export default function Users() {
 
   // Selection
   const [selected, setSelected] = useState([]);
+  const [roles, setRoles] = useState([]);
 
   // Modals
   const [showCreate,     setShowCreate]     = useState(false);
@@ -407,7 +473,91 @@ export default function Users() {
 
   const dateError = filterDateFrom && filterDateTo && filterDateFrom > filterDateTo;
 
-  const setSortKey = (key) => {
+useEffect(() => {
+  const fetchInstitutes = async () => {
+    try {
+      const response = await getInstitutes({
+        page: 1,
+        limit: 10,
+        sort: "created_date",
+        order: "desc",
+      });
+
+      const normalized = (response.data || []).map((i) => ({
+        id:   i.id   ?? i.institute_uuid ?? i.uuid,
+        name: i.name ?? i.institute_name ?? i.title ?? "Unnamed Institute",
+        city: i.city ?? i.city_name ?? "",
+      }));
+
+      setInstitutes(normalized);
+    } catch (err) {
+      console.error(err);
+      toast.error("Unable to fetch institutes");
+    }
+  };
+
+  fetchInstitutes();
+}, []);
+
+  useEffect(() => {
+  const fetchRoles = async () => {
+    try {
+      const response = await getRoles({
+        active_only: false,
+        page: 1,
+        limit: 20,
+      });
+
+      setRoles(response.data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Unable to fetch roles");
+    }
+  };
+
+  fetchRoles();
+}, []);
+useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        let allUsers = [];
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore) {
+          const response = await getUsers({ page, page_size: 100 });
+          const items = response.items || [];
+          allUsers = [...allUsers, ...items];
+          hasMore = items.length === 100;
+          page += 1;
+        }
+
+        setRawUsers(allUsers);
+      } catch (err) {
+        console.error(err);
+        toast.error("Unable to fetch users");
+      }
+    };
+
+    fetchUsers();
+  }, []);
+
+  const users = useMemo(
+    () => rawUsers.map((u) => normalizeUser(u, roles)),
+    [rawUsers, roles]
+  );
+
+ const removeUserLocally = (id) => {
+    setRawUsers((prev) => prev.filter((u) => u.id !== id));
+  };
+
+  const patchUserLocally = (uuid, patch) => {
+    setRawUsers((prev) =>
+      prev.map((u) => (u.uuid === uuid ? { ...u, ...patch } : u))
+    );
+  };
+
+const setSortKey = (key) => {
     setSort((cur) =>
       cur.key === key
         ? { key, dir: cur.dir === "asc" ? "desc" : "asc" }
@@ -416,11 +566,11 @@ export default function Users() {
   };
 
   const filtered = useMemo(() => {
-    if (dateError) return [];
-    return users.filter((u) => {
-      if (filterInst   !== "all" && u.instituteId !== filterInst)           return false;
-      if (filterRole   !== "all" && !getUserRoles(u).includes(filterRole))   return false;
-      if (filterStatus !== "all" && (u.status ?? "Active") !== filterStatus) return false;
+  if (dateError) return [];
+  return users.filter((u) => {
+    if (filterInst   !== "all" && u.instituteId !== filterInst)           return false;
+    if (filterRole   !== "all" && !getUserRoles(u).some((r) => r.toLowerCase() === filterRole.toLowerCase())) return false;
+    if (filterStatus !== "all" && (u.status ?? "Active") !== filterStatus) return false;
       if (q && !u.name?.toLowerCase().includes(q.toLowerCase()) &&
                !u.email?.toLowerCase().includes(q.toLowerCase()))           return false;
       if (filterDateFrom && u.createdAt && u.createdAt < filterDateFrom)    return false;
@@ -506,16 +656,15 @@ export default function Users() {
               </div>
             </Field>
 
-            <Field label="Role">
-              <Select value={filterRole} onValueChange={(v) => { setFilterRole(v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="All Roles" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Roles</SelectItem>
-                  {ALL_ROLES.map((r)    => <SelectItem key={r}         value={r}>{r}</SelectItem>)}
-                  {LEGACY_ROLES.map((r) => <SelectItem key={`l-${r}`} value={r} className="capitalize">{r}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
+           <Field label="Role">
+  <Select value={filterRole} onValueChange={(v) => { setFilterRole(v); setPage(1); }}>
+    <SelectTrigger><SelectValue placeholder="All Roles" /></SelectTrigger>
+    <SelectContent>
+      <SelectItem value="all">All Roles</SelectItem>
+      {roles.map((r) => <SelectItem key={r.role_uuid} value={r.role_name}>{r.role_name}</SelectItem>)}
+    </SelectContent>
+  </Select>
+</Field>
 
             <Field label="Institute">
               <Select value={filterInst} onValueChange={(v) => { setFilterInst(v); setPage(1); }}>
@@ -567,11 +716,22 @@ export default function Users() {
                 )}
               </div>
             </Field>
-            <div className="flex items-end">
-              <Button variant="outline" className="w-full" onClick={() => toast.success("Export started")}>
-                <Download className="h-4 w-4" />Export Excel
-              </Button>
-            </div>
+           <div className="flex items-end">
+  <Button
+    variant="outline"
+    className="w-full"
+    onClick={() => {
+      if (sorted.length === 0) {
+        toast.error("No users to export");
+        return;
+      }
+      exportUsersToExcel(sorted, instMap);
+      toast.success(`Exported ${sorted.length} users to Excel`);
+    }}
+  >
+    <Download className="h-4 w-4" />Export Excel
+  </Button>
+</div>
           </div>
 
           {dateError && (
@@ -585,18 +745,56 @@ export default function Users() {
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
               <div className="text-sm font-medium">{selected.length} users selected</div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-7 text-xs px-2"
-                  onClick={() => { selected.forEach((id) => appUsersApi.update(id, { status: "Active" })); toast.success(`${selected.length} users activated`); setSelected([]); }}>
+               <Button size="sm" variant="outline" className="h-7 text-xs px-2"
+                  onClick={async () => {
+                    const targets = users.filter((u) => selected.includes(u.id));
+                    const results = await Promise.allSettled(
+                      targets.map((u) => unsuspendUser(u.uuid ?? u.id))
+                    );
+                    results.forEach((r, i) => {
+                      if (r.status === "fulfilled") {
+                        patchUserLocally(targets[i].uuid, {
+                          status: r.value.data?.status ?? "ACTIVE",
+                          is_active: r.value.data?.is_active ?? true,
+                        });
+                      }
+                    });
+                    const failed = results.filter((r) => r.status === "rejected").length;
+                    if (failed) toast.error(`${failed} user(s) failed to activate`);
+                    if (results.length - failed > 0) toast.success(`${results.length - failed} users activated`);
+                    setSelected([]);
+                  }}>
                   Activate
                 </Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs px-2"
-                  onClick={() => { selected.forEach((id) => appUsersApi.update(id, { status: "Inactive" })); toast.success(`${selected.length} users deactivated`); setSelected([]); }}>
+                  onClick={async () => {
+                    const targets = users.filter((u) => selected.includes(u.id));
+                    const results = await Promise.allSettled(
+                      targets.map((u) => suspendUser(u.uuid ?? u.id))
+                    );
+                    results.forEach((r, i) => {
+                      if (r.status === "fulfilled") {
+                        patchUserLocally(targets[i].uuid, {
+                          status: r.value.data?.status ?? "SUSPENDED",
+                          is_active: r.value.data?.is_active ?? false,
+                        });
+                      }
+                    });
+                    const failed = results.filter((r) => r.status === "rejected").length;
+                    if (failed) toast.error(`${failed} user(s) failed to deactivate`);
+                    if (results.length - failed > 0) toast.success(`${results.length - failed} users deactivated`);
+                    setSelected([]);
+                  }}>
                   Deactivate
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs px-2"
-                  onClick={() => { toast.success("Export started"); }}>
-                  <Download className="h-3 w-3" />Export
-                </Button>
+               <Button size="sm" variant="outline" className="h-7 text-xs px-2"
+  onClick={() => {
+    const selectedUsers = users.filter((u) => selected.includes(u.id));
+    exportUsersToExcel(selectedUsers, instMap);
+    toast.success(`Exported ${selectedUsers.length} selected users`);
+  }}>
+  <Download className="h-3 w-3" />Export
+</Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-destructive border-destructive/30"
                   onClick={() => { selected.forEach((id) => appUsersApi.remove?.(id)); toast.success(`${selected.length} users deleted`); setSelected([]); }}>
                   Delete
@@ -646,6 +844,7 @@ export default function Users() {
                 ) : (
                   paginated.map((u) => {
                     const isLocked = (u.status ?? "Active") === "Locked";
+                    const isSuspended = (u.status ?? "Active") === "Suspended";
                     const userIsSuperAdmin = getUserRoles(u).includes("Super Admin");
                     return (
                       <TableRow key={u.id}>
@@ -688,14 +887,28 @@ export default function Users() {
                               <KeyRound className="h-4 w-4" />
                             </IconButton>
                             <IconButton
-                              label={isLocked ? "Unlock" : "Deactivate"}
-                              onClick={() => {
+                              label={isLocked ? "Unlock" : isSuspended ? "Activate" : "Deactivate"}
+                              onClick={async () => {
                                 if (isLocked) {
                                   appUsersApi.update(u.id, { status: "Active" });
                                   toast.success(`${u.name} unlocked`);
-                                } else {
-                                  setDeactivateUser(u);
+                                  return;
                                 }
+                                if (isSuspended) {
+                                  try {
+                                    const response = await unsuspendUser(u.uuid ?? u.id);
+                                    patchUserLocally(u.uuid, {
+                                      status: response.data?.status ?? "ACTIVE",
+                                      is_active: response.data?.is_active ?? true,
+                                    });
+                                    toast.success(response.message || `${u.name} activated`);
+                                  } catch (err) {
+                                    console.error(err);
+                                    toast.error(err.response?.data?.message || "Unable to activate user");
+                                  }
+                                  return;
+                                }
+                                setDeactivateUser(u);
                               }}
                             >
                               <UserX className="h-4 w-4" />
@@ -745,19 +958,29 @@ export default function Users() {
 
       {/* ─── Modals & Panels ─────────────────────────────────────────────────── */}
 
-      {showCreate     && <CreateUserModal    institutes={institutes} onClose={() => setShowCreate(false)} />}
-      {editUser       && <EditUserModal      user={editUser}        institutes={institutes} onClose={() => setEditUser(null)} />}
+      {showCreate     && <CreateUserModal
+    institutes={institutes}
+    roles={roles}
+    onClose={() => setShowCreate(false)}
+/>}
+      {editUser       && <EditUserModal
+    user={editUser}
+    institutes={institutes}
+    roles={roles}
+    onClose={() => setEditUser(null)}
+/>}
       {resetUser      && <ResetPasswordModal user={resetUser}       onClose={() => setResetUser(null)} />}
-      {deactivateUser && <DeactivateModal    user={deactivateUser}  onClose={() => setDeactivateUser(null)} />}
-      {deleteUser     && <DeleteModal        user={deleteUser}      instMap={instMap} onClose={() => setDeleteUser(null)} />}
-      {showImport     && <ImportModal        onClose={() => setShowImport(false)} />}
+{deactivateUser && <DeactivateModal    user={deactivateUser}  onSuccess={patchUserLocally} onClose={() => setDeactivateUser(null)} />}
+  {deleteUser     && <DeleteModal        user={deleteUser}      instMap={instMap} onRemoveLocal={removeUserLocally} onClose={() => setDeleteUser(null)} />}
+        {showImport     && <ImportModal        onClose={() => setShowImport(false)} />}
 
       <SlidePanel open={!!viewUser} onClose={() => setViewUser(null)}>
         {viewUser && (
           <ViewUserPanel
-            user={viewUser}
-            instMap={instMap}
-            institutes={institutes}
+  user={viewUser}
+  instMap={instMap}
+  institutes={institutes}
+  roles={roles}
             onEdit={() => { setEditUser(viewUser); setViewUser(null); }}
             onClose={() => setViewUser(null)}
           />
@@ -769,29 +992,84 @@ export default function Users() {
 
 // ─── Create User Modal ────────────────────────────────────────────────────────
 
-function CreateUserModal({ institutes, onClose }) {
+function CreateUserModal({ institutes,roles, onClose }) {
   const [form, setForm] = useState({
     name: "", email: "", phone: "",
-    roles: [], instituteId: institutes[0]?.id ?? "",
+    roles: [], instituteId: "",
     department: "", autoPassword: true, password: "",
     sendWelcome: true, accessScope: "Full Access",
     validFrom: "", validUntil: "",
   });
+
+  // Default to the first institute once the list has actually loaded,
+  // but don't stomp on a value the user already picked.
+  useEffect(() => {
+    if (!form.instituteId && institutes.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setForm((f) => (f.instituteId ? f : { ...f, instituteId: institutes[0].id }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [institutes]);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const isSuperAdmin = form.roles.includes("Super Admin");
 
-  const submit = () => {
-    if (!form.name.trim() || !form.email.trim()) { toast.error("Full name and email are required"); return; }
-    if (form.roles.length === 0) { toast.error("At least one role is required"); return; }
-    if (!isSuperAdmin && !form.instituteId) { toast.error("Assigned institute is required"); return; }
-    if (!form.autoPassword && form.password.length < 6) { toast.error("Password must be at least 6 characters"); return; }
-    appUsersApi.add({
-      name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(),
-      role: form.roles, instituteId: isSuperAdmin ? null : form.instituteId, status: "Active",
-    });
-    toast.success(`${form.name} created`, { description: form.sendWelcome ? "Welcome email sent" : undefined });
+  const submit = async () => {
+  if (!form.name.trim()) {
+    toast.error("Full name is required");
+    return;
+  }
+
+  if (!form.email.trim()) {
+    toast.error("Email is required");
+    return;
+  }
+
+  if (form.roles.length === 0) {
+    toast.error("Please select at least one role");
+    return;
+  }
+
+  if (!isSuperAdmin && !form.instituteId) {
+    toast.error("Please select an institute");
+    return;
+  }
+
+  try {
+    // Convert selected role names to role UUIDs
+    const selectedRoleUUIDs = roles
+      .filter((r) => form.roles.includes(r.role_name))
+      .map((r) => r.role_uuid);
+
+    const payload = {
+      display_name: form.name,
+      email: form.email,
+      phone: form.phone,
+      institute_assignments: [
+        {
+          institute_uuid: form.instituteId,
+          department_uuid: null,
+          role_uuids: selectedRoleUUIDs,
+          is_primary: true,
+        },
+      ],
+      auto_generate_password: form.autoPassword,
+      send_welcome_email: form.sendWelcome,
+    };
+
+    const response = await createUser(payload);
+
+    toast.success(response.message);
+
     onClose();
-  };
+  } catch (error) {
+    console.error(error);
+
+    toast.error(
+      error.response?.data?.message || "Unable to create user"
+    );
+  }
+};
 
   return (
     <Modal onClose={onClose} maxWidth="max-w-2xl">
@@ -807,8 +1085,11 @@ function CreateUserModal({ institutes, onClose }) {
           <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 …" />
         </Field>
         <Field label={<>Role(s) <span className="text-destructive">*</span></>}>
-          <RoleMultiSelect value={form.roles} onChange={(v) => set("roles", v)} />
-        </Field>
+<RoleMultiSelect
+    roles={roles}
+    value={form.roles}
+    onChange={(v) => set("roles", v)}
+/>        </Field>
         {isSuperAdmin && (
           <div className="sm:col-span-2 flex items-start gap-2 p-3 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 text-xs">
             <Info className="h-4 w-4 shrink-0 mt-0.5" />
@@ -823,24 +1104,7 @@ function CreateUserModal({ institutes, onClose }) {
             </Select>
           </Field>
         )}
-        {!isSuperAdmin && (
-          <Field label="Department">
-            <Input value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="e.g. Science" />
-          </Field>
-        )}
-        
-        <Field label="Access Scope">
-          <Select value={form.accessScope} onValueChange={(v) => set("accessScope", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{ACCESS_SCOPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
-        </Field>
-        <Field label="Access Valid From">
-          <Input type="date" value={form.validFrom}  onChange={(e) => set("validFrom",  e.target.value)} />
-        </Field>
-        <Field label="Access Valid Until">
-          <Input type="date" value={form.validUntil} onChange={(e) => set("validUntil", e.target.value)} />
-        </Field>
+       
         <div className="sm:col-span-2 space-y-3 pt-1">
           <ToggleRow label="Auto-generate Password" desc="System will create a secure random password" checked={form.autoPassword} onCheckedChange={(v) => set("autoPassword", v)} />
           {!form.autoPassword && (
@@ -862,19 +1126,61 @@ function CreateUserModal({ institutes, onClose }) {
 
 // ─── Edit User Modal ──────────────────────────────────────────────────────────
 
-function EditUserModal({ user, institutes, onClose }) {
+function EditUserModal({ user, institutes,roles, onClose }) {
   const initialRoles = getUserRoles(user).length ? getUserRoles(user) : ["Teacher"];
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     name:        user.name        ?? "",
     phone:       user.phone       ?? "",
     roles:       initialRoles,
-    instituteId: user.instituteId ?? institutes[0]?.id ?? "",
+    instituteId: user.instituteId ?? "",
     department:  user.department  ?? "",
     accessScope: user.accessScope ?? "Full Access",
     validFrom:   user.validFrom   ?? "",
     validUntil:  user.validUntil  ?? "",
     status:      user.status      ?? "Active",
   });
+
+  // Fetch the full, fresh record for this user when the modal opens,
+  // and re-populate the form from it (list-row data can be stale/thin).
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchDetail = async () => {
+      try {
+        const detail = await getUserById(user.uuid ?? user.id);
+        if (cancelled) return;
+
+const fresh = normalizeUser(detail.data ?? detail, roles);
+        setForm((f) => ({
+          ...f,
+          name: fresh.name ?? f.name,
+          phone: fresh.phone ?? f.phone,
+          roles: getUserRoles(fresh).length ? getUserRoles(fresh) : f.roles,
+          instituteId: fresh.instituteId ?? f.instituteId,
+          department: fresh.department ?? f.department,
+          status: fresh.status ?? f.status,
+        }));
+      } catch (err) {
+        console.error(err);
+        toast.error("Unable to load latest user details");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchDetail();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.uuid, user.id]);
+
+  useEffect(() => {
+    if (!form.instituteId && institutes.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setForm((f) => (f.instituteId ? f : { ...f, instituteId: institutes[0].id }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [institutes]);
   const [roleWarning, setRoleWarning] = useState(false);
   const isSuperAdmin = form.roles.includes("Super Admin");
 
@@ -888,22 +1194,41 @@ function EditUserModal({ user, institutes, onClose }) {
     setForm((f) => ({ ...f, [k]: v }));
   };
 
-  const submit = () => {
-    if (form.roles.length === 0) { toast.error("At least one role is required"); return; }
-    if (!isSuperAdmin && !form.instituteId) { toast.error("Assigned institute is required"); return; }
-    appUsersApi.update(user.id, {
-      name: form.name.trim(), phone: form.phone,
-      role: form.roles, instituteId: isSuperAdmin ? null : form.instituteId,
-      department: form.department, status: form.status,
-    });
-    toast.success("User updated");
+ const [saving, setSaving] = useState(false);
+
+const submit = async () => {
+  if (form.roles.length === 0) { toast.error("At least one role is required"); return; }
+  if (!isSuperAdmin && !form.instituteId) { toast.error("Assigned institute is required"); return; }
+
+  try {
+    setSaving(true);
+
+    const payload = {
+      display_name: form.name.trim(),
+      phone: form.phone,
+    };
+
+    const response = await updateUser(user.uuid ?? user.id, payload);
+
+    toast.success(response.message || "User updated");
     onClose();
-  };
+  } catch (error) {
+    console.error(error);
+    toast.error(error.response?.data?.message || "Unable to update user");
+  } finally {
+    setSaving(false);
+  }
+};
 
   return (
     <Modal onClose={onClose} maxWidth="max-w-2xl">
       <ModalHeader title="Edit User" onClose={onClose} />
-      <div className="px-6 py-4 space-y-4">
+      {loading && (
+        <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+          Loading user details…
+        </div>
+      )}
+      <div className={`px-6 py-4 space-y-4 ${loading ? "hidden" : ""}`}>
         {roleWarning && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -935,8 +1260,11 @@ function EditUserModal({ user, institutes, onClose }) {
             <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
           </Field>
           <Field label={<>Role(s) <span className="text-destructive">*</span></>}>
-            <RoleMultiSelect value={form.roles} onChange={(v) => set("roles", v)} />
-          </Field>
+<RoleMultiSelect
+    roles={roles}
+    value={form.roles}
+    onChange={(v) => set("roles", v)}
+/>          </Field>
           {!isSuperAdmin && (
             <Field label="Assigned Institute(s)" className="sm:col-span-2">
               <Select value={form.instituteId} onValueChange={(v) => set("instituteId", v)}>
@@ -945,7 +1273,7 @@ function EditUserModal({ user, institutes, onClose }) {
               </Select>
             </Field>
           )}
-          {!isSuperAdmin && (
+          {/* {!isSuperAdmin && (
             <Field label="Department">
               <Input value={form.department} onChange={(e) => set("department", e.target.value)} />
             </Field>
@@ -961,7 +1289,7 @@ function EditUserModal({ user, institutes, onClose }) {
           </Field>
           <Field label="Access Valid Until">
             <Input type="date" value={form.validUntil} onChange={(e) => set("validUntil", e.target.value)} />
-          </Field>
+          </Field> */}
           {/* <Field label="Account Status">
             <Select value={form.status} onValueChange={(v) => set("status", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -975,7 +1303,9 @@ function EditUserModal({ user, institutes, onClose }) {
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button className="gradient-primary border-0" onClick={submit}>Save Changes</Button>
+<Button className="gradient-primary border-0" disabled={saving} onClick={submit}>
+  {saving ? "Saving…" : "Save Changes"}
+</Button>
       </ModalFooter>
     </Modal>
   );
@@ -983,7 +1313,7 @@ function EditUserModal({ user, institutes, onClose }) {
 
 // ─── View User Panel ──────────────────────────────────────────────────────────
 
-function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
+function ViewUserPanel({ user, instMap, institutes, roles, onClose }) {
   const [tab, setTab] = useState("profile");
   const [assignedUsers, setAssignedUsers] = useState(MOCK_ASSIGNED_USERS);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -994,7 +1324,7 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
   const tabs = [
     { id: "profile",     label: "Profile"      },
     // { id: "users",       label: "Users"        },
-    { id: "permissions", label: "Permissions"  },
+    // { id: "permissions", label: "Permissions"  },
     { id: "activity",    label: "Activity Log" },
     { id: "sessions",    label: "Sessions"     },
   ];
@@ -1019,9 +1349,9 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Button size="sm" variant="outline" onClick={onEdit}>
+            {/* <Button size="sm" variant="outline" onClick={onEdit}>
               <Pencil className="h-3.5 w-3.5 mr-1" />Edit
-            </Button>
+            </Button> */}
             <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
@@ -1052,10 +1382,6 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
               ["Phone",        user.phone       || "—"],
               ["Role",         user.role],
               ["Institute(s)", userIsSuperAdmin ? "All Institutes" : (instMap[user.instituteId] ?? user.instituteId)],
-              ["Department",   user.department  || "—"],
-              ["Access Scope", user.accessScope || "Full Access"],
-              ["Valid From",   user.validFrom   || "—"],
-              ["Valid Until",  user.validUntil  || "—"],
               ["Created By",   user.createdBy   || "System"],
               ["Created At",   user.createdAt   || "—"],
               ["Last Login",   user.lastLogin   || "—"],
@@ -1226,8 +1552,9 @@ function ViewUserPanel({ user, instMap, institutes, onEdit, onClose }) {
       {/* Assign User Modal */}
       {showAssignModal && (
         <AssignUserModal
-          institutes={institutes}
-          instituteName={instMap[user.instituteId] ?? "this institute"}
+  institutes={institutes}
+  roles={roles}
+  instituteName={instMap[user.instituteId] ?? "this institute"}
           onClose={() => setShowAssignModal(false)}
           onAssign={(assignment) => {
             setAssignedUsers((prev) => [...prev, { ...assignment, id: `a${Date.now()}`, status: "Active" }]);
@@ -1395,7 +1722,7 @@ function ResetPasswordModal({ user, onClose }) {
 
 // ─── Assign User Modal ────────────────────────────────────────────────────────
 
-function AssignUserModal({ instituteName, onClose, onAssign }) {
+function AssignUserModal({ roles, instituteName, onClose, onAssign }) {
   const allUsers = useAppUsers();
   const [searchQ,     setSearchQ]     = useState("");
   const [searchRes,   setSearchRes]   = useState([]);
@@ -1486,7 +1813,7 @@ function AssignUserModal({ instituteName, onClose, onAssign }) {
           <Select value={role} onValueChange={setRole}>
             <SelectTrigger><SelectValue placeholder="Select role…" /></SelectTrigger>
             <SelectContent>
-              {ALL_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            {roles.map((r) => <SelectItem key={r.role_uuid} value={r.role_name}>{r.role_name}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>
@@ -1599,13 +1926,26 @@ function RemoveAssignmentModal({ assignedUser, instituteName, onClose, onConfirm
 
 // ─── Deactivate Modal ─────────────────────────────────────────────────────────
 
-function DeactivateModal({ user, onClose }) {
+function DeactivateModal({ user, onSuccess, onClose }) {
   const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const confirm = () => {
-    appUsersApi.update(user.id, { status: "Inactive" });
-    toast.success(`${user.name} deactivated`);
-    onClose();
+  const confirm = async () => {
+    try {
+      setSaving(true);
+      const response = await suspendUser(user.uuid ?? user.id);
+      onSuccess?.(user.uuid, {
+        status: response.data?.status ?? "SUSPENDED",
+        is_active: response.data?.is_active ?? false,
+      });
+      toast.success(response.message || `${user.name} deactivated`);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Unable to deactivate user");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1622,26 +1962,35 @@ function DeactivateModal({ user, onClose }) {
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button className="bg-orange-600 hover:bg-orange-700 text-white border-0" onClick={confirm}>
-          Confirm Deactivate
+        <Button className="bg-orange-600 hover:bg-orange-700 text-white border-0" disabled={saving} onClick={confirm}>
+          {saving ? "Deactivating…" : "Confirm Deactivate"}
         </Button>
       </ModalFooter>
     </Modal>
   );
 }
-
 // ─── Delete Modal ─────────────────────────────────────────────────────────────
 
-function DeleteModal({ user, instMap, onClose }) {
+function DeleteModal({ user, instMap, onRemoveLocal, onClose }) {
   const [confirmEmail, setConfirmEmail] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const matches = confirmEmail.toLowerCase() === user.email?.toLowerCase();
   const userIsSuperAdmin = getUserRoles(user).includes("Super Admin");
 
-  const confirm = () => {
-    if (!matches) return;
-    appUsersApi.remove?.(user.id);
-    toast.success(`${user.name} deleted`);
-    onClose();
+  const confirm = async () => {
+    if (!matches || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteUser(user.uuid ?? user.id);
+      onRemoveLocal(user.id);
+      toast.success(`${user.name} deleted`);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Unable to delete user");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -1671,13 +2020,13 @@ function DeleteModal({ user, instMap, onClose }) {
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button
-          disabled={!matches}
+       <Button
+          disabled={!matches || deleting}
           style={{ backgroundColor: matches ? "#B71C1C" : undefined }}
           className="text-white border-0 disabled:opacity-40 hover:opacity-90"
           onClick={confirm}
         >
-          Delete User
+          {deleting ? "Deleting…" : "Delete User"}
         </Button>
       </ModalFooter>
     </Modal>

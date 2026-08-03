@@ -48,7 +48,7 @@ const adminGroups = [
   {
     label: "Academic",
     items: [
-      { title: "Admissions", url: "/admin/admissions", icon: KanbanSquare },
+      { title: "Admissions", url: "/admissions", icon: KanbanSquare },
       { title: "Students", url: "/students", icon: GraduationCap },
       { title: "Classes & Sections", url: "/classes", icon: School },
       { title: "Timetable", url: "/timetable", icon: CalendarDays },
@@ -72,9 +72,9 @@ const adminGroups = [
     label: "Operations",
     items: [
       { title: "Fees & Finance", url: "/fees", icon: IndianRupee },
-      { title: "Expenses", url: "/admin/expenses", icon: Receipt },
+      { title: "Expenses", url: "/expenses", icon: Receipt },
       { title: "Infrastructure", url: "/admin/infrastructure", icon: Network },
-      { title: "Assets", url: "/admin/assets", icon: Boxes },
+      { title: "Assets", url: "/assets", icon: Boxes },
       { title: "Transport", url: "/transport", icon: Bus },
       { title: "Hostel", url: "/hostel", icon: Building2 },
       { title: "Library", url: "/library", icon: Library },
@@ -116,7 +116,7 @@ const superGroups = [
   {
     label: "Academic Monitoring",
     items: [
-      { title: "Admissions", url: "/admin/admissions", icon: KanbanSquare },
+      { title: "Admissions", url: "/admissions", icon: KanbanSquare },
       { title: "Students", url: "/students", icon: GraduationCap },
       { title: "Studentarchive", url: "/sudents/archive", icon: Megaphone },
       { title: "Teachers", url: "/teachers", icon: UserCog },
@@ -136,18 +136,30 @@ const superGroups = [
     ],
   },
 
+   {
+    label: "Student",
+    items: [
+      { title: "Examinations", url: "/student/exams", icon: BookOpen },
+      { title: "My Timetable", url: "/student/timetable", icon: CalendarDays },
+
+      
+
+
+
+    ],
+  },
   {
     label: "Operations",
     items: [
       { title: "Fees & Finance", url: "/fees", icon: IndianRupee },
       { title: "Fee Collection", url: "/fee-collection", icon: IndianRupee },
-      { title: "Expenses", url: "/admin/expenses", icon: Receipt },
-      { title: "Assets", url: "/admin/assets", icon: Boxes },
-      { title: "Infrastructure", url: "/admin/infrastructure", icon: Network },
+      { title: "Expenses", url: "/expenses", icon: Receipt },
+      { title: "Assets", url: "/assets", icon: Boxes },
+      { title: "Infrastructure", url: "/infrastructure", icon: Network },
       { title: "Transport", url: "/transport", icon: Bus },
       { title: "Hostel", url: "/hostel", icon: Building2 },
       { title: "Library", url: "/library", icon: Library },
-      { title: "Documents", url: "/admin/dms", icon: FolderArchive },
+      { title: "Documents", url: "/dms", icon: FolderArchive },
     ],
   },
 
@@ -256,23 +268,56 @@ const parentGroups = [
   },
 ];
 export function navForRole(role) {
-  if (role === "SUPER_ADMIN") return superGroups;
-  if (role === "teacher") return teacherGroups;
-  if (role === "student") return studentGroups;
-  if (role === "parent") return parentGroups;
-  return adminGroups;
+  switch (role) {
+    case "SUPER_ADMIN":
+      return superGroups;
+
+    case "TEACHER":
+      return teacherGroups;
+
+    case "STUDENT":
+      return studentGroups;
+
+    case "PARENT":
+      return parentGroups;
+
+    default:
+      return adminGroups;
+  }
 }
 export function portalHomeForRole(role) {
-  if (role === "SUPER_ADMIN") return "/super/dashboard";
-  if (role === "teacher") return "/teacher/dashboard";
-  if (role === "student") return "/student/dashboard";
-  if (role === "parent") return "/parent/dashboard";
-  return "/";
+  switch (role) {
+    case "SUPER_ADMIN":
+      return "/super/dashboard";
+
+    case "TEACHER":
+      return "/teacher/dashboard";
+
+    case "STUDENT":
+      return "/student/dashboard";
+
+    case "PARENT":
+      return "/parent/dashboard";
+
+    default:
+      return "/admin/dashboard";
+  }
 }
 export function portalLabelForRole(role) {
-  if (role === "SUPER_ADMIN") return "Super Admin Portal";
-  if (role === "teacher") return "Teacher Portal";
-  if (role === "student") return "Student Portal";
-  if (role === "parent") return "Parent Portal";
-  return "Admin Portal";
+  switch (role) {
+    case "SUPER_ADMIN":
+      return "Super Admin Portal";
+
+    case "TEACHER":
+      return "Teacher Portal";
+
+    case "STUDENT":
+      return "Student Portal";
+
+    case "PARENT":
+      return "Parent Portal";
+
+    default:
+      return "Admin Portal";
+  }
 }

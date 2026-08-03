@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState,useRef,  } from "react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "./ui/dialog";
@@ -9,68 +9,31 @@ import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
-import { ChevronRight, Shield, Layers, KeyRound, Check, Trash2 } from "lucide-react";
+import { ChevronRight, Shield, Layers, KeyRound, Check } from "lucide-react";
 import { toast } from "sonner";
-import { customRolesApi } from "../lib/store";
+import { getInstitutes,createRole, getRoleDetails, updateRole, deleteRole as deleteRoleApi} from "../api/role";
+// import { customRolesApi } from "../lib/store";
 
-export const MODULE_CATALOG = [
-  { key: "admissions", label: "Admissions", tabs: [
-    { key: "inquiries", label: "Inquiries" }, { key: "applications", label: "Applications" },
-    { key: "interviews", label: "Interviews" }, { key: "offers", label: "Offers" }, { key: "reports", label: "Reports" },
-  ]},
-  { key: "students", label: "Students", tabs: [
-    { key: "list", label: "Directory" }, { key: "profile", label: "Profiles" },
-    { key: "attendance", label: "Attendance" }, { key: "documents", label: "Documents" }, { key: "transfers", label: "Transfers" },
-  ]},
-  { key: "classes", label: "Classes", tabs: [
-    { key: "list", label: "Class List" }, { key: "sections", label: "Sections" },
-    { key: "subjects", label: "Subjects" }, { key: "mapping", label: "Subject Mapping" }, { key: "teachers", label: "Teacher Mapping" },
-  ]},
-  { key: "timetable", label: "Timetable", tabs: [
-    { key: "grid", label: "Grid" }, { key: "rooms", label: "Room Allocation" },
-    { key: "conflicts", label: "Conflicts" }, { key: "publish", label: "Publish" },
-  ]},
-  { key: "attendance", label: "Attendance", tabs: [
-    { key: "daily", label: "Daily" }, { key: "subject", label: "Subject-wise" },
-    { key: "corrections", label: "Corrections" }, { key: "reports", label: "Reports" },
-  ]},
-  { key: "assignments", label: "Assignments", tabs: [
-    { key: "list", label: "All Assignments" }, { key: "submissions", label: "Submissions" },
-    { key: "grading", label: "Grading" }, { key: "analytics", label: "Analytics" },
-  ]},
-  { key: "exams", label: "Examinations", tabs: [
-    { key: "schedule", label: "Schedule" }, { key: "halls", label: "Hall Plan" },
-    { key: "marks", label: "Marks Entry" }, { key: "results", label: "Results" }, { key: "reports", label: "Reports" },
-  ]},
-  { key: "fees", label: "Fees", tabs: [
-    { key: "structure", label: "Structure" }, { key: "collection", label: "Collection" },
-    { key: "pending", label: "Pending" }, { key: "reports", label: "Reports" },
-  ]},
-  { key: "payroll", label: "Payroll", tabs: [
-    { key: "runs", label: "Pay Runs" }, { key: "components", label: "Components" }, { key: "payslips", label: "Payslips" },
-  ]},
-  { key: "employees", label: "Employees", tabs: [
-    { key: "list", label: "Directory" }, { key: "leaves", label: "Leaves" }, { key: "documents", label: "Documents" },
-  ]},
-  { key: "transport", label: "Transport", tabs: [
-    { key: "routes", label: "Routes" }, { key: "vehicles", label: "Vehicles" }, { key: "drivers", label: "Drivers" },
-  ]},
-  { key: "hostel", label: "Hostel", tabs: [
-    { key: "blocks", label: "Blocks & Rooms" }, { key: "allocations", label: "Allocations" }, { key: "visitors", label: "Visitors" },
-  ]},
-  { key: "library", label: "Library", tabs: [
-    { key: "catalog", label: "Catalog" }, { key: "issue", label: "Issue / Return" }, { key: "fines", label: "Fines" },
-  ]},
-  { key: "communication", label: "Communication", tabs: [
-    { key: "notices", label: "Notices" }, { key: "compose", label: "Compose" }, { key: "history", label: "History" },
-  ]},
-  { key: "reports", label: "Reports & Analytics", tabs: [
-    { key: "academic", label: "Academic" }, { key: "finance", label: "Finance" }, { key: "operations", label: "Operations" },
-  ]},
-  { key: "settings", label: "Settings", tabs: [
-    { key: "general", label: "General" }, { key: "roles", label: "Roles" }, { key: "billing", label: "Billing" },
-  ]},
-];
+const SCOPE_OPTIONS = ["Institute"];
+function toWizardScope(apiScope) {
+  const match = SCOPE_OPTIONS.find(
+    (s) => s.toUpperCase() === (apiScope || "").toUpperCase()
+  );
+  return match ?? "Institute";
+}
+
+function mapPermissionsToWizardPerms(permissions = []) {
+  const perms = {};
+  permissions.forEach((p) => {
+    if (!perms[p.module_code]) {
+      perms[p.module_code] = { enabled: true, tabs: {} };
+    }
+    perms[p.module_code].tabs[p.tab_code] = (p.actions || [])
+      .filter((a) => a.allow)
+      .map((a) => a.action_code);
+  });
+  return perms;
+}
 
 const ALL_ACTIONS = [
   { key: "view", label: "View" },
@@ -81,45 +44,209 @@ const ALL_ACTIONS = [
   { key: "approve", label: "Approve" },
 ];
 
-export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
+export function RoleWizard({ open, onOpenChange, edit, onDeleted, modules,loadModuleTabs, }) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [scope, setScope] = useState("Institute");
   const [desc, setDesc] = useState("");
   const [perms, setPerms] = useState({});
-  const [activeModule, setActiveModule] = useState(MODULE_CATALOG[0].key);
+  const [activeModule, setActiveModule] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setStep(1);
-    setName(edit?.name ?? "");
-    setScope(edit?.scope ?? "Institute");
-    setDesc(edit?.desc ?? "");
-    setPerms(edit?.perms ?? {});
-    setActiveModule(MODULE_CATALOG[0].key);
-    setConfirmDeleteOpen(false);
-  }, [open, edit]);
+  const [deletingRole, setDeletingRole] = useState(false);
+  const [institutes, setInstitutes] = useState([]);
+  const [selectedInstitutes, setSelectedInstitutes] = useState([]);
+  const [instituteDropdownOpen, setInstituteDropdownOpen] = useState(false);
+  const instituteDropdownRef = useRef(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingEditDetails, setLoadingEditDetails] = useState(false);
+  const [editDetailsError, setEditDetailsError] = useState(null);
 
   const enabledModules = useMemo(
     () => Object.entries(perms).filter(([, v]) => v.enabled).map(([k]) => k),
     [perms],
   );
-
-  const toggleModule = (key, on) => {
-    setPerms((p) => {
-      const next = { ...p };
-      if (on) {
-        const spec = MODULE_CATALOG.find((m) => m.key === key);
-        next[key] = next[key] ?? { enabled: true, tabs: Object.fromEntries(spec.tabs.map((t) => [t.key, ["view"]])) };
-        next[key].enabled = true;
-      } else if (next[key]) {
-        next[key] = { ...next[key], enabled: false };
-      }
-      return next;
+const buildPermissions = () =>
+  enabledModules.flatMap((modKey) => {
+    const spec = modules.find((m) => m.key === modKey);
+    const modPerms = perms[modKey];
+    return Object.entries(modPerms.tabs).map(([tabKey, actions]) => {
+      const tab = spec.tabs?.find((t) => t.key === tabKey);
+      return {
+        module_uuid: spec.uuid,
+        tab_uuid: tab?.uuid,
+        actions,
+      };
     });
+  });
+
+const submit = async () => {
+  if (!name.trim()) return toast.error("Role name is required");
+
+  const payload = {
+    role_name: name.trim(),
+    role_code: name.trim().toUpperCase().replace(/\s+/g, "_"),
+    description: desc,
+    scope: scope.toUpperCase(),
+    role_type: "CUSTOM",
+    institute_uuid: scope === "Institute" ? selectedInstitutes[0] ?? null : null,
+    permissions: buildPermissions(),
   };
 
+ try {
+    setSubmitting(true);
+    if (edit) {
+      await updateRole(edit.id, payload);
+      toast.success(`Role "${name}" updated`);
+    } else {
+      await createRole(payload);
+      toast.success(`Role "${name}" created`);
+    }
+    onOpenChange(false);
+  } catch (err) {
+    console.error(err);
+    toast.error(err?.response?.data?.message || "Failed to save role");
+  } finally {
+    setSubmitting(false);
+  }
+};
+ useEffect(() => {
+  if (!open) return;
+
+  const loadInstitutes = async () => {
+    try {
+      const list = await getInstitutes();
+      setInstitutes(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error(err);
+      setInstitutes([]);
+    }
+  };
+
+  loadInstitutes();
+}, [open]);
+
+useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStep(1);
+    setActiveModule(modules?.[0]?.key || null);
+    setConfirmDeleteOpen(false);
+    setInstituteDropdownOpen(false);
+    setEditDetailsError(null);
+
+    if (!edit) {
+      // Create flow — blank slate
+      setName("");
+      setScope("Institute");
+      setDesc("");
+      setPerms({});
+      setSelectedInstitutes([]);
+      return;
+    }
+
+    // Edit flow — list rows don't carry permissions, so fetch the full
+    // role by id and hydrate the wizard from that.
+    let cancelled = false;
+    const loadEditDetails = async () => {
+      setLoadingEditDetails(true);
+      try {
+        const detail = await getRoleDetails(edit.id);
+        if (cancelled) return;
+        setName(detail.role_name ?? "");
+        setScope(toWizardScope(detail.scope));
+        setDesc(detail.description ?? "");
+        setPerms(mapPermissionsToWizardPerms(detail.permissions));
+        setSelectedInstitutes(detail.institute_uuid ? [detail.institute_uuid] : []);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setEditDetailsError("Failed to load role details. Please try again.");
+          setName(edit.name ?? "");
+          setScope(toWizardScope(edit.raw?.scope));
+          setDesc(edit.desc ?? "");
+          setPerms({});
+          setSelectedInstitutes([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingEditDetails(false);
+      }
+    };
+    loadEditDetails();
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, edit]);
+
+ 
+  // Fires GET /super/modules/:uuid ONLY when this module is opened
+  // (i.e. clicked in the left list on step 3), and only if not cached yet.
+ useEffect(() => {
+  if (step !== 3 || !activeModule) return;
+  const spec = modules.find((m) => m.key === activeModule);
+  if (spec && !spec.tabs) {
+    loadModuleTabs(spec.uuid);
+  }
+}, [step, activeModule, modules, loadModuleTabs]);
+
+  const toggleModule = (key, on) => {
+  if (on) {
+    const spec = modules.find((m) => m.key === key);
+    if (spec && !spec.tabs) {
+      // Tabs haven't been fetched yet — kick off the load; we'll backfill
+      // default permissions once they arrive (see effect below).
+      loadModuleTabs(spec.uuid);
+    }
+  }
+  setPerms((p) => {
+    const next = { ...p };
+    if (on) {
+      const spec = modules.find((m) => m.key === key);
+      next[key] = next[key] ?? {
+        enabled: true,
+        tabs: Object.fromEntries((spec?.tabs ?? []).map((t) => [t.key, ["view"]])),
+      };
+      next[key].enabled = true;
+    } else if (next[key]) {
+      next[key] = { ...next[key], enabled: false };
+    }
+    return next;
+  });
+};
+useEffect(() => {
+  setPerms((p) => {
+    let changed = false;
+    const next = { ...p };
+    Object.entries(next).forEach(([key, val]) => {
+      if (!val.enabled || Object.keys(val.tabs ?? {}).length > 0) return;
+      const spec = modules.find((m) => m.key === key);
+      if (spec?.tabs?.length) {
+        next[key] = { ...val, tabs: Object.fromEntries(spec.tabs.map((t) => [t.key, ["view"]])) };
+        changed = true;
+      }
+    });
+    return changed ? next : p;
+  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [modules]);
+useEffect(() => {
+  if (!instituteDropdownOpen) return;
+
+  const handleClickOutside = (e) => {
+    if (instituteDropdownRef.current && !instituteDropdownRef.current.contains(e.target)) {
+      setInstituteDropdownOpen(false);
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutside);
+  return () => document.removeEventListener("mousedown", handleClickOutside);
+}, [instituteDropdownOpen]);
+
+ const toggleInstitute = (uuid) => {
+    setSelectedInstitutes((prev) =>
+      prev.includes(uuid) ? prev.filter((id) => id !== uuid) : [...prev, uuid]
+    );
+  };
   const toggleTab = (mod, tab, on) => {
     setPerms((p) => {
       const cur = p[mod] ?? { enabled: true, tabs: {} };
@@ -131,44 +258,60 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
   };
 
   const toggleAction = (mod, tab, act, on) => {
-    setPerms((p) => {
-      const cur = p[mod] ?? { enabled: true, tabs: {} };
-      const set = new Set(cur.tabs[tab] ?? []);
-      if (on) set.add(act); else set.delete(act);
-      if (on) set.add("view");
-      return { ...p, [mod]: { ...cur, enabled: true, tabs: { ...cur.tabs, [tab]: Array.from(set) } } };
-    });
-  };
+  setPerms((p) => {
+    const cur = p[mod] ?? { enabled: true, tabs: {} };
+    let set = new Set(cur.tabs[tab] ?? []);
 
-  const bulkSetModule = (mod, acts) => {
-    setPerms((p) => {
-      const spec = MODULE_CATALOG.find((m) => m.key === mod);
-      return { ...p, [mod]: { enabled: true, tabs: Object.fromEntries(spec.tabs.map((t) => [t.key, [...acts]])) } };
-    });
-  };
-
-  const canNext = step === 1 ? name.trim().length > 1 : step === 2 ? enabledModules.length > 0 : true;
-
-  const submit = () => {
-    if (!name.trim()) return toast.error("Role name is required");
-    const payload = { name: name.trim(), level: "Custom", scope, desc, perms };
-    if (edit) {
-      customRolesApi.update(edit.id, payload);
-      toast.success(`Role "${name}" updated`);
+    if (act === "view" && !on) {
+      set = new Set(); // unchecking View clears all actions on this tab
     } else {
-      customRolesApi.add(payload);
-      toast.success(`Role "${name}" created`);
+      if (on) set.add(act);
+      else set.delete(act);
+      if (on) set.add("view");
     }
-    onOpenChange(false);
-  };
 
-  const handleDelete = () => {
+    return { ...p, [mod]: { ...cur, enabled: true, tabs: { ...cur.tabs, [tab]: Array.from(set) } } };
+  });
+};
+
+ const bulkSetModule = (mod, acts) => {
+  setPerms((p) => {
+    const spec = modules.find((m) => m.key === mod);
+    return {
+      ...p,
+      [mod]: { enabled: true, tabs: Object.fromEntries((spec?.tabs ?? []).map((t) => [t.key, [...acts]])) },
+    };
+  });
+};
+const canNext = step === 1 ? name.trim().length > 1 && !loadingEditDetails : step === 2 ? enabledModules.length > 0 : true;
+//   const submit = () => {
+//     if (!name.trim()) return toast.error("Role name is required");
+// const payload = { name: name.trim(), level: "Custom", scope, institute_uuids: selectedInstitutes, desc, perms };
+//     if (edit) {
+//       customRolesApi.update(edit.id, payload);
+//       toast.success(`Role "${name}" updated`);
+//     } else {
+//       customRolesApi.add(payload);
+//       toast.success(`Role "${name}" created`);
+//     }
+//     onOpenChange(false);
+//   };
+
+ const handleDelete = async () => {
     if (!edit) return;
-    customRolesApi.remove(edit.id);
-    toast.success(`Role "${edit.name}" deleted`);
-    setConfirmDeleteOpen(false);
-    onOpenChange(false);
-    onDeleted?.(edit.id);
+    try {
+      setDeletingRole(true);
+      await deleteRoleApi(edit.id);
+      toast.success(`Role "${edit.name}" deleted`);
+      setConfirmDeleteOpen(false);
+      onOpenChange(false);
+      onDeleted?.(edit.id);
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || "Failed to delete role");
+    } finally {
+      setDeletingRole(false);
+    }
   };
 
   const stepMeta = [
@@ -187,38 +330,112 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
             <DialogDescription>Define exactly which modules, sub-tabs, and actions this role can use.</DialogDescription>
             <div className="flex items-center gap-2 pt-4">
               {stepMeta.map((s, i) => {
-                const Icon = s.icon;
-                const active = step === s.n;
-                const done = step > s.n;
-                return (
-                  <div key={s.n} className="flex items-center gap-2">
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${active ? "bg-primary text-primary-foreground" : done ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>
-                      <Icon className="h-3.5 w-3.5" />{s.t}
-                    </div>
-                    {i < stepMeta.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-                  </div>
-                );
-              })}
+  const Icon = s.icon;
+  const active = step === s.n;
+  const done = step > s.n;
+  const clickable = !!edit; // only allow direct step jumps when editing
+  return (
+    <div key={s.n} className="flex items-center gap-2">
+      <button
+        type="button"
+        disabled={!clickable}
+        onClick={() => clickable && setStep(s.n)}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition ${
+          active
+            ? "bg-primary text-primary-foreground"
+            : done
+            ? "bg-success/15 text-success"
+            : "bg-muted text-muted-foreground"
+        } ${clickable ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
+      >
+        <Icon className="h-3.5 w-3.5" />
+        {s.t}
+      </button>
+      {i < stepMeta.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+    </div>
+  );
+})}
             </div>
           </DialogHeader>
 
           <div className="px-6 py-5 min-h-[420px] max-h-[60vh] overflow-auto">
             {step === 1 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {loadingEditDetails && (
+                  <p className="sm:col-span-2 text-sm text-muted-foreground">
+                    Loading role details…
+                  </p>
+                )}
+                {editDetailsError && (
+                  <p className="sm:col-span-2 text-sm text-destructive">{editDetailsError}</p>
+                )}
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Role Name</Label>
                   <Input placeholder="e.g. Exam Controller" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Scope</Label>
-                  <Select value={scope} onValueChange={setScope}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {["Institute","Department","Class","Self"].map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
+<div className="space-y-1.5">
+  <Label>Scope</Label>
+  <Select value={scope} onValueChange={setScope}>
+    <SelectTrigger><SelectValue /></SelectTrigger>
+    <SelectContent>
+      {SCOPE_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+    </SelectContent>
+  </Select>
+</div>
+
+{scope === "Institute" && (
+  <div className="space-y-1.5 relative" ref={instituteDropdownRef}>
+    <Label>Institute</Label>
+    <button
+      type="button"
+      onClick={() => setInstituteDropdownOpen((v) => !v)}
+      className="w-full h-9 px-3 rounded-md border border-input bg-transparent text-sm text-left flex items-center justify-between"
+    >
+      <span className="truncate text-muted-foreground">
+        {selectedInstitutes.length === 0
+          ? "Select Institute(s)"
+          : `${selectedInstitutes.length} institute${selectedInstitutes.length > 1 ? "s" : ""} selected`}
+      </span>
+      <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${instituteDropdownOpen ? "rotate-90" : ""}`} />
+    </button>
+
+    {selectedInstitutes.length > 0 && (
+      <div className="flex flex-wrap gap-1 pt-1">
+        {selectedInstitutes.map((uuid) => {
+          const inst = institutes.find((i) => i.uuid === uuid);
+          if (!inst) return null;
+          return (
+            <Badge key={uuid} variant="secondary" className="text-[10px] font-normal gap-1">
+              {inst.name}
+              <button type="button" onClick={() => toggleInstitute(uuid)} className="hover:text-destructive">×</button>
+            </Badge>
+          );
+        })}
+      </div>
+    )}
+
+    {instituteDropdownOpen && (
+      <div className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
+        {institutes.length === 0 ? (
+          <p className="text-xs text-muted-foreground p-3">No institutes found.</p>
+        ) : (
+          institutes.map((inst) => (
+            <label
+              key={inst.uuid}
+              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 cursor-pointer"
+            >
+              <Checkbox
+                checked={selectedInstitutes.includes(inst.uuid)}
+                onCheckedChange={() => toggleInstitute(inst.uuid)}
+              />
+              {inst.name}
+            </label>
+          ))
+        )}
+      </div>
+    )}
+  </div>
+)}                <div className="space-y-1.5 sm:col-span-2">
                   <Label>Description</Label>
                   <Textarea rows={3} placeholder="What does this role do?" value={desc} onChange={(e) => setDesc(e.target.value)} />
                 </div>
@@ -230,20 +447,35 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">Select the modules this role should have access to.</p>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setPerms(Object.fromEntries(MODULE_CATALOG.map((m) => [m.key, { enabled: true, tabs: Object.fromEntries(m.tabs.map((t) => [t.key, ["view"]])) }])))}>Select all</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setPerms({})}>Clear</Button>
+<Button
+  variant="outline"
+  size="sm"
+  onClick={() =>
+    setPerms(
+      Object.fromEntries(
+        modules.map((m) => [
+          m.key,
+          { enabled: true, tabs: Object.fromEntries((m.tabs ?? []).map((t) => [t.key, ["view"]])) },
+        ]),
+      ),
+    )
+  }
+>
+  Select all
+</Button>                    <Button variant="ghost" size="sm" onClick={() => setPerms({})}>Clear</Button>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {MODULE_CATALOG.map((m) => {
+                  {modules.map((m) => {
                     const on = !!perms[m.key]?.enabled;
                     return (
                       <label key={m.key} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${on ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}>
                         <Checkbox checked={on} onCheckedChange={(v) => toggleModule(m.key, !!v)} className="mt-0.5" />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium">{m.label}</div>
-                          <div className="text-[11px] text-muted-foreground truncate">{m.tabs.length} tabs</div>
-                        </div>
+<div className="text-[11px] text-muted-foreground truncate">
+  {m.tabs ? `${m.tabs.length} tabs` : "…"}
+</div>                        </div>
                         {on && <Badge variant="secondary" className="text-[10px]">{Object.keys(perms[m.key]?.tabs ?? {}).length} on</Badge>}
                       </label>
                     );
@@ -259,14 +491,14 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
                   <div className="p-1.5 space-y-0.5">
                     {enabledModules.length === 0 && <p className="text-xs text-muted-foreground p-3">Enable modules in the previous step.</p>}
                     {enabledModules.map((k) => {
-                      const spec = MODULE_CATALOG.find((m) => m.key === k);
+                      const spec = modules.find((m) => m.key === k);
                       const isActive = activeModule === k;
                       return (
                         <button key={k} onClick={() => setActiveModule(k)}
                           className={`w-full text-left px-3 py-2 rounded text-sm transition ${isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
                           <div className="font-medium">{spec.label}</div>
                           <div className={`text-[10px] ${isActive ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                            {Object.keys(perms[k]?.tabs ?? {}).length}/{spec.tabs.length} tabs
+                            {Object.keys(perms[k]?.tabs ?? {}).length}/{spec.tabs?.length ?? "…"} tabs                         
                           </div>
                         </button>
                       );
@@ -276,7 +508,7 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
 
                 <div className="border rounded-md flex flex-col min-h-[420px]">
                   {enabledModules.includes(activeModule) ? (() => {
-                    const spec = MODULE_CATALOG.find((m) => m.key === activeModule);
+                    const spec =  modules.find((m) => m.key === activeModule);
                     const modPerms = perms[activeModule];
                     return (
                       <>
@@ -292,7 +524,11 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
                           </div>
                         </div>
                         {/* Right column: tabs list — plain scrollable div (no ScrollArea dep) */}
+                        {/* Right column: tabs list — plain scrollable div (no ScrollArea dep) */}
                         <div className="flex-1 overflow-y-auto">
+                          {!spec.tabs ? (
+                            <div className="p-6 text-center text-sm text-muted-foreground">Loading tabs…</div>
+                          ) : (
                           <div className="divide-y">
                             {spec.tabs.map((t) => {
                               const enabled = !!modPerms?.tabs[t.key];
@@ -308,22 +544,22 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
                                   </div>
                                   {enabled && (
                                     <div className="mt-2 ml-6 flex flex-wrap gap-3">
-                                      {ALL_ACTIONS.map((a) => (
-                                        <label key={a.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                                          <Checkbox
-                                            checked={acts.has(a.key)}
-                                            disabled={a.key === "view"}
-                                            onCheckedChange={(v) => toggleAction(activeModule, t.key, a.key, !!v)}
-                                          />
-                                          {a.label}
-                                        </label>
-                                      ))}
+                                     {ALL_ACTIONS.map((a) => (
+  <label key={a.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+    <Checkbox
+      checked={acts.has(a.key)}
+      onCheckedChange={(v) => toggleAction(activeModule, t.key, a.key, !!v)}
+    />
+    {a.label}
+  </label>
+))}
                                     </div>
                                   )}
                                 </div>
                               );
                             })}
-                          </div>
+                         </div>
+                          )}
                         </div>
                       </>
                     );
@@ -344,7 +580,7 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
                 <div className="border rounded-md divide-y">
                   {enabledModules.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No modules selected.</div>}
                   {enabledModules.map((k) => {
-                    const spec = MODULE_CATALOG.find((m) => m.key === k);
+                    const spec =  modules.find((m) => m.key === k);
                     const mp = perms[k];
                     return (
                       <div key={k} className="p-3">
@@ -370,26 +606,17 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
             )}
           </div>
 
-          <DialogFooter className="px-6 py-4 border-t bg-muted/30">
-            {edit && (
-              <Button
-                variant="outline"
-                className="mr-auto gap-1.5 text-destructive hover:text-destructive"
-                onClick={() => setConfirmDeleteOpen(true)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete Role
-              </Button>
-            )}
-            <div className="flex-1 text-xs text-muted-foreground text-right sm:text-left">Step {step} of 4</div>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            {step > 1 && <Button variant="outline" onClick={() => setStep((s) => s - 1)}>Back</Button>}
-            {step < 4 ? (
-              <Button disabled={!canNext} onClick={() => setStep((s) => s + 1)} className="gradient-primary border-0">Next</Button>
-            ) : (
-              <Button onClick={submit} className="gradient-primary border-0">{edit ? "Save Changes" : "Create Role"}</Button>
-            )}
-          </DialogFooter>
+         <DialogFooter className="px-6 py-4 border-t bg-muted/30">
+  <div className="flex-1 text-xs text-muted-foreground text-right sm:text-left">Step {step} of 4</div>
+  <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+  {step > 1 && <Button variant="outline" onClick={() => setStep((s) => s - 1)}>Back</Button>}
+  {step < 4 ? (
+    <Button disabled={!canNext} onClick={() => setStep((s) => s + 1)} className="gradient-primary border-0">Next</Button>
+  ) : (
+<Button onClick={submit} disabled={submitting} className="gradient-primary border-0">
+  {submitting ? "Saving…" : edit ? "Save Changes" : "Create Role"}
+</Button>  )}
+</DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -408,8 +635,9 @@ export function RoleWizard({ open, onOpenChange, edit, onDeleted }) {
             <Button
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
+              disabled={deletingRole}
             >
-              Delete Role
+              {deletingRole ? "Deleting…" : "Delete Role"}
             </Button>
           </DialogFooter>
         </DialogContent>

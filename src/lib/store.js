@@ -2938,3 +2938,36 @@ export const maintenanceApi = {
   },
   remove: (id) => maintenanceStore.set((arr) => arr.filter((x) => x.id !== id)),
 };
+
+// ============ Temporary Access Grants ============
+const initTempAccess = [];
+const tempAccessStore = createStore(initTempAccess);
+export const useTempAccess = () => useStore(tempAccessStore);
+
+let _taN = 100;
+export const tempAccessApi = {
+  list: () => tempAccessStore.get(),
+  add: (g) => {
+    const id = "TA-" + String(++_taN).padStart(3, "0");
+    tempAccessStore.set((arr) => [
+      { ...g, id, createdAt: new Date().toISOString() },
+      ...arr,
+    ]);
+    activityApi.log("temp-access", id, `Granted to ${g.userId}`);
+    return id;
+  },
+  update: (id, patch) =>
+    tempAccessStore.set((arr) =>
+      arr.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    ),
+  remove: (id) => {
+    tempAccessStore.set((arr) => arr.filter((x) => x.id !== id));
+    activityApi.log("temp-access", id, "Revoked");
+  },
+  isExpired: (grant) => {
+    if (!grant?.expiresAt) return false;
+    const exp = new Date(grant.expiresAt);
+    exp.setHours(23, 59, 59, 999); // treat expiresAt as end-of-day
+    return new Date() > exp;
+  },
+};

@@ -322,6 +322,23 @@ function exportRowsCsv(rows, fileName) {
   toast.success("Exported");
 }
 
+function buildAuditReport(period, kpis, ledger) {
+  const label = period === "week" ? "Weekly" : period === "month" ? "Monthly" : "Annual";
+  return {
+    reportTitle: `Fees & Finance Audit Report (${label})`,
+    reportSubtitle: "Consolidated income, dues and late-fee position",
+    reportCode: `AUD/F&F/${period.toUpperCase()}/${TODAY.getFullYear()}`,
+    period: TODAY.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+    institute: "Mothers Public School — Edureon ERP",
+    summary: [
+      { label: "Today's Collection", value: kpis.todayColl, tone: "in" },
+      { label: "Outstanding Dues", value: kpis.totalDue, tone: "out" },
+      { label: "Late Fees Accrued", value: kpis.lateCollected, tone: "net" },
+    ],
+    ledger,
+  };
+}
+
 function openAuditReport({ period, kpis, ledger }) {
   const win = window.open("", "_blank");
   if (!win) {
@@ -413,7 +430,8 @@ export default function FeesPage() {
     return id;
   };
 
-  // KPIs derived from ledger + computed dues, mirroring the production dashboard
+  // KPIs derived from ledger + computed dues — same shape/order as the
+  // production dashboard so KpiCard rendering stays 1:1.
   const kpis = useMemo(() => {
     const isToday = (d) => {
       try {
@@ -448,7 +466,7 @@ export default function FeesPage() {
   // Structure delete — local state only, no API
   const removeStructure = (structureUuid) => {
     setStructures((prev) => prev.filter((s) => s.fee_structure_uuid !== structureUuid));
-    toast.success("Structure removed");
+    toast.success("Removed");
   };
   const cloneStructure = (s) => {
     const { fee_structure_uuid, ...rest } = s;
@@ -547,6 +565,8 @@ export default function FeesPage() {
 
   return (
     <PageContainer>
+      {/* Header actions mirror the .tsx page exactly: Export → Audit dropdown
+          (Weekly / Monthly / Annual) → single gradient "Fee Collection" CTA. */}
       <PageHeader
         eyebrow="Operations"
         title="Fees & Finance"
@@ -573,31 +593,16 @@ export default function FeesPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button size="sm" variant="outline" onClick={() => setCustomOpen(true)}>
+            <Button size="sm" className="gradient-primary border-0" onClick={() => setCustomOpen(true)}>
               <Sparkles className="h-4 w-4" />
-              Custom Collection
-            </Button>
-
-            <Button size="sm" className="gradient-primary border-0" onClick={() => setTab("collection")}>
-              <Plus className="h-4 w-4" />
-              Collect Fee
+              Fee Collection
             </Button>
           </>
         }
       />
 
-      {/* KPI card row now sits above the tablist, and is always visible
-          regardless of which tab is active. */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <KpiCard label="Today's Collection" value={inr(kpis.todayColl)} icon={<IndianRupee className="h-5 w-5" />} tone="success" />
-        <KpiCard label="Pending Amount" value={inr(kpis.totalDue)} icon={<AlertCircle className="h-5 w-5" />} tone="warning" />
-        <KpiCard label="Overdue Students" value={String(kpis.overdueStudents)} icon={<Users className="h-5 w-5" />} tone="warning" />
-        <KpiCard label="Future Collection" value={inr(kpis.future)} icon={<TrendingUp className="h-5 w-5" />} tone="info" />
-        <KpiCard label="Total Discounts" value={inr(kpis.discountTotal)} icon={<Percent className="h-5 w-5" />} tone="primary" />
-        <KpiCard label="Late Fee Collected" value={inr(kpis.lateCollected)} icon={<Wallet className="h-5 w-5" />} tone="info" />
-      </div>
-
-      <Tabs value={tab} onValueChange={setTab} className="space-y-4 mt-4">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+        {/* Desktop tabs */}
         <TabsList className="hidden md:flex flex-wrap h-auto">
           {TAB_META.map(({ value, label, icon: Icon }) => (
             <TabsTrigger key={value} value={value} className="gap-1.5">
@@ -606,6 +611,7 @@ export default function FeesPage() {
             </TabsTrigger>
           ))}
         </TabsList>
+        {/* Mobile dropdown */}
         <div className="md:hidden">
           <Select value={tab} onValueChange={setTab}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -617,8 +623,8 @@ export default function FeesPage() {
           </Select>
         </div>
 
-        <TabsContent value="dashboard" className="space-y-4">
-          <DashboardPanel ledger={ledger} onQuick={setTab} />
+        <TabsContent value="dashboard">
+          <DashboardPanel kpis={kpis} ledger={ledger} onQuick={setTab} onCollect={() => setCustomOpen(true)} />
         </TabsContent>
 
         <TabsContent value="structures">
@@ -711,56 +717,67 @@ export default function FeesPage() {
 }
 
 /* ================================================================== */
-/*  1. DASHBOARD — Recent transactions + quick actions                 */
-/*  (KPI cards moved out of this panel — they now render above the     */
-/*  tablist, at the page level, so they stay visible on every tab.)    */
+/*  1. DASHBOARD — KPI row + Recent transactions + Quick actions       */
+/*  (KPI cards live inside this panel, matching the .tsx layout,       */
+/*  rather than pinned above the tab list.)                            */
 /* ================================================================== */
 
-function DashboardPanel({ ledger, onQuick }) {
+function DashboardPanel({ kpis, ledger, onQuick, onCollect }) {
   const recent = ledger.slice(0, 10);
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="lg:col-span-2 border-border/60">
-        <CardHeader className="pb-2"><CardTitle className="font-display text-base">Recent Transactions</CardTitle></CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ref</TableHead><TableHead>Student</TableHead><TableHead>Mode</TableHead>
-                <TableHead className="text-right">Amount</TableHead><TableHead>When</TableHead><TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recent.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">{r.id}</TableCell>
-                  <TableCell className="text-sm">{r.student_name}</TableCell>
-                  <TableCell className="text-xs">{r.mode ?? "—"}</TableCell>
-                  <TableCell className="text-right font-semibold">{inr(r.amount)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{r.date}</TableCell>
-                  <TableCell><Badge variant="outline" className="text-xs">{r.status}</Badge></TableCell>
-                </TableRow>
-              ))}
-              {recent.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">No transactions yet.</TableCell></TableRow>}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiCard label="Today's Collection" value={inr(kpis.todayColl)} icon={<IndianRupee className="h-5 w-5" />} tone="success" />
+        <KpiCard label="Pending Amount" value={inr(kpis.totalDue)} icon={<AlertCircle className="h-5 w-5" />} tone="warning" />
+        <KpiCard label="Overdue Students" value={String(kpis.overdueStudents)} icon={<Users className="h-5 w-5" />} tone="warning" />
+        <KpiCard label="Future Collection" value={inr(kpis.future)} icon={<TrendingUp className="h-5 w-5" />} tone="info" />
+        <KpiCard label="Total Discounts" value={inr(kpis.discountTotal)} icon={<Percent className="h-5 w-5" />} tone="primary" />
+        <KpiCard label="Late Fee Collected" value={inr(kpis.lateCollected)} icon={<Wallet className="h-5 w-5" />} tone="info" />
+      </div>
 
-      <Card className="border-border/60">
-        <CardHeader className="pb-2">
-          <CardTitle className="font-display text-base">Quick Actions</CardTitle>
-          <CardDescription>Jump straight into a workflow.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Button className="w-full justify-start gradient-primary border-0" onClick={() => onQuick("collection")}><CreditCard className="h-4 w-4" />Collect Fee</Button>
-          <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("structures")}><Layers className="h-4 w-4" />New Structure</Button>
-          <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("assignment")}><Users className="h-4 w-4" />Assign Fees</Button>
-          <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("dues")}><Send className="h-4 w-4" />Send Reminders</Button>
-          <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("discounts")}><Percent className="h-4 w-4" />Manage Discounts</Button>
-          <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("reports")}><BarChart3 className="h-4 w-4" />Open Reports</Button>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2 border-border/60">
+          <CardHeader className="pb-2"><CardTitle className="font-display text-base">Recent Transactions</CardTitle></CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ref</TableHead><TableHead>Student</TableHead><TableHead>Mode</TableHead>
+                  <TableHead className="text-right">Amount</TableHead><TableHead>When</TableHead><TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-mono text-xs">{r.id}</TableCell>
+                    <TableCell className="text-sm">{r.student_name}</TableCell>
+                    <TableCell className="text-xs">{r.mode ?? "—"}</TableCell>
+                    <TableCell className="text-right font-semibold">{inr(r.amount)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.date}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs">{r.status}</Badge></TableCell>
+                  </TableRow>
+                ))}
+                {recent.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">No transactions yet.</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="font-display text-base">Quick Actions</CardTitle>
+            <CardDescription>Jump straight into a workflow.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button className="w-full justify-start gradient-primary border-0" onClick={onCollect}><CreditCard className="h-4 w-4" />Fee Collection</Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("structures")}><Layers className="h-4 w-4" />New Structure</Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("assignment")}><Users className="h-4 w-4" />Assign Fees</Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("dues")}><Send className="h-4 w-4" />Send Reminders</Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("discounts")}><Percent className="h-4 w-4" />Manage Discounts</Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => onQuick("reports")}><BarChart3 className="h-4 w-4" />Open Reports</Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -786,10 +803,7 @@ function StructuresPanel({ structures, students, components, onEditStructure, on
         <Card className="border-border/60">
           <CardHeader className="pb-3 flex-row items-center justify-between space-y-0 gap-3 flex-wrap">
             <div>
-              <CardTitle className="font-display text-base flex items-center gap-2">
-                <Layers className="h-4 w-4" />
-                Fee Structures
-              </CardTitle>
+              <CardTitle className="font-display text-base">Fee Structures</CardTitle>
               <CardDescription>Combine components into class-level structures.</CardDescription>
             </div>
             <div className="flex gap-2">
@@ -797,10 +811,10 @@ function StructuresPanel({ structures, students, components, onEditStructure, on
               <Button size="sm" className="gradient-primary border-0" onClick={onNewStructure}><Plus className="h-4 w-4" />New Structure</Button>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-border/60 hover:bg-transparent">
+                <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Class</TableHead>
                   <TableHead>Course</TableHead>
@@ -817,7 +831,7 @@ function StructuresPanel({ structures, students, components, onEditStructure, on
                 {structures.map((s) => {
                   const assigned = students.filter((st) => st.class_name === s.class_name).length;
                   return (
-                    <TableRow key={s.fee_structure_uuid} className="border-border/60 hover:bg-muted/40">
+                    <TableRow key={s.fee_structure_uuid}>
                       <TableCell className="text-sm font-medium">{s.structure_name}</TableCell>
                       <TableCell><Badge variant="secondary" className="font-mono">{s.class_name}</Badge></TableCell>
                       <TableCell className="text-xs">{s.course_name}</TableCell>
@@ -825,7 +839,7 @@ function StructuresPanel({ structures, students, components, onEditStructure, on
                       <TableCell className="text-right font-semibold">{inr(monthlyTotal(s))}</TableCell>
                       <TableCell className="text-right">{inr(annualTotal(s))}</TableCell>
                       <TableCell className="text-xs">{s.due_day}</TableCell>
-                      <TableCell className="text-xs">₹{s.late_fee_amount}/mo · {s.grace_days}d grace</TableCell>
+                      <TableCell className="text-xs">₹{s.late_fee_amount}/mo · {s.grace_days}d</TableCell>
                       <TableCell className="text-right text-xs">{assigned}</TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -914,12 +928,13 @@ function ComponentsLibrary({ components, onSave, onClone, onArchive, onRemove })
           </TableBody>
         </Table>
       </CardContent>
-      <ComponentDialog open={open} onOpenChange={setOpen} editing={edit} onSave={onSave} />
+      {/* Modal editor, matching the "Create Fee Structure" dialog pattern */}
+      <ComponentDrawer open={open} onOpenChange={setOpen} editing={edit} onSave={onSave} />
     </Card>
   );
 }
 
-function ComponentDialog({ open, onOpenChange, editing, onSave }) {
+function ComponentDrawer({ open, onOpenChange, editing, onSave }) {
   const [f, setF] = useState({
     name: "", category: "Tuition", default_amount: 0, recurring: true, mandatory: true, new_admission_only: false, status: "Active", description: "",
   });
@@ -942,20 +957,22 @@ function ComponentDialog({ open, onOpenChange, editing, onSave }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Component" : "Add Component"}</DialogTitle>
           <DialogDescription>Define a reusable fee head.</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="rounded-lg border border-border/60 p-4 space-y-4">
           <FF label="Component Name"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Tuition Fee" /></FF>
-          <FF label="Category">
-            <Select value={f.category} onValueChange={(v) => setF({ ...f, category: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{COMPONENT_CATEGORY_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-            </Select>
-          </FF>
-          <FF label="Default Amount (₹)"><Input type="number" min={0} value={f.default_amount} onChange={(e) => setF({ ...f, default_amount: parseInt(e.target.value) || 0 })} /></FF>
+          <Row>
+            <FF label="Category">
+              <Select value={f.category} onValueChange={(v) => setF({ ...f, category: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{COMPONENT_CATEGORY_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </FF>
+            <FF label="Default Amount (₹)"><Input type="number" min={0} value={f.default_amount} onChange={(e) => setF({ ...f, default_amount: parseInt(e.target.value) || 0 })} /></FF>
+          </Row>
           <Row>
             <SW label="Recurring" checked={f.recurring} onChange={(v) => setF({ ...f, recurring: v })} />
             <SW label="Mandatory" checked={f.mandatory} onChange={(v) => setF({ ...f, mandatory: v })} />
@@ -968,7 +985,7 @@ function ComponentDialog({ open, onOpenChange, editing, onSave }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} className="gradient-primary border-0">Save</Button>
+          <Button onClick={save} className="gradient-primary border-0">{editing ? "Save changes" : "Add component"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -976,7 +993,7 @@ function ComponentDialog({ open, onOpenChange, editing, onSave }) {
 }
 
 /* ================================================================== */
-/*  3. DISCOUNTS — Dialog-based editor, Percent/Fixed, classes, cap    */
+/*  3. DISCOUNTS — Modal editor, Percent/Fixed, classes, cap           */
 /* ================================================================== */
 
 function DiscountsPanel({ discounts, onSave, onRemove }) {
@@ -1026,12 +1043,12 @@ function DiscountsPanel({ discounts, onSave, onRemove }) {
           </TableBody>
         </Table>
       </CardContent>
-      <DiscountDialog open={open} onOpenChange={setOpen} editing={edit} onSave={onSave} />
+      <DiscountDrawer open={open} onOpenChange={setOpen} editing={edit} onSave={onSave} />
     </Card>
   );
 }
 
-function DiscountDialog({ open, onOpenChange, editing, onSave }) {
+function DiscountDrawer({ open, onOpenChange, editing, onSave }) {
   const [f, setF] = useState({ name: "", type: "Percent", value: 10, appliesTo: ["*"], classes: [], studentOverride: true, maxDiscount: undefined, status: "Active" });
 
   useEffect(() => {
@@ -1052,11 +1069,12 @@ function DiscountDialog({ open, onOpenChange, editing, onSave }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Discount" : "New Discount"}</DialogTitle>
+          <DialogDescription>Define who qualifies, how much it's worth, and any cap.</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="rounded-lg border border-border/60 p-4 space-y-4">
           <FF label="Name"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Sibling Discount" /></FF>
           <Row>
             <FF label="Type">
@@ -1078,7 +1096,7 @@ function DiscountDialog({ open, onOpenChange, editing, onSave }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} className="gradient-primary border-0">Save</Button>
+          <Button onClick={save} className="gradient-primary border-0">{editing ? "Save changes" : "Create discount"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1387,7 +1405,7 @@ function AssignmentPanel({ students, structures, discounts, components, assignme
 }
 
 /* ================================================================== */
-/*  5. COLLECTION — month-wise dues, discounts, receipt                */
+/*  5. COLLECTION — month-wise dues, discounts, advance, receipt       */
 /* ================================================================== */
 
 function CollectionPanel({ students, structures, discounts, settings, paidMonths, onMarkPaid, onCollected }) {
@@ -1408,19 +1426,22 @@ function CollectionPanel({ students, structures, discounts, settings, paidMonths
 
   const [pickedLines, setPickedLines] = useState(new Set());
   const [pickedDisc, setPickedDisc] = useState(new Set());
+  const [mode, setMode] = useState(settings.payment_modes[0] ?? "UPI");
+  const [note, setNote] = useState("");
+  const [advance, setAdvance] = useState(0);
 
   const selectedLines = dues.lines.filter((l) => !l.paid && pickedLines.has(l.ym));
   const selectedComponentsAmt = selectedLines.reduce((a, l) => a + l.monthly, 0);
   const selectedLateFee = selectedLines.reduce((a, l) => a + l.lateFee, 0);
   const discountApplied = discounts.filter((d) => pickedDisc.has(d.discount_uuid)).reduce((a, d) => a + (d.type === "Percent" ? (selectedComponentsAmt * d.value) / 100 : d.value), 0);
-  const grandTotal = Math.max(selectedComponentsAmt + selectedLateFee - discountApplied, 0);
+  const grandTotal = Math.max(selectedComponentsAmt + selectedLateFee - discountApplied + advance, 0);
 
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastReceipt, setLastReceipt] = useState(null);
 
   const collect = () => {
     if (!student) { toast.error("Pick a student"); return; }
-    if (selectedLines.length === 0) { toast.error("Pick at least one due"); return; }
+    if (selectedLines.length === 0 && advance === 0) { toast.error("Pick at least one due or add advance"); return; }
     selectedLines.forEach((l) => onMarkPaid(student.student_uuid, l.ym));
 
     const entry = {
@@ -1430,18 +1451,19 @@ function CollectionPanel({ students, structures, discounts, settings, paidMonths
       class_name: student.class_name,
       section: student.section,
       amount: grandTotal,
-      mode: settings.payment_modes[0],
-      components: selectedLines.map((l) => ({ name: l.label })),
+      mode,
+      components: selectedLines.map((l) => ({ name: l.label })).concat(advance ? [{ name: "Advance" }] : []),
       discount: discountApplied,
       lateFee: selectedLateFee,
+      note,
       date: TODAY.toISOString().split("T")[0],
       status: "Success",
     };
     const id = onCollected(entry);
     setLastReceipt({ ...entry, id });
     setReceiptOpen(true);
-    setPickedLines(new Set()); setPickedDisc(new Set());
-    toast.success("Payment recorded · " + id);
+    setPickedLines(new Set()); setPickedDisc(new Set()); setNote(""); setAdvance(0);
+    toast.success("Payment recorded · " + settings.receipt_prefix + id);
   };
 
   return (
@@ -1457,7 +1479,7 @@ function CollectionPanel({ students, structures, discounts, settings, paidMonths
           <div className="border rounded-md max-h-[420px] overflow-y-auto">
             <Table>
               <TableBody>
-                {filtered.map((s) => (
+                {filtered.slice(0, 100).map((s) => (
                   <TableRow key={s.student_uuid} className={`cursor-pointer ${selId === s.student_uuid ? "bg-muted/60" : ""}`} onClick={() => { setSelId(s.student_uuid); setPickedLines(new Set()); }}>
                     <TableCell className="text-sm">{s.full_name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground text-right">{s.class_name}-{s.section_name}</TableCell>
@@ -1520,16 +1542,33 @@ function CollectionPanel({ students, structures, discounts, settings, paidMonths
                 </div>
               </div>
 
+              <Row>
+                <FF label="Payment Mode">
+                  <RadioGroup value={mode} onValueChange={setMode} className="flex flex-wrap gap-3">
+                    {settings.payment_modes.map((m) => (
+                      <label key={m} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <RadioGroupItem value={m} />{m}
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </FF>
+              </Row>
+              <Row>
+                <FF label="Advance / Partial (₹)"><Input type="number" min={0} value={advance} onChange={(e) => setAdvance(parseInt(e.target.value) || 0)} /></FF>
+                <FF label="Note (optional)"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Cheque #, remarks..." /></FF>
+              </Row>
+
               <div className="border rounded-lg p-3 bg-muted/30 grid grid-cols-2 gap-2 text-sm">
                 <div className="text-muted-foreground">Components</div><div className="text-right font-medium">{inr(selectedComponentsAmt)}</div>
                 <div className="text-muted-foreground">Late Fee</div><div className="text-right text-warning">{inr(selectedLateFee)}</div>
                 <div className="text-muted-foreground">Discount</div><div className="text-right">- {inr(discountApplied)}</div>
+                <div className="text-muted-foreground">Advance</div><div className="text-right">{inr(advance)}</div>
                 <div className="border-t col-span-2 my-1" />
                 <div className="font-semibold">Grand Total</div><div className="text-right font-display font-bold text-lg">{inr(grandTotal)}</div>
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => { setPickedLines(new Set()); setPickedDisc(new Set()); }}>Reset</Button>
+                <Button variant="outline" onClick={() => { setPickedLines(new Set()); setPickedDisc(new Set()); setAdvance(0); setNote(""); }}>Reset</Button>
                 <Button className="gradient-primary border-0" onClick={collect}><Receipt className="h-4 w-4" />Collect & Issue Receipt</Button>
               </div>
             </>
@@ -1549,10 +1588,11 @@ function ReceiptDialog({ open, onOpenChange, entry, settings }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{entry.id}</DialogTitle><DialogDescription>Payment Due</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{settings.receipt_prefix}{entry.id?.replace(settings.receipt_prefix, "")}</DialogTitle><DialogDescription>Payment successful</DialogDescription></DialogHeader>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Student</span><span className="font-medium">{entry.student_name}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Class</span><span>{entry.class_name}{entry.section ? "-" + entry.section : ""}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><span>{entry.mode}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{entry.date}</span></div>
           <div className="border-t pt-2">
             {entry.components.map((c, i) => (<div key={i} className="flex justify-between text-xs"><span>{c.name}</span></div>))}
@@ -1612,7 +1652,7 @@ function DuesPanel({ students, structures, paidMonths, onGenInvoices }) {
       <CardHeader className="pb-3 flex-row items-center justify-between space-y-0 gap-3 flex-wrap">
         <div><CardTitle className="font-display text-base">Student Dues</CardTitle><CardDescription>Track overdue balances with auto-computed late fees.</CardDescription></div>
         <div className="flex gap-2 flex-wrap">
-          <Select value={only} onValueChange={setOnly}><SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="overdue">Overdue only</SelectItem><SelectItem value="all">All students</SelectItem></SelectContent></Select>
+          <Select value={only} onValueChange={setOnly}><SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="overdue">Overdue only</SelectItem><SelectItem value="all">All students</SelectItem></SelectContent></Select>
           <Select value={cls} onValueChange={setCls}><SelectTrigger className="w-24 h-9"><SelectValue placeholder="Class" /></SelectTrigger><SelectContent>{classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
           <Select value={sec} onValueChange={setSec}><SelectTrigger className="w-24 h-9"><SelectValue placeholder="Section" /></SelectTrigger><SelectContent>{sectionsFor.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search..." className="h-9 w-40" />
@@ -1637,7 +1677,7 @@ function DuesPanel({ students, structures, paidMonths, onGenInvoices }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => (
+            {rows.slice(0, 300).map((r) => (
               <TableRow key={r.s.student_uuid}>
                 <TableCell><Checkbox checked={picked.has(r.s.student_uuid)} onCheckedChange={(v) => { const n = new Set(picked); if (v) n.add(r.s.student_uuid); else n.delete(r.s.student_uuid); setPicked(n); }} /></TableCell>
                 <TableCell className="text-sm">{r.s.full_name} <span className="text-xs text-muted-foreground">· {r.s.student_no}</span></TableCell>
@@ -1726,7 +1766,7 @@ function TransactionsPanel({ ledger, students, structures, paidMonths, onCancel,
                 <TableHead className="w-24"></TableHead>
               </TableRow></TableHeader>
               <TableBody>
-                {grouped.map((g) => (
+                {grouped.slice(0, 400).map((g) => (
                   <TableRow key={g.student_uuid} className="cursor-pointer hover:bg-muted/40" onClick={() => setOpenStudentId(g.student_uuid)}>
                     <TableCell className="text-sm font-medium">{g.name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{g.class_name}{g.section ? "-" + g.section : ""}</TableCell>
@@ -1753,7 +1793,7 @@ function TransactionsPanel({ ledger, students, structures, paidMonths, onCancel,
                 <TableHead className="text-right">Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead className="w-10"></TableHead>
               </TableRow></TableHeader>
               <TableBody>
-                {rows.map((r) => (
+                {rows.slice(0, 500).map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-mono text-xs">{r.id}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{r.kind}</Badge></TableCell>
@@ -1794,10 +1834,15 @@ function StudentLedgerDrawer({ open, onOpenChange, studentUuid, students, struct
   const studentEntries = ledger.filter((e) => e.student_uuid === studentUuid).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
   const badgeVariant = (s) => (s === "Paid" ? "default" : s === "Late" ? "destructive" : s === "Unpaid" ? "secondary" : "outline");
+
+  // Month-wise × component matrix (matching the .tsx drawer): when the
+  // student's structure has multiple components, break each month into
+  // one row per component so billed amounts line up with the structure.
   const monthRows = dues.lines.slice().reverse().map((line) => {
     const status = line.paid ? "Paid" : line.lateFee > 0 ? "Late" : "Due";
     return { ...line, status };
   });
+  const structureComponents = dues.structure?.components ?? [];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -1820,19 +1865,36 @@ function StudentLedgerDrawer({ open, onOpenChange, studentUuid, students, struct
             <div className="border rounded-md overflow-hidden">
               <Table>
                 <TableHeader><TableRow>
-                  <TableHead>Month</TableHead><TableHead className="text-right">Billed</TableHead>
-                  <TableHead className="text-right">Late Fee</TableHead><TableHead>Status</TableHead>
+                  <TableHead>Month</TableHead>
+                  <TableHead>Component</TableHead>
+                  <TableHead className="text-right">Billed</TableHead>
+                  <TableHead className="text-right">Late Fee</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {monthRows.map((r) => (
-                    <TableRow key={r.ym}>
-                      <TableCell className="text-xs">{r.label}</TableCell>
-                      <TableCell className="text-right">{inr(r.monthly)}</TableCell>
-                      <TableCell className="text-right text-warning">{r.lateFee > 0 ? inr(r.lateFee) : "—"}</TableCell>
-                      <TableCell><Badge variant={badgeVariant(r.status)} className="text-xs">{r.status}</Badge></TableCell>
-                    </TableRow>
-                  ))}
-                  {monthRows.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">No structure assigned to this class.</TableCell></TableRow>}
+                  {monthRows.map((r) => {
+                    if (!structureComponents.length) {
+                      return (
+                        <TableRow key={r.ym}>
+                          <TableCell className="text-xs">{r.label}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right">{inr(r.monthly)}</TableCell>
+                          <TableCell className="text-right text-warning">{r.lateFee > 0 ? inr(r.lateFee) : "—"}</TableCell>
+                          <TableCell><Badge variant={badgeVariant(r.status)} className="text-xs">{r.status}</Badge></TableCell>
+                        </TableRow>
+                      );
+                    }
+                    return structureComponents.map((c, i) => (
+                      <TableRow key={r.ym + c.component_uuid}>
+                        <TableCell className="text-xs">{i === 0 ? r.label : ""}</TableCell>
+                        <TableCell className="text-sm">{c.component_name} <span className="text-[10px] text-muted-foreground">· {c.frequency}</span></TableCell>
+                        <TableCell className="text-right">{inr(c.frequency === "MONTHLY" ? c.installment_amount || c.amount : 0)}</TableCell>
+                        <TableCell className="text-right text-warning">{i === 0 && r.lateFee > 0 ? inr(r.lateFee) : "—"}</TableCell>
+                        <TableCell>{i === 0 && <Badge variant={badgeVariant(r.status)} className="text-xs">{r.status}</Badge>}</TableCell>
+                      </TableRow>
+                    ));
+                  })}
+                  {monthRows.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">No structure assigned to this class.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </div>
@@ -1844,7 +1906,7 @@ function StudentLedgerDrawer({ open, onOpenChange, studentUuid, students, struct
               <Table>
                 <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Kind</TableHead><TableHead>Mode</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {studentEntries.map((e) => (
+                  {studentEntries.slice(0, 200).map((e) => (
                     <TableRow key={e.id}>
                       <TableCell className="font-mono text-xs">{e.id}</TableCell>
                       <TableCell><Badge variant="outline" className="text-xs">{e.kind}</Badge></TableCell>
@@ -1871,7 +1933,7 @@ function StudentLedgerDrawer({ open, onOpenChange, studentUuid, students, struct
 }
 
 /* ================================================================== */
-/*  8. REPORTS — 12 report types                                       */
+/*  8. REPORTS — report grid + custom report builder                   */
 /* ================================================================== */
 
 const REPORT_DEFS = [
@@ -1889,8 +1951,29 @@ const REPORT_DEFS = [
   { key: "cashbook", title: "Cash Book", desc: "Cash-only ledger for the day." },
 ];
 
+const CUSTOM_REPORTS_KEY = "edureon.fee.customReports.v1";
+const loadCustomReports = () => {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_REPORTS_KEY) || "[]"); } catch { return []; }
+};
+const saveCustomReports = (list) => {
+  localStorage.setItem(CUSTOM_REPORTS_KEY, JSON.stringify(list));
+  window.dispatchEvent(new Event("edureon-custom-reports"));
+};
+const LEDGER_COLUMNS = ["id", "kind", "student", "class", "mode", "amount", "discount", "lateFee", "date", "status"];
+const DUES_COLUMNS = ["student", "class", "due", "late"];
+const STUDENT_COLUMNS = ["id", "name", "class", "section"];
+
 function ReportsPanel({ ledger, students, structures, paidMonths }) {
   const [openR, setOpenR] = useState(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [saved, setSaved] = useState(loadCustomReports());
+  const [openCustom, setOpenCustom] = useState(null);
+
+  useEffect(() => {
+    const onChange = () => setSaved(loadCustomReports());
+    window.addEventListener("edureon-custom-reports", onChange);
+    return () => window.removeEventListener("edureon-custom-reports", onChange);
+  }, []);
 
   const dataFor = (k) => {
     if (k === "outstanding")
@@ -1912,8 +1995,77 @@ function ReportsPanel({ ledger, students, structures, paidMonths }) {
     return ledger.map((e) => ({ id: e.id, kind: e.kind, student: e.student_name, class: e.class_name, amount: e.amount, date: e.date, status: e.status }));
   };
 
+  const customData = (r) => {
+    const f = r.filters;
+    const inRange = (d) => {
+      if (!f.from && !f.to) return true;
+      try {
+        const dt = new Date(d).getTime();
+        if (f.from && dt < new Date(f.from).getTime()) return false;
+        if (f.to && dt > new Date(f.to).getTime() + 86400000) return false;
+        return true;
+      } catch { return true; }
+    };
+    let rows = [];
+    if (["ledger", "cashbook", "late", "discount"].includes(r.source)) {
+      rows = ledger.filter((e) => inRange(e.date));
+      if (r.source === "cashbook") rows = rows.filter((e) => e.mode === "Cash");
+      if (r.source === "late") rows = rows.filter((e) => e.lateFee > 0);
+      if (r.source === "discount") rows = rows.filter((e) => e.discount > 0);
+      if (f.kind) rows = rows.filter((e) => e.kind === f.kind);
+      if (f.mode) rows = rows.filter((e) => e.mode === f.mode);
+      if (f.class) rows = rows.filter((e) => e.class_name === f.class);
+      if (f.minAmount) rows = rows.filter((e) => e.amount >= f.minAmount);
+      rows = rows.map((e) => ({ id: e.id, kind: e.kind, student: e.student_name, class: e.class_name, mode: e.mode ?? "", amount: e.amount, discount: e.discount, lateFee: e.lateFee, date: e.date, status: e.status }));
+    } else if (r.source === "dues") {
+      rows = students
+        .filter((s) => !f.class || s.class_name === f.class)
+        .map((s) => {
+          const d = computeStudentDues(s.class_name, s.student_uuid, structures, paidMonths);
+          return { student: s.full_name, class: s.class_name, due: d.totalDue, late: d.totalLate };
+        })
+        .filter((x) => x.due >= (f.minAmount ?? 0));
+    } else {
+      rows = students
+        .filter((s) => !f.class || s.class_name === f.class)
+        .map((s) => ({ id: s.student_uuid, name: s.full_name, class: s.class_name, section: s.section }));
+    }
+    if (r.columns.length) rows = rows.map((row) => Object.fromEntries(r.columns.map((c) => [c, row[c]])));
+    return rows;
+  };
+
   return (
     <>
+      <Card className="border-border/60 mb-3">
+        <CardHeader className="pb-3 flex-row items-center justify-between space-y-0 gap-2 flex-wrap">
+          <div>
+            <CardTitle className="font-display text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" />Custom Reports</CardTitle>
+            <CardDescription>Design your own report with filters and columns · saved for reuse.</CardDescription>
+          </div>
+          <Button size="sm" className="gradient-primary border-0" onClick={() => setBuilderOpen(true)}><Plus className="h-4 w-4" />New Custom Report</Button>
+        </CardHeader>
+        {saved.length > 0 && (
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Source</TableHead><TableHead>Columns</TableHead><TableHead className="w-32 text-right">Actions</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {saved.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="text-sm font-medium">{r.name}</TableCell>
+                    <TableCell className="text-xs capitalize">{r.source}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.columns.length ? r.columns.join(", ") : "All"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="outline" onClick={() => setOpenCustom(r)}><Eye className="h-3.5 w-3.5" />Run</Button>
+                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { saveCustomReports(saved.filter((x) => x.id !== r.id)); setSaved(saved.filter((x) => x.id !== r.id)); toast.success("Deleted"); }}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        )}
+      </Card>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {REPORT_DEFS.map((r) => (
           <Card key={r.key} className="border-border/60 cursor-pointer hover:border-primary/40 transition-colors" onClick={() => setOpenR(r.key)}>
@@ -1965,7 +2117,179 @@ function ReportsPanel({ ledger, students, structures, paidMonths }) {
           })()}
         </SheetContent>
       </Sheet>
+
+      {/* Custom report runner */}
+      <Sheet open={!!openCustom} onOpenChange={(v) => !v && setOpenCustom(null)}>
+        <SheetContent className="w-full sm:max-w-4xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{openCustom?.name}</SheetTitle>
+            <SheetDescription>Custom Report · {openCustom?.source}</SheetDescription>
+          </SheetHeader>
+          {openCustom && (() => {
+            const rows = customData(openCustom);
+            const keys = rows[0] ? Object.keys(rows[0]) : (openCustom.columns.length ? openCustom.columns : []);
+            return (
+              <div className="py-4 space-y-3">
+                <div className="flex gap-2 flex-wrap">
+                  <Button size="sm" variant="outline" onClick={() => exportRowsCsv(rows, `${openCustom.name}.csv`)}><Download className="h-4 w-4" />Export CSV</Button>
+                  <Button size="sm" variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
+                  <Badge variant="outline">{rows.length} rows</Badge>
+                </div>
+                <div className="border rounded-md overflow-x-auto max-h-[70vh]">
+                  <Table>
+                    <TableHeader><TableRow>{keys.map((k) => <TableHead key={k} className="capitalize">{k}</TableHead>)}</TableRow></TableHeader>
+                    <TableBody>
+                      {rows.map((r, i) => (
+                        <TableRow key={i}>
+                          {keys.map((k) => (
+                            <TableCell key={k} className="text-sm">
+                              {typeof r[k] === "number" ? (k.match(/amount|due|late|discount|fee/i) ? inr(r[k]) : r[k]) : String(r[k] ?? "—")}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                      {rows.length === 0 && <TableRow><TableCell colSpan={keys.length || 1} className="text-center py-8 text-sm text-muted-foreground">No matching data.</TableCell></TableRow>}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
+
+      <CustomReportBuilder
+        open={builderOpen}
+        onOpenChange={setBuilderOpen}
+        onSave={(r) => {
+          const next = [{ ...r, id: "cr_" + Date.now().toString(36) }, ...saved];
+          saveCustomReports(next);
+          setSaved(next);
+          toast.success(`Saved "${r.name}"`);
+        }}
+        classes={Array.from(new Set(students.map((s) => s.class_name))).sort()}
+      />
     </>
+  );
+}
+
+function CustomReportBuilder({ open, onOpenChange, onSave, classes }) {
+  const [name, setName] = useState("");
+  const [source, setSource] = useState("ledger");
+  const [cols, setCols] = useState([]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [kind, setKind] = useState("");
+  const [mode, setMode] = useState("");
+  const [cls, setCls] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setName(""); setSource("ledger"); setCols([]); setFrom(""); setTo("");
+      setKind(""); setMode(""); setCls(""); setMinAmount("");
+    }
+  }, [open]);
+
+  const available = source === "dues" ? DUES_COLUMNS : source === "students" ? STUDENT_COLUMNS : LEDGER_COLUMNS;
+  const toggle = (c) => setCols((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  const usesLedger = ["ledger", "cashbook", "late", "discount"].includes(source);
+
+  const save = () => {
+    if (!name.trim()) { toast.error("Report name is required"); return; }
+    onSave({
+      name: name.trim(),
+      source,
+      columns: cols,
+      filters: {
+        from: from || undefined,
+        to: to || undefined,
+        kind: kind || undefined,
+        mode: mode || undefined,
+        class: cls || undefined,
+        minAmount: minAmount ? parseInt(minAmount) : undefined,
+      },
+    });
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>New Custom Report</DialogTitle>
+          <DialogDescription>Pick a data source, filters, columns and give the report a name.</DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg border border-border/60 p-4 space-y-4">
+          <FF label="Report Name"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Class 6 · September Cash Collections" /></FF>
+          <FF label="Data Source">
+            <Select value={source} onValueChange={(v) => { setSource(v); setCols([]); }}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ledger">Fee Ledger (all transactions)</SelectItem>
+                <SelectItem value="cashbook">Cash Book</SelectItem>
+                <SelectItem value="late">Late Fee Register</SelectItem>
+                <SelectItem value="discount">Discount Register</SelectItem>
+                <SelectItem value="dues">Student Dues</SelectItem>
+                <SelectItem value="students">Students Master</SelectItem>
+              </SelectContent>
+            </Select>
+          </FF>
+
+          <div className="grid grid-cols-2 gap-3">
+            {usesLedger && (
+              <>
+                <FF label="From Date"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></FF>
+                <FF label="To Date"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></FF>
+                <FF label="Kind">
+                  <Select value={kind || "any"} onValueChange={(v) => setKind(v === "any" ? "" : v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      {["Invoice", "Payment", "Refund", "Adjustment", "Advance", "Cancelled"].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </FF>
+                <FF label="Mode">
+                  <Select value={mode || "any"} onValueChange={(v) => setMode(v === "any" ? "" : v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      {["Cash", "UPI", "Card", "Cheque", "NetBanking", "Bank Transfer"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </FF>
+              </>
+            )}
+            <FF label="Class">
+              <Select value={cls || "any"} onValueChange={(v) => setCls(v === "any" ? "" : v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </FF>
+            <FF label={usesLedger ? "Min Amount (₹)" : "Min Due (₹)"}>
+              <Input type="number" min={0} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="0" />
+            </FF>
+          </div>
+
+          <div>
+            <Label className="text-xs text-muted-foreground">Columns <span className="text-muted-foreground/70">(leave empty to include all)</span></Label>
+            <div className="flex flex-wrap gap-2 pt-2">
+              {available.map((c) => (
+                <Badge key={c} variant={cols.includes(c) ? "default" : "outline"} className="cursor-pointer capitalize" onClick={() => toggle(c)}>{c}</Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={save} className="gradient-primary border-0"><Sparkles className="h-4 w-4" />Save Report</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2073,10 +2397,13 @@ function LateRuleDrawer({ open, onOpenChange, editing, onSave }) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-        <SheetHeader><SheetTitle>{editing ? "Edit Late Fee Rule" : "New Late Fee Rule"}</SheetTitle></SheetHeader>
-        <div className="grid gap-4 py-4">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit Late Fee Rule" : "New Late Fee Rule"}</DialogTitle>
+          <DialogDescription>Flat, per-day, or slab-based late fee calculation.</DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg border border-border/60 p-4 space-y-4">
           <FF label="Name"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Standard flat" /></FF>
           <FF label="Calc Type">
             <Select value={f.calc_type} onValueChange={(v) => setF({ ...f, calc_type: v })}>
@@ -2090,12 +2417,17 @@ function LateRuleDrawer({ open, onOpenChange, editing, onSave }) {
           </FF>
           {f.calc_type === "Flat" && <FF label="Flat Amount (₹)"><Input type="number" min={0} value={f.amount} onChange={(e) => setF({ ...f, amount: parseInt(e.target.value) || 0 })} /></FF>}
           {f.calc_type === "PerDay" && <FF label="Per Day (₹)"><Input type="number" min={0} value={f.per_day} onChange={(e) => setF({ ...f, per_day: parseInt(e.target.value) || 0 })} /></FF>}
-          <FF label="Grace Period (days)"><Input type="number" min={0} value={f.grace_period} onChange={(e) => setF({ ...f, grace_period: parseInt(e.target.value) || 0 })} /></FF>
-          <FF label="Max Late Fee (optional ₹)"><Input type="number" min={0} value={f.max_late_fee} onChange={(e) => setF({ ...f, max_late_fee: parseInt(e.target.value) || 0 })} /></FF>
+          <Row>
+            <FF label="Grace Period (days)"><Input type="number" min={0} value={f.grace_period} onChange={(e) => setF({ ...f, grace_period: parseInt(e.target.value) || 0 })} /></FF>
+            <FF label="Max Late Fee (optional ₹)"><Input type="number" min={0} value={f.max_late_fee} onChange={(e) => setF({ ...f, max_late_fee: parseInt(e.target.value) || 0 })} /></FF>
+          </Row>
         </div>
-        <SheetFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={save} className="gradient-primary border-0">Save</Button></SheetFooter>
-      </SheetContent>
-    </Sheet>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={save} className="gradient-primary border-0">{editing ? "Save changes" : "Create rule"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2210,8 +2542,8 @@ function CustomCollectDialog({ open, onOpenChange, students, structures, discoun
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-display flex items-center gap-2"><Wallet className="h-4 w-4" />Custom Collection</DialogTitle>
-          <DialogDescription>Select fee heads to collect an ad-hoc payment from a student.</DialogDescription>
+          <DialogTitle className="font-display flex items-center gap-2"><Wallet className="h-4 w-4" />Fee Collection</DialogTitle>
+          <DialogDescription>Select fee heads to collect a payment from a student.</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4">

@@ -114,28 +114,28 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const data = await verifyOtpRequest(pendingEmail, code);
-      // access_token / refresh_token are already persisted to localStorage
-      // inside verifyOtpRequest(). The backend should also return the
-      // authenticated user (with role) in the same response — adjust the
-      // key below (`data.user`) to match your actual API shape.
-    const user = data.user;
+     const data = await verifyOtpRequest(pendingEmail, code);
 
-localStorage.setItem("user", JSON.stringify(user));
+const primaryRole = data.role_codes?.[0];
+
+const authUser = {
+  ...data.user,
+  role: primaryRole,
+  role_code: primaryRole,
+  role_codes: data.role_codes,
+  permissions: data.permissions,
+  is_super_admin: data.is_super_admin,
+  active_institute: data.active_institute,
+};
+
+localStorage.setItem("user", JSON.stringify(authUser));
 localStorage.setItem("access_token", data.access_token);
 localStorage.setItem("refresh_token", data.refresh_token);
 localStorage.setItem("session_uuid", data.session_uuid);
 
-navigate(portalHomeForRole(user.role_code));
+toast.success("Welcome back");
 
-      if (!user) {
-        throw new Error("No user payload returned from verify-otp");
-      }
-
-      localStorage.setItem("user", JSON.stringify(user));
-
-      toast.success("Welcome back");
-     navigate(portalHomeForRole(user.role_code));
+navigate(portalHomeForRole(primaryRole));
     } catch (err) {
       toast.error(
         err?.response?.data?.message ||
