@@ -61,6 +61,7 @@ import Hostel from "./pages/admin/modules/Hostel";
 import LibraryPage from "./pages/admin/modules/Library";
 import Communication from "./pages/admin/modules/Communication";
 import EmployeesPage from "./pages/admin/staff/Employee";
+import ShiftsPage from "./pages/admin/staff/ShiftsPage"
 import PayrollPage from "./pages/admin/staff/Payroll";
 import RolesPage from "./pages/roles/roles";
 import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
@@ -153,6 +154,7 @@ const router = createBrowserRouter([
       { path: "/subjects/:id", element: <SubjectDetail /> },
       { path: "/classes/:sectionUUID", element: <SectionDetail /> },
       { path: "/sudents/archive", element: <StudentArchive /> },
+
       
 
       
@@ -169,6 +171,7 @@ const router = createBrowserRouter([
       { path: "/fee-collection", element: <FeeCollection /> },
        //admin staff routes
       { path: "/employees", element: <EmployeesPage /> },
+      {path:"/shift",element:<ShiftsPage/>},
       { path: "/payroll", element: <PayrollPage /> },
       { path: "/admin/roles", element: <RolesPage /> },
       { path: "/super/roles", element: <RolesPage /> },

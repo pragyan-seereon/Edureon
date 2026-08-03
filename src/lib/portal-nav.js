@@ -17,6 +17,7 @@ import {
   Bell,
   FileText,
   Briefcase,
+  Clock3,
   School,
   User as UserIcon,
   Boxes,
@@ -64,6 +65,7 @@ const adminGroups = [
     label: "HR & Staff",
     items: [
       { title: "Employees", url: "/employees", icon: UserCog },
+      { title: "Shift", url: "/shift", icon: Clock3 },
       { title: "Payroll", url: "/payroll", icon: Briefcase },
       { title: "Roles & Permissions", url: "/admin/roles", icon: Shield },
     ],
