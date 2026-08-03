@@ -25,7 +25,7 @@ import Library from "./pages/students/Library";
 import StudyMaterials from "./pages/students/Studymaterials";
 import Notices from "./pages/students/Notices";
 import Results from "./pages/students/Results";
-import Timetable from "./pages/students/Timetable";
+import Timetable from "./pages/admin/Timetable";
 import TeacherAttendance from "./pages/teacher/TeacherAttendance";
 import TeacherClasses from "./pages/teacher/TeacherClasses";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
@@ -74,6 +74,8 @@ import StudentArchive from "./pages/admin/academic/Studentarchive";
 import IdCardPage from "./pages/superadmin/Idcarddesigner";
 import GatePassPage from "./pages/superadmin/GatePass";
 import AdminMaintenance from "./pages/superadmin/AdminMaintenance";
+import StudentExamsPage from "./pages/students/StudentExams";
+import MyTimetable from "./pages/students/Mytimetable";
 const router = createBrowserRouter([
   {
     element: <AppLayout />,
@@ -120,6 +122,9 @@ const router = createBrowserRouter([
       { path: "/student/notices", element: <Notices /> },
       { path: "/student/fees", element: <Fees /> },
       { path: "/student/library", element: <Library /> },
+      { path: "/student/exams", element: <StudentExamsPage /> },
+      { path: "/student/timetable", element: <MyTimetable /> },
+
       //teacher routes
       { path: "/teacher/dashboard", element: <TeacherDashboard /> },
       { path: "/teacher/classes", element: <TeacherClasses /> },
@@ -136,8 +141,8 @@ const router = createBrowserRouter([
       { path: "/security-log", element: <SecurityLog /> },
       { path: "/notifications", element: <Notifications /> },
       //admin academic routes
-      { path: "/admin/admissions", element: <Admissions /> },
-      { path: "/admin/admissions/:id", element: <AdmissionsDetails /> },
+      { path: "/admissions", element: <Admissions /> },
+      { path: "/admissions/:id", element: <AdmissionsDetails /> },
       { path: "/students", element: <Students /> },
       { path: "/students/:id", element: <StudentDetails /> },
       { path: "/id-cards", element: <IdCardPage /> },
@@ -158,10 +163,10 @@ const router = createBrowserRouter([
       
       //admin modules routes
       { path: "/fees", element: <FeesPage /> },
-      { path: "/admin/dms", element: <Dms /> },
-      { path: "/admin/expenses", element: <Expenses /> },
-      { path: "/admin/infrastructure", element: <Infrastructure /> },
-      { path: "/admin/assets", element: <Assets /> },
+      { path: "/dms", element: <Dms /> },
+      { path: "/expenses", element: <Expenses /> },
+      { path: "/infrastructure", element: <Infrastructure /> },
+      { path: "/assets", element: <Assets /> },
       { path: "/transport", element: <Transport /> },
       { path: "/hostel", element: <Hostel /> },
       { path: "/library", element: <LibraryPage /> },

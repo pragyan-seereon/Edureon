@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react";
@@ -10,36 +11,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ── Demo accounts ─────────────────────────────────────────────────────────
 // Email + password pairs used purely for the login demo. The role attached
 // to each account determines which portal the user is redirected to.
-export const DEMO_ACCOUNTS = [
-  {
-    email: "student@gmail.com",
-    password: "demo1234",
-    name: "Aarav Sharma",
-    role: "student",
-    institute: "Delhi Public School — North",
-  },
-  {
-    email: "teacher@gmail.com",
-    password: "demo1234",
-    name: "Priya Verma",
-    role: "teacher",
-    institute: "Delhi Public School — North",
-  },
-  {
-    email: "institute@gmail.com",
-    password: "demo1234",
-    name: "Rajesh Kumar",
-    role: "principal",
-    institute: "Delhi Public School — North",
-  },
-  {
-    email: "superadmin@gmail.com",
-    password: "demo1234",
-    name: "Scholaris Admin",
-    role: "super_admin",
-    institute: "Scholaris HQ",
-  },
-];
+// export const DEMO_ACCOUNTS = [
+//   {
+//     email: "student@gmail.com",
+//     password: "demo1234",
+//     name: "Aarav Sharma",
+//     role: "student",
+//     institute: "Delhi Public School — North",
+//   },
+//   {
+//     email: "teacher@gmail.com",
+//     password: "demo1234",
+//     name: "Priya Verma",
+//     role: "teacher",
+//     institute: "Delhi Public School — North",
+//   },
+//   {
+//     email: "institute@gmail.com",
+//     password: "demo1234",
+//     name: "Rajesh Kumar",
+//     role: "principal",
+//     institute: "Delhi Public School — North",
+//   },
+//   {
+//     email: "superadmin@gmail.com",
+//     password: "demo1234",
+//     name: "Scholaris Admin",
+//     role: "super_admin",
+//     institute: "Scholaris HQ",
+//   },
+// ];
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -71,27 +72,27 @@ export function AuthProvider({ children }) {
       const shouldPersist = options.persistUser !== false;
 
       // 1. Check against hardcoded demo accounts first
-      const demo = DEMO_ACCOUNTS.find(
-        (d) => d.email.toLowerCase() === email.toLowerCase()
-      );
-      if (demo) {
-        if (demo.password !== password) {
-          throw new Error("Invalid credentials");
-        }
-        const u = {
-          id: "u_" + Date.now().toString(36),
-          name: demo.name,
-          email: demo.email,
-          role: demo.role,
-          designation: roleLabel[demo.role],
-          phone: "+91 98100 12345",
-          institute: demo.institute,
-          bio: "Building a future-ready learning campus with technology.",
-          joinedAt: "2024-04-01",
-        };
-        if (shouldPersist) persist(u);
-        return u;
-      }
+      // const demo = DEMO_ACCOUNTS.find(
+      //   (d) => d.email.toLowerCase() === email.toLowerCase()
+      // );
+      // if (demo) {
+      //   if (demo.password !== password) {
+      //     throw new Error("Invalid credentials");
+      //   }
+      //   const u = {
+      //     id: "u_" + Date.now().toString(36),
+      //     name: demo.name,
+      //     email: demo.email,
+      //     role: demo.role,
+      //     designation: roleLabel[demo.role],
+      //     phone: "+91 98100 12345",
+      //     institute: demo.institute,
+      //     bio: "Building a future-ready learning campus with technology.",
+      //     joinedAt: "2024-04-01",
+      //   };
+      //   if (shouldPersist) persist(u);
+      //   return u;
+      // }
 
       // 2. Lookup provisioned user by email
       const { appUsersApi, institutesApi } = await import("./store");
@@ -117,19 +118,19 @@ export function AuthProvider({ children }) {
       // 3. Fallback: demo personas inferred from email
       const local = email.split("@")[0] || "user";
       const name = titleCase(local) || "Rahul Kapoor";
-      const role = local.includes("super")
-        ? "super_admin"
-        : local.includes("teacher")
-          ? "teacher"
-          : local.includes("student")
-            ? "student"
-            : local.includes("parent")
-              ? "parent"
-              : local.includes("hr")
-                ? "hr"
-                : local.includes("account")
-                  ? "accountant"
-                  : "principal";
+      // const role = local.includes("super")
+      //   ? "super_admin"
+      //   : local.includes("teacher")
+      //     ? "teacher"
+      //     : local.includes("student")
+      //       ? "student"
+      //       : local.includes("parent")
+      //         ? "parent"
+      //         : local.includes("hr")
+      //           ? "hr"
+      //           : local.includes("account")
+      //             ? "accountant"
+      //             : "principal";
       const u = {
         id: "u_" + Date.now().toString(36),
         name,
@@ -175,33 +176,33 @@ export function AuthProvider({ children }) {
     changePassword: async () => {
       await sleep(450);
     },
-    switchRole: (role) => {
-      const base = user ?? {
-        id: "u_" + Date.now().toString(36),
-        name: "Demo User",
-        email: "demo@scholaris.app",
-        role,
-        institute: "Delhi Public School — North",
-        joinedAt: "2024-04-01",
-      };
-      const designation =
-        role === "super_admin"
-          ? "Platform Owner"
-          : role === "principal"
-            ? "Principal"
-            : role === "teacher"
-              ? "Senior Teacher"
-              : role === "student"
-                ? "Student"
-                : role === "parent"
-                  ? "Parent"
-                  : role === "hr"
-                    ? "HR Manager"
-                    : role === "accountant"
-                      ? "Accountant"
-                      : "Administrator";
-      persist({ ...base, role, designation });
-    },
+    // switchRole: (role) => {
+    //   const base = user ?? {
+    //     id: "u_" + Date.now().toString(36),
+    //     name: "Demo User",
+    //     email: "demo@scholaris.app",
+    //     role,
+    //     institute: "Delhi Public School — North",
+    //     joinedAt: "2024-04-01",
+    //   };
+    //   const designation =
+    //     role === "super_admin"
+    //       ? "Platform Owner"
+    //       : role === "principal"
+    //         ? "Principal"
+    //         : role === "teacher"
+    //           ? "Senior Teacher"
+    //           : role === "student"
+    //             ? "Student"
+    //             : role === "parent"
+    //               ? "Parent"
+    //               : role === "hr"
+    //                 ? "HR Manager"
+    //                 : role === "accountant"
+    //                   ? "Accountant"
+    //                   : "Administrator";
+    //   persist({ ...base, role, designation });
+    // },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
