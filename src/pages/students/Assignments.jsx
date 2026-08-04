@@ -72,6 +72,9 @@ export default function Assignments() {
       return s && s.status === "Graded";
     }),
   };
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = grouped.pending.filter((a) => a.due && a.due < today);
+
   return (
     <PageContainer>
       <PageHeader
@@ -79,6 +82,61 @@ export default function Assignments() {
         title="My Assignments"
         description={`Class ${STUDENT_CLASS} · ${mine.length} assignments`}
       />
+
+      {/* Push-notification style cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-md bg-warning/20 text-warning flex items-center justify-center">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-muted-foreground">
+                Pending Assignments
+              </div>
+              <div className="text-2xl font-display font-semibold">
+                {grouped.pending.length}
+              </div>
+            </div>
+            <Badge variant="outline">Action Required</Badge>
+          </CardContent>
+        </Card>
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-md bg-destructive/20 text-destructive flex items-center justify-center">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-muted-foreground">
+                Overdue / Late
+              </div>
+              <div className="text-2xl font-display font-semibold text-destructive">
+                {overdue.length}
+              </div>
+            </div>
+            <Badge variant="destructive">Submit Now</Badge>
+          </CardContent>
+        </Card>
+        <Card className="border-success/40 bg-success/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-md bg-success/20 text-success flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-muted-foreground">Submitted</div>
+              <div className="text-2xl font-display font-semibold text-success">
+                {grouped.submitted.length + grouped.graded.length}
+              </div>
+            </div>
+            <Badge
+              className="bg-success/10 text-success border-success/20"
+              variant="outline"
+            >
+              On Track
+            </Badge>
+          </CardContent>
+        </Card>
+      </div>
 
       <Tabs defaultValue="pending">
         <TabsList>

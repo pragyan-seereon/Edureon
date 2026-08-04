@@ -77,6 +77,11 @@ import GatePassPage from "./pages/superadmin/GatePass";
 import AdminMaintenance from "./pages/superadmin/AdminMaintenance";
 import StudentExamsPage from "./pages/students/StudentExams";
 import MyTimetable from "./pages/students/Mytimetable";
+import Calendar from "./pages/students/Calendar";
+import StudentWallet from "./pages/students/Wallet";
+import StudentGatePass from "./pages/students/Gatepass";
+import StudentTransport from "./pages/students/Transport";
+
 const router = createBrowserRouter([
   {
     element: <AppLayout />,
@@ -119,12 +124,16 @@ const router = createBrowserRouter([
       { path: "/student/attendance", element: <Attendance /> },
       { path: "/student/assignments", element: <Assignments /> },
       { path: "/student/results", element: <Results /> },
+      { path: "/student/calendar", element: <Calendar /> },
       { path: "/student/materials", element: <StudyMaterials /> },
       { path: "/student/notices", element: <Notices /> },
       { path: "/student/fees", element: <Fees /> },
       { path: "/student/library", element: <Library /> },
       { path: "/student/exams", element: <StudentExamsPage /> },
       { path: "/student/timetable", element: <MyTimetable /> },
+      { path: "/student/wallet", element: <StudentWallet /> },
+      { path: "/student/gate-pass", element: <StudentGatePass /> },
+      { path: "/student/transport", element: <StudentTransport /> },
 
       //teacher routes
       { path: "/teacher/dashboard", element: <TeacherDashboard /> },

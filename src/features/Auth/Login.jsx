@@ -114,16 +114,22 @@ export default function Login() {
 
     setLoading(true);
     try {
-     const data = await verifyOtpRequest(pendingEmail, code);
+    const data = await verifyOtpRequest(pendingEmail, code);
 
-const primaryRole = data.role_codes?.[0];
+// Get the primary role from API
+const primaryRole =
+  data.role_codes?.[0] ||
+  data.user?.legacy_role?.role_code ||
+  data.user?.role_code ||
+  "ADMIN";
 
+// Save user
 const authUser = {
   ...data.user,
   role: primaryRole,
   role_code: primaryRole,
-  role_codes: data.role_codes,
-  permissions: data.permissions,
+  role_codes: data.role_codes || [primaryRole],
+  permissions: data.permissions || [],
   is_super_admin: data.is_super_admin,
   active_institute: data.active_institute,
 };
@@ -135,6 +141,7 @@ localStorage.setItem("session_uuid", data.session_uuid);
 
 toast.success("Welcome back");
 
+// Navigate according to role
 navigate(portalHomeForRole(primaryRole));
     } catch (err) {
       toast.error(
