@@ -690,7 +690,7 @@ import {
   Download,
   Eye,
   FilePenLine,
-  LogIn,
+  // LogIn,
   Plus,
   Search,
   Trash2,
@@ -720,7 +720,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import { useAuth } from "../../../lib/auth";
+// import { useAuth } from "../../../lib/auth";
 import { Switch } from "../../../components/ui/switch";
 import { getInstitutes,  deleteInstitute,   restoreInstitute,} from "../../../api/Institute";
 import useAuthStore from "../../../store/authStore";
@@ -730,7 +730,7 @@ const TYPE_OPTIONS = ["All", "SCHOOL", "COLLEGE", "COACHING", "UNIVERSITY"];
 const PAGE_SIZES = [10, 25, 50, 100];
 
 // Key used to persist the super admin session so the dashboard can restore it
-const SUPER_ADMIN_SESSION_KEY = "superAdminSession";
+// const SUPER_ADMIN_SESSION_KEY = "superAdminSession";
 
 // const normalizeType = (type) => {
 //   if (type === "Coaching Centre") return "Coaching";
@@ -826,7 +826,7 @@ const [institutes, setInstitutes] = useState([]);
 const [loading, setLoading] = useState(false);
 const [total, setTotal] = useState(0);
   const navigate = useNavigate();
-  const auth = useAuth();
+  // const auth = useAuth();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("All");
@@ -1026,31 +1026,31 @@ const restore = async (item) => {
     );
   }
 };
-const openInstitute = async (item) => {
-  const currentUser = auth.user;
+// const openInstitute = async (item) => {
+//   const currentUser = auth.user;
 
-  if (currentUser) {
-    sessionStorage.setItem(
-      SUPER_ADMIN_SESSION_KEY,
-      JSON.stringify(currentUser)
-    );
-  }
+//   if (currentUser) {
+//     sessionStorage.setItem(
+//       SUPER_ADMIN_SESSION_KEY,
+//       JSON.stringify(currentUser)
+//     );
+//   }
 
-  await auth.completeLogin({
-    id: item.id,
-    name: item.adminName,
-    email: "",
-    role: "admin",
-    designation: "Institute Admin",
-    institute: item.name,
-    instituteId: item.id,
-    joinedAt: item.createdAt,
-    switchedFrom: "super_admin",
-  });
+//   await auth.completeLogin({
+//     id: item.id,
+//     name: item.adminName,
+//     email: "",
+//     role: "admin",
+//     designation: "Institute Admin",
+//     institute: item.name,
+//     instituteId: item.id,
+//     joinedAt: item.createdAt,
+//     switchedFrom: "super_admin",
+//   });
 
-  toast.success(`Opened ${item.name} as institute admin`);
-  navigate("/");
-};
+//   toast.success(`Opened ${item.name} as institute admin`);
+//   navigate("/");
+// };
   return (
     <PageContainer>
       <PageHeader
@@ -1215,9 +1215,9 @@ const openInstitute = async (item) => {
                           <IconButton label="View" onClick={() => navigate(`/super/institutes/${item.id}`)}>
                             <Eye className="h-4 w-4" />
                           </IconButton>
-                          <IconButton label="Open Institute" onClick={() => openInstitute(item)}>
+                          {/* <IconButton label="Open Institute" onClick={() => openInstitute(item)}>
                             <LogIn className="h-4 w-4" />
-                          </IconButton>
+                          </IconButton> */}
                           <IconButton label="Edit" onClick={() => navigate(`/super/institutes/${item.id}/edit`)}>
                             <FilePenLine className="h-4 w-4" />
                           </IconButton>

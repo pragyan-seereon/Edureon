@@ -270,11 +270,12 @@ const parentGroups = [
   },
 ];
 export function navForRole(role) {
-  switch (role) {
+  switch (role?.toUpperCase()) {
     case "SUPER_ADMIN":
       return superGroups;
 
     case "TEACHER":
+    case "PROFESSOR":
       return teacherGroups;
 
     case "STUDENT":
@@ -283,23 +284,39 @@ export function navForRole(role) {
     case "PARENT":
       return parentGroups;
 
+    // Temporary access users and other institute users
+    case "STAFF":
+    case "ADMIN":
+    case "ACCOUNTANT":
+    case "LIBRARIAN":
+    case "RECEPTIONIST":
     default:
       return adminGroups;
   }
 }
 export function portalHomeForRole(role) {
-  switch (role) {
+  switch (role?.toUpperCase()) {
     case "SUPER_ADMIN":
       return "/super/dashboard";
-
-    case "TEACHER":
-      return "/teacher/dashboard";
 
     case "STUDENT":
       return "/student/dashboard";
 
+    case "TEACHER":
+    case "PROFESSOR":
+      return "/teacher/dashboard";
+
     case "PARENT":
       return "/parent/dashboard";
+
+    // Temporary access users
+    case "STAFF":
+    case "ADMIN":
+    case "ACCOUNTANT":
+    case "LIBRARIAN":
+    case "RECEPTIONIST":
+    case "EMPLOYEE":
+      return "/admin/dashboard";
 
     default:
       return "/admin/dashboard";
