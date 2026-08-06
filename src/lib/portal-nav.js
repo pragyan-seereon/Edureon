@@ -294,6 +294,94 @@ export function navForRole(role) {
       return adminGroups;
   }
 }
+
+const normalisePermissionValue = (value) =>
+  String(value || "").trim() === "*"
+    ? "*"
+    : String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const NAV_MODULE_CODES = {
+  Dashboard: ["dashboard"], Analytics: ["analytics", "reports_analytics", "reports"],
+  Notifications: ["notifications", "communication"], "Audit Log": ["audit", "audit_log"],
+  Admissions: ["admissions"], Students: ["students"], "Classes & Sections": ["classes", "sections"],
+  Timetable: ["timetable"], Assignments: ["assignments"], Attendance: ["attendance"],
+  Examinations: ["examinations", "exams"], Notices: ["notices", "communication"],
+  Studentarchive: ["students", "student_archive"], Employees: ["employees", "staff"],
+  Shift: ["shift", "shifts", "employees"], Payroll: ["payroll"], "Roles & Permissions": ["roles", "permissions"],
+  "Fees & Finance": ["fees", "finance"], "Fee Collection": ["fees", "fee_collection"],
+  Expenses: ["expenses"], Infrastructure: ["infrastructure"], Assets: ["assets"],
+  Transport: ["transport"], Hostel: ["hostel"], Library: ["library"], Documents: ["dms", "documents"],
+  Communication: ["communication"], Settings: ["settings"], "My Classes": ["classes"],
+  "Take Attendance": ["attendance"], "Lesson Plans": ["lesson_plans"], "Study Materials": ["study_materials", "materials"],
+  "Leave Application": ["leave"], Results: ["examinations", "results"], Fees: ["fees"],
+  "My Children": ["students"], Institutes: ["institutes"], Users: ["users"],
+  Subscriptions: ["subscriptions"], Transactions: ["transactions"], "Security & Sessions": ["security"],
+};
+
+const flattenPermissions = (raw = []) =>
+  raw.flatMap((entry) => {
+    const permission = entry?.permission || entry;
+    // API permissions are action-level strings, e.g.
+    // "admissions.applications.view". The sidebar is module-level, so keep
+    // both the full value and its first segment ("admissions").
+    if (typeof permission === "string") {
+      const value = permission.trim();
+      if (value === "*") return ["*"];
+      return [value, value.split(".")[0]];
+    }
+    if (!permission || typeof permission !== "object") return [];
+    return [
+      permission.module_code,
+      permission.module_name,
+      permission.module?.module_code,
+      permission.module?.module_name,
+      permission.tab_code,
+      permission.tab_name,
+      permission.tab?.tab_code,
+      permission.tab?.tab_name,
+    ].filter(Boolean);
+  }).map(normalisePermissionValue);
+
+/**
+ * Returns role navigation constrained by the permissions issued for the active
+ * institute. An empty permission list means the role has its normal access
+ * (as is the case for institute administrators in the current API response).
+ */
+export function navForUser(role, source = {}) {
+  // Professors may be assigned institute modules beyond the teacher portal
+  // (for example Admissions and Students), so filter the complete institute
+  // navigation for them rather than starting with the narrow teacher menu.
+  const groups = String(role).toUpperCase() === "PROFESSOR" ? adminGroups : navForRole(role);
+  const permissions = Array.isArray(source) ? source : source.permissions || [];
+  const rolePermissions = Array.isArray(source) ? [] : source.rolePermissions || [];
+  const temporaryPermissions = Array.isArray(source) ? [] : source.temporaryPermissions || [];
+  const allowed = new Set(flattenPermissions([...permissions, ...rolePermissions, ...temporaryPermissions]));
+  const denied = new Set(flattenPermissions(Array.isArray(source) ? [] : source.overrideDeniedPermissions || []));
+  flattenPermissions(Array.isArray(source) ? [] : source.overrideAllowedPermissions || []).forEach((code) => allowed.add(code));
+
+  if (allowed.has("*")) return groups;
+
+  // System admins have unrestricted navigation when the backend correctly
+  // represents full access as an empty permission list.
+  if (allowed.size === 0 && ["ADMIN", "SUPER_ADMIN"].includes(String(role).toUpperCase())) return groups;
+
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (["Dashboard", "My Profile", "Settings"].includes(item.title)) return true;
+        const moduleCodes = NAV_MODULE_CODES[item.title] || [];
+        return moduleCodes.some((code) => {
+          const normalisedCode = normalisePermissionValue(code);
+          return allowed.has(normalisedCode) && !denied.has(normalisedCode);
+        });
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+}
 export function portalHomeForRole(role) {
   switch (role?.toUpperCase()) {
     case "SUPER_ADMIN":

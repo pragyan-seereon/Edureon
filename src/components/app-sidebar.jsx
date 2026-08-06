@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { GraduationCap, ChevronRight } from "lucide-react";
 import {
   Sidebar,
@@ -14,18 +15,55 @@ import {
   useSidebar,
 } from "./ui/sidebar";
 import { initials } from "../lib/auth";
-import { navForRole, portalLabelForRole } from "../lib/portal-nav";
+import { navForUser, portalLabelForRole } from "../lib/portal-nav";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { getAuthorizationContext } from "../api/auth";
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
   const isActive = (url) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
-  const user = JSON.parse(localStorage.getItem("user"));
- const role = user?.role_code;
+  const [authorizationContext, setAuthorizationContext] = useState(null);
+  const user = JSON.parse(localStorage.getItem("user") || "null");
 
-const groups = navForRole(role);
+  useEffect(() => {
+    let active = true;
+    getAuthorizationContext()
+      .then((context) => {
+        if (!active) return;
+        setAuthorizationContext(context);
+
+        // Keep future renders and page reloads in sync with the backend's
+        // effective permission calculation, including the SUPER_ADMIN '*'.
+        const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        localStorage.setItem("user", JSON.stringify({
+          ...storedUser,
+          role_code: context.role_codes?.[0] || storedUser.role_code,
+          role_codes: context.role_codes || storedUser.role_codes,
+          permissions: context.permissions || [],
+          role_permissions: context.role_permissions || [],
+          temporary_permissions: context.temporary_permissions || [],
+          override_allowed_permissions: context.override_allowed_permissions || [],
+          override_denied_permissions: context.override_denied_permissions || [],
+          is_super_admin: context.is_super_admin,
+        }));
+      })
+      .catch(() => {
+        // Retain the login response if the context endpoint is temporarily unavailable.
+      });
+    return () => { active = false; };
+  }, []);
+
+ const role = authorizationContext?.role_codes?.[0] || user?.role_code;
+
+const groups = navForUser(role, {
+  permissions: authorizationContext?.permissions ?? user?.permissions,
+  rolePermissions: authorizationContext?.role_permissions ?? user?.role_permissions,
+  temporaryPermissions: authorizationContext?.temporary_permissions ?? user?.temporary_permissions,
+  overrideAllowedPermissions: authorizationContext?.override_allowed_permissions ?? user?.override_allowed_permissions,
+  overrideDeniedPermissions: authorizationContext?.override_denied_permissions ?? user?.override_denied_permissions,
+});
 const portalLabel = portalLabelForRole(role);
   return (
     <Sidebar collapsible="icon" className="border-r">

@@ -2,10 +2,11 @@ import { useNavigate, Link } from "react-router-dom";
 import { useState, useRef } from "react";
 import { login, verifyOtp as verifyOtpRequest } from "../../api/auth.js"; // adjust path to match your project structure
 import { portalHomeForRole } from "../../lib/portal-nav";
+import { requiresInstituteSelection } from "../../lib/institute-selection";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, X } from "lucide-react";
 import {
   GraduationCap,
   Loader2,
@@ -44,6 +45,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   // ── OTP step state ───────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
@@ -59,6 +61,7 @@ export default function Login() {
       return toast.error("Email and password are required");
     }
 
+    setLoginError("");
     setLoading(true);
     try {
       const data = await login(email.trim(), password, rememberMe);
@@ -70,11 +73,17 @@ export default function Login() {
       toast.success(data?.message || `OTP sent to ${email.trim()}`);
       window.setTimeout(() => otpInputsRef.current[0]?.focus(), 80);
     } catch (err) {
-      toast.error(
-        err?.response?.data?.message ||
-          err?.response?.data?.detail ||
-          "Invalid credentials"
-      );
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.response?.data?.detail;
+      const isInvalidCredential =
+        (status >= 400 && status < 500) ||
+        /invalid|incorrect|wrong password/i.test(String(message || ""));
+      const errorText = isInvalidCredential
+        ? "Invalid credentials"
+        : message || "Unable to sign in. Please try again.";
+
+      setLoginError(errorText);
+      toast.error(errorText);
     } finally {
       setLoading(false);
     }
@@ -116,7 +125,8 @@ export default function Login() {
     try {
     const data = await verifyOtpRequest(pendingEmail, code);
 
-// Get the primary role from API
+// Do not request authorization context here. Institute-scoped users receive
+// it only after choosing an institute and receiving the scoped token.
 const primaryRole =
   data.role_codes?.[0] ||
   data.user?.legacy_role?.role_code ||
@@ -126,23 +136,35 @@ const primaryRole =
 // Save user
 const authUser = {
   ...data.user,
+  name: data.user?.display_name || data.user?.name,
   role: primaryRole,
   role_code: primaryRole,
   role_codes: data.role_codes || [primaryRole],
   permissions: data.permissions || [],
+  role_permissions: data.role_permissions || [],
+  temporary_permissions: data.temporary_permissions || [],
+  override_allowed_permissions: data.override_allowed_permissions || [],
+  override_denied_permissions: data.override_denied_permissions || [],
   is_super_admin: data.is_super_admin,
   active_institute: data.active_institute,
+  institutes: Array.isArray(data.institutes) ? data.institutes : [],
+  requires_institute_selection: Boolean(data.requires_institute_selection),
 };
 
 localStorage.setItem("user", JSON.stringify(authUser));
+localStorage.setItem("scholaris.auth.user", JSON.stringify(authUser));
 localStorage.setItem("access_token", data.access_token);
 localStorage.setItem("refresh_token", data.refresh_token);
 localStorage.setItem("session_uuid", data.session_uuid);
 
 toast.success("Welcome back");
 
-// Navigate according to role
-navigate(portalHomeForRole(primaryRole));
+// Institute users choose their institute before the workspace/sidebar opens.
+if (requiresInstituteSelection(authUser)) {
+  navigate("/select-institute");
+} else {
+  navigate(portalHomeForRole(primaryRole));
+}
     } catch (err) {
       toast.error(
         err?.response?.data?.message ||
@@ -342,6 +364,23 @@ navigate(portalHomeForRole(primaryRole));
               </h2>
 
               <form onSubmit={submit} className="mt-5 space-y-4">
+                {loginError && (
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between gap-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+                  >
+                    <span>{loginError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setLoginError("")}
+                      className="rounded p-0.5 hover:bg-destructive/15"
+                      aria-label="Dismiss login error"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <Label htmlFor="email" className="text-xs">
                     Email
@@ -350,7 +389,10 @@ navigate(portalHomeForRole(primaryRole));
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setLoginError("");
+                    }}
                     placeholder="you@institute.edu.in"
                     autoComplete="email"
                     required
@@ -373,7 +415,10 @@ navigate(portalHomeForRole(primaryRole));
                       id="password"
                       type={showPassword ? "text" : "password"}
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setLoginError("");
+                      }}
                       placeholder="••••••••"
                       autoComplete="current-password"
                       required

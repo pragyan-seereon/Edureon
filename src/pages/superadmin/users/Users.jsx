@@ -237,15 +237,15 @@ function RoleBadgeList({ roles }) {
 }
 
 // Multi-select dropdown for assigning one or more roles to a user
-function RoleMultiSelect({ roles, value, onChange }) {
+function RoleMultiSelect({ roles, value, onChange, valueKey = "role_name" }) {
   const [open, setOpen] = useState(false);
   const selectedRoles = Array.isArray(value) ? value : value ? [value] : [];
 
-  const toggle = (roleName) => {
+  const toggle = (roleValue) => {
     onChange(
-      selectedRoles.includes(roleName)
-        ? selectedRoles.filter((r) => r !== roleName)
-        : [...selectedRoles, roleName]
+      selectedRoles.includes(roleValue)
+        ? selectedRoles.filter((r) => r !== roleValue)
+        : [...selectedRoles, roleValue]
     );
   };
 
@@ -259,7 +259,10 @@ function RoleMultiSelect({ roles, value, onChange }) {
         <div className="flex flex-wrap gap-1 flex-1 min-w-0">
           {selectedRoles.length === 0
             ? <span className="text-muted-foreground">Select roles…</span>
-            : selectedRoles.map((r) => <RoleBadge key={r} role={r} />)}
+            : selectedRoles.map((value) => {
+              const role = roles.find((item) => item[valueKey] === value);
+              return <RoleBadge key={value} role={role?.role_name || value} />;
+            })}
         </div>
         <span className="text-muted-foreground text-xs shrink-0">▾</span>
       </button>
@@ -271,12 +274,13 @@ function RoleMultiSelect({ roles, value, onChange }) {
               <p className="px-2 py-1.5 text-xs text-muted-foreground">No roles available</p>
             )}
             {roles.map((role) => {
-              const checked = selectedRoles.includes(role.role_name);
+              const roleValue = role[valueKey];
+              const checked = selectedRoles.includes(roleValue);
               return (
                 <button
                   key={role.role_uuid}
                   type="button"
-                  onClick={() => toggle(role.role_name)}
+                  onClick={() => toggle(roleValue)}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 text-left text-sm"
                 >
                   <span className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center ${
@@ -992,27 +996,96 @@ const setSortKey = (key) => {
 
 // ─── Create User Modal ────────────────────────────────────────────────────────
 
-function CreateUserModal({ institutes,roles, onClose }) {
+function InstituteRoleAssignmentRow({ assignment, institutes, onChange, onRemove, canRemove }) {
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!assignment.instituteId) {
+      setRoles([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadRoles = async () => {
+      setLoading(true);
+      try {
+        const response = await getRoles({
+          active_only: true,
+          page: 1,
+          limit: 100,
+          institute_uuid: assignment.instituteId,
+        });
+        if (!cancelled) setRoles(response.data || []);
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) toast.error("Unable to fetch roles for the selected institute");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadRoles();
+    return () => { cancelled = true; };
+  }, [assignment.instituteId]);
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-3 rounded-lg border bg-muted/20 p-3">
+      <Field label="Institute">
+        <Select
+          value={assignment.instituteId}
+          onValueChange={(instituteId) => onChange({ instituteId, roleUuids: [] })}
+        >
+          <SelectTrigger><SelectValue placeholder="Select institute" /></SelectTrigger>
+          <SelectContent>
+            {institutes.map((institute) => (
+              <SelectItem key={institute.id} value={institute.id}>
+                {institute.name}{institute.city ? ` · ${institute.city}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Roles">
+        <div className={!assignment.instituteId || loading ? "pointer-events-none opacity-60" : ""}>
+          <RoleMultiSelect
+            roles={roles}
+            value={assignment.roleUuids}
+            valueKey="role_uuid"
+            onChange={(roleUuids) => onChange({ roleUuids })}
+          />
+        </div>
+      </Field>
+      <Button type="button" variant="ghost" size="icon" onClick={onRemove} disabled={!canRemove} aria-label="Remove role assignment">
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
+    </div>
+  );
+}
+
+function CreateUserModal({ institutes, onClose }) {
   const [form, setForm] = useState({
     name: "", email: "", phone: "",
-    roles: [], instituteId: "",
     department: "", autoPassword: true, password: "",
     sendWelcome: true, accessScope: "Full Access",
     validFrom: "", validUntil: "",
   });
-
-  // Default to the first institute once the list has actually loaded,
-  // but don't stomp on a value the user already picked.
-  useEffect(() => {
-    if (!form.instituteId && institutes.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setForm((f) => (f.instituteId ? f : { ...f, instituteId: institutes[0].id }));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [institutes]);
+  const [assignments, setAssignments] = useState([
+    { id: crypto.randomUUID(), instituteId: "", roleUuids: [] },
+  ]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const isSuperAdmin = form.roles.includes("Super Admin");
+  const updateAssignment = (id, changes) => {
+    setAssignments((current) => current.map((assignment) => (
+      assignment.id === id ? { ...assignment, ...changes } : assignment
+    )));
+  };
+  const addAssignment = () => {
+    setAssignments((current) => [...current, { id: crypto.randomUUID(), instituteId: "", roleUuids: [] }]);
+  };
+  const removeAssignment = (id) => {
+    setAssignments((current) => current.filter((assignment) => assignment.id !== id));
+  };
 
   const submit = async () => {
   if (!form.name.trim()) {
@@ -1025,35 +1098,32 @@ function CreateUserModal({ institutes,roles, onClose }) {
     return;
   }
 
-  if (form.roles.length === 0) {
-    toast.error("Please select at least one role");
+  if (!form.autoPassword && form.password.length < 6) {
+    toast.error("Password must be at least 6 characters");
     return;
   }
 
-  if (!isSuperAdmin && !form.instituteId) {
-    toast.error("Please select an institute");
+  if (assignments.some((assignment) => !assignment.instituteId || assignment.roleUuids.length === 0)) {
+    toast.error("Select an institute and at least one role for every assignment");
     return;
   }
 
   try {
-    // Convert selected role names to role UUIDs
-    const selectedRoleUUIDs = roles
-      .filter((r) => form.roles.includes(r.role_name))
-      .map((r) => r.role_uuid);
-
     const payload = {
-      display_name: form.name,
-      email: form.email,
+      display_name: form.name.trim(),
+      email: form.email.trim(),
       phone: form.phone,
-      institute_assignments: [
+      institute_assignments: assignments.map((assignment, index) => (
         {
-          institute_uuid: form.instituteId,
+          institute_uuid: assignment.instituteId,
           department_uuid: null,
-          role_uuids: selectedRoleUUIDs,
-          is_primary: true,
-        },
-      ],
+          role_uuids: assignment.roleUuids,
+          is_primary: index === 0,
+        }
+      )),
       auto_generate_password: form.autoPassword,
+      // The API needs the manual password whenever automatic generation is off.
+      ...(form.autoPassword ? {} : { password: form.password }),
       send_welcome_email: form.sendWelcome,
     };
 
@@ -1075,6 +1145,7 @@ function CreateUserModal({ institutes,roles, onClose }) {
     <Modal onClose={onClose} maxWidth="max-w-2xl">
       <ModalHeader title="Create  User"  onClose={onClose} />
       <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        
         <Field label={<>Full Name <span className="text-destructive">*</span></>}>
           <Input value={form.name}  onChange={(e) => set("name",  e.target.value)} placeholder="Meera Iyer" />
         </Field>
@@ -1084,29 +1155,61 @@ function CreateUserModal({ institutes,roles, onClose }) {
         <Field label="Phone Number">
           <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 …" />
         </Field>
+        <div className="sm:col-span-2 space-y-3 rounded-lg border bg-muted/10 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <Label className="text-sm font-medium">Roles & institute mapping <span className="text-destructive">*</span></Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">Assign one role for each institute. Add more rows for additional institute access.</p>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={addAssignment}>
+              <Plus className="mr-1 h-4 w-4" /> Add role
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {assignments.map((assignment) => (
+              <InstituteRoleAssignmentRow
+                key={assignment.id}
+                assignment={assignment}
+                institutes={institutes}
+                onChange={(changes) => updateAssignment(assignment.id, changes)}
+                onRemove={() => removeAssignment(assignment.id)}
+                canRemove={assignments.length > 1}
+              />
+            ))}
+          </div>
+        </div>
+        {false && <>
+        <Field label={<>Institute <span className="text-destructive">*</span></>}>
+          <Select value={form.instituteId} onValueChange={selectInstitute}>
+            <SelectTrigger><SelectValue placeholder="Select institute first" /></SelectTrigger>
+            <SelectContent>{institutes.map((i) => <SelectItem key={i.id} value={i.id}>{i.name} · {i.city}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
         <Field label={<>Role(s) <span className="text-destructive">*</span></>}>
-<RoleMultiSelect
-    roles={roles}
-    value={form.roles}
-    onChange={(v) => set("roles", v)}
-/>        </Field>
+          <div className={!form.instituteId || loadingRoles ? "pointer-events-none opacity-60" : ""}>
+            <RoleMultiSelect
+              roles={instituteRoles}
+              value={form.roles}
+              onChange={(v) => set("roles", v)}
+            />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {!form.instituteId ? "Select an institute to load its roles." : loadingRoles ? "Loading institute roles…" : "Roles available for the selected institute."}
+          </p>
+        </Field>
         {isSuperAdmin && (
           <div className="sm:col-span-2 flex items-start gap-2 p-3 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 text-xs">
             <Info className="h-4 w-4 shrink-0 mt-0.5" />
             Super Admin has access across all institutes. Institute assignment is not required.
           </div>
         )}
-        {!isSuperAdmin && (
-          <Field label={<>Assigned Institute(s) <span className="text-destructive">*</span></>} className="sm:col-span-2">
-            <Select value={form.instituteId} onValueChange={(v) => set("instituteId", v)}>
-              <SelectTrigger><SelectValue placeholder="Select institute" /></SelectTrigger>
-              <SelectContent>{institutes.map((i) => <SelectItem key={i.id} value={i.id}>{i.name} · {i.city}</SelectItem>)}</SelectContent>
-            </Select>
-          </Field>
-        )}
-       
+        </>}
+
         <div className="sm:col-span-2 space-y-3 pt-1">
-          <ToggleRow label="Auto-generate Password" desc="System will create a secure random password" checked={form.autoPassword} onCheckedChange={(v) => set("autoPassword", v)} />
+          <ToggleRow label="Auto-generate Password" desc="System will create a secure random password" checked={form.autoPassword} onCheckedChange={(v) => {
+            set("autoPassword", v);
+            if (v) set("password", "");
+          }} />
           {!form.autoPassword && (
             <Field label={<>Password <span className="text-destructive">*</span></>}>
               <Input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder="Minimum 6 characters" />
@@ -1128,6 +1231,9 @@ function CreateUserModal({ institutes,roles, onClose }) {
 
 function EditUserModal({ user, institutes,roles, onClose }) {
   const initialRoles = getUserRoles(user).length ? getUserRoles(user) : ["Teacher"];
+  const initialRoleUuids = roles
+    .filter((role) => initialRoles.includes(role.role_name))
+    .map((role) => role.role_uuid);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     name:        user.name        ?? "",
@@ -1140,6 +1246,9 @@ function EditUserModal({ user, institutes,roles, onClose }) {
     validUntil:  user.validUntil  ?? "",
     status:      user.status      ?? "Active",
   });
+  const [assignments, setAssignments] = useState([
+    { id: crypto.randomUUID(), instituteId: user.instituteId ?? "", roleUuids: initialRoleUuids },
+  ]);
 
   // Fetch the full, fresh record for this user when the modal opens,
   // and re-populate the form from it (list-row data can be stale/thin).
@@ -1152,6 +1261,13 @@ function EditUserModal({ user, institutes,roles, onClose }) {
         if (cancelled) return;
 
 const fresh = normalizeUser(detail.data ?? detail, roles);
+        const memberships = detail.data?.institute_memberships ?? detail.institute_memberships ?? [];
+        const loadedAssignments = memberships.map((membership) => ({
+          id: crypto.randomUUID(),
+          instituteId: membership.institute_uuid ?? membership.institute_id ?? "",
+          roleUuids: membership.role_uuids ?? membership.roles?.map((role) => role.role_uuid ?? role.uuid).filter(Boolean) ?? [],
+        })).filter((assignment) => assignment.instituteId);
+        if (loadedAssignments.length) setAssignments(loadedAssignments);
         setForm((f) => ({
           ...f,
           name: fresh.name ?? f.name,
@@ -1193,12 +1309,28 @@ const fresh = normalizeUser(detail.data ?? detail, roles);
     }
     setForm((f) => ({ ...f, [k]: v }));
   };
+  const updateAssignment = (id, changes) => {
+    setAssignments((current) => current.map((assignment) => (
+      assignment.id === id ? { ...assignment, ...changes } : assignment
+    )));
+    setRoleWarning(true);
+  };
+  const addAssignment = () => {
+    setAssignments((current) => [...current, { id: crypto.randomUUID(), instituteId: "", roleUuids: [] }]);
+    setRoleWarning(true);
+  };
+  const removeAssignment = (id) => {
+    setAssignments((current) => current.filter((assignment) => assignment.id !== id));
+    setRoleWarning(true);
+  };
 
  const [saving, setSaving] = useState(false);
 
 const submit = async () => {
-  if (form.roles.length === 0) { toast.error("At least one role is required"); return; }
-  if (!isSuperAdmin && !form.instituteId) { toast.error("Assigned institute is required"); return; }
+  if (assignments.some((assignment) => !assignment.instituteId || assignment.roleUuids.length === 0)) {
+    toast.error("Select an institute and at least one role for every assignment");
+    return;
+  }
 
   try {
     setSaving(true);
@@ -1206,6 +1338,12 @@ const submit = async () => {
     const payload = {
       display_name: form.name.trim(),
       phone: form.phone,
+      institute_assignments: assignments.map((assignment, index) => ({
+        institute_uuid: assignment.instituteId,
+        department_uuid: null,
+        role_uuids: assignment.roleUuids,
+        is_primary: index === 0,
+      })),
     };
 
     const response = await updateUser(user.uuid ?? user.id, payload);
@@ -1259,6 +1397,7 @@ const submit = async () => {
           <Field label="Phone Number">
             <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
           </Field>
+          {false && <>
           <Field label={<>Role(s) <span className="text-destructive">*</span></>}>
 <RoleMultiSelect
     roles={roles}
@@ -1273,6 +1412,30 @@ const submit = async () => {
               </Select>
             </Field>
           )}
+          </>}
+          <div className="sm:col-span-2 space-y-3 rounded-lg border bg-muted/10 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-sm font-medium">Roles & institute mapping <span className="text-destructive">*</span></Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">Each institute can have one or more roles for this user.</p>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={addAssignment}>
+                <Plus className="mr-1 h-4 w-4" /> Add institute
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {assignments.map((assignment) => (
+                <InstituteRoleAssignmentRow
+                  key={assignment.id}
+                  assignment={assignment}
+                  institutes={institutes}
+                  onChange={(changes) => updateAssignment(assignment.id, changes)}
+                  onRemove={() => removeAssignment(assignment.id)}
+                  canRemove={assignments.length > 1}
+                />
+              ))}
+            </div>
+          </div>
           {/* {!isSuperAdmin && (
             <Field label="Department">
               <Input value={form.department} onChange={(e) => set("department", e.target.value)} />

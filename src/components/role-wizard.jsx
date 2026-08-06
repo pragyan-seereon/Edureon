@@ -35,14 +35,17 @@ function mapPermissionsToWizardPerms(permissions = []) {
   return perms;
 }
 
-const ALL_ACTIONS = [
-  { key: "view", label: "View" },
-  { key: "create", label: "Create" },
-  { key: "update", label: "Update" },
-  { key: "delete", label: "Delete" },
-  { key: "export", label: "Export" },
-  { key: "approve", label: "Approve" },
-];
+const ACTION_LABELS = {
+  view: "View",
+  create: "Create",
+  update: "Update",
+  delete: "Delete",
+  export: "Export",
+  approve: "Approve",
+};
+
+const defaultActionsForTab = (tab) =>
+  tab?.permissions?.includes("view") ? ["view"] : tab?.permissions?.slice(0, 1) ?? [];
 
 export function RoleWizard({ open, onOpenChange, edit, onDeleted, modules,loadModuleTabs, }) {
   const [step, setStep] = useState(1);
@@ -204,7 +207,7 @@ useEffect(() => {
       const spec = modules.find((m) => m.key === key);
       next[key] = next[key] ?? {
         enabled: true,
-        tabs: Object.fromEntries((spec?.tabs ?? []).map((t) => [t.key, ["view"]])),
+        tabs: Object.fromEntries((spec?.tabs ?? []).map((t) => [t.key, defaultActionsForTab(t)])),
       };
       next[key].enabled = true;
     } else if (next[key]) {
@@ -221,7 +224,7 @@ useEffect(() => {
       if (!val.enabled || Object.keys(val.tabs ?? {}).length > 0) return;
       const spec = modules.find((m) => m.key === key);
       if (spec?.tabs?.length) {
-        next[key] = { ...val, tabs: Object.fromEntries(spec.tabs.map((t) => [t.key, ["view"]])) };
+        next[key] = { ...val, tabs: Object.fromEntries(spec.tabs.map((t) => [t.key, defaultActionsForTab(t)])) };
         changed = true;
       }
     });
@@ -251,7 +254,10 @@ useEffect(() => {
     setPerms((p) => {
       const cur = p[mod] ?? { enabled: true, tabs: {} };
       const tabs = { ...cur.tabs };
-      if (on) tabs[tab] = tabs[tab]?.length ? tabs[tab] : ["view"];
+      if (on) {
+        const tabSpec = modules.find((m) => m.key === mod)?.tabs?.find((t) => t.key === tab);
+        tabs[tab] = tabs[tab]?.length ? tabs[tab] : defaultActionsForTab(tabSpec);
+      }
       else delete tabs[tab];
       return { ...p, [mod]: { ...cur, enabled: true, tabs } };
     });
@@ -274,12 +280,22 @@ useEffect(() => {
   });
 };
 
- const bulkSetModule = (mod, acts) => {
+ const bulkSetModule = (mod, acts = null) => {
   setPerms((p) => {
     const spec = modules.find((m) => m.key === mod);
     return {
       ...p,
-      [mod]: { enabled: true, tabs: Object.fromEntries((spec?.tabs ?? []).map((t) => [t.key, [...acts]])) },
+      [mod]: {
+        enabled: true,
+        tabs: Object.fromEntries(
+          (spec?.tabs ?? []).map((t) => [
+            t.key,
+            acts === null
+              ? [...(t.permissions ?? [])]
+              : acts.filter((action) => t.permissions?.includes(action)),
+          ]),
+        ),
+      },
     };
   });
 };
@@ -520,7 +536,7 @@ const canNext = step === 1 ? name.trim().length > 1 && !loadingEditDetails : ste
                           <div className="flex gap-1.5">
                             <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule, ["view"])}>View only</Button>
                             <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule, ["view","create","update"])}>R/W</Button>
-                            <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule, ["view","create","update","delete","export","approve"])}>Full</Button>
+                            <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule)}>Full</Button>
                           </div>
                         </div>
                         {/* Right column: tabs list — plain scrollable div (no ScrollArea dep) */}
@@ -544,13 +560,13 @@ const canNext = step === 1 ? name.trim().length > 1 && !loadingEditDetails : ste
                                   </div>
                                   {enabled && (
                                     <div className="mt-2 ml-6 flex flex-wrap gap-3">
-                                     {ALL_ACTIONS.map((a) => (
-  <label key={a.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                     {t.permissions.map((action) => (
+  <label key={action} className="flex items-center gap-1.5 text-xs cursor-pointer">
     <Checkbox
-      checked={acts.has(a.key)}
-      onCheckedChange={(v) => toggleAction(activeModule, t.key, a.key, !!v)}
+      checked={acts.has(action)}
+      onCheckedChange={(v) => toggleAction(activeModule, t.key, action, !!v)}
     />
-    {a.label}
+    {ACTION_LABELS[action] || action.replace(/(^|_)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`)}
   </label>
 ))}
                                     </div>

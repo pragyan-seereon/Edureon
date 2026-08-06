@@ -23,6 +23,20 @@ export const verifyOtp = async (email, otp) => {
 
   return response.data;
 };
+
+export const getAuthorizationContext = async () => {
+  const response = await api.get("/authorization/context");
+  return response.data;
+};
+
+export const selectInstitute = async ({ membershipUuid, instituteUuid } = {}) => {
+  const response = await api.post("/auth/select-institute", {
+    // Normal institute users must select their membership. institute_uuid is
+    // reserved by the API for a Super Admin's institute context.
+    ...(membershipUuid ? { membership_uuid: membershipUuid } : { institute_uuid: instituteUuid }),
+  });
+  return response.data;
+};
 export const forgotPassword = async (email) => {
   const response = await api.post("/auth/forgot-password", {
     email,

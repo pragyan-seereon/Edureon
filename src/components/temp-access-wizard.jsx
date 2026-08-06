@@ -33,14 +33,20 @@ import { Clock, Layers, KeyRound, Check, ChevronRight, Search, Plus, X, Building
 import { getDirectUsers, createTemporaryAccessGrant, getTemporaryAccessGrants,getTemporaryAccessGrantById, updateTemporaryAccessGrant,deleteTemporaryAccessGrant, revokeTemporaryAccessGrant } from "../api/temporaryuser";
 import { getModules, getModuleDetails, getInstitutes } from "../api/role";
 
-const ALL_ACTIONS = [
-  { key: "view", label: "View" },
-  { key: "create", label: "Create" },
-  { key: "update", label: "Update" },
-  { key: "delete", label: "Delete" },
-  { key: "export", label: "Export" },
-  { key: "approve", label: "Approve" },
-];
+const ACTION_LABELS = {
+  view: "View",
+  create: "Create",
+  update: "Update",
+  delete: "Delete",
+  export: "Export",
+  approve: "Approve",
+};
+
+const defaultActionsForTab = (tab) =>
+  tab?.permissions?.includes("view") ? ["view"] : tab?.permissions?.slice(0, 1) ?? [];
+
+const actionLabel = (action) =>
+  ACTION_LABELS[action] || action.replace(/(^|_)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
 
 const STATUS_STYLES = {
   ACTIVE: { label: "Active", variant: "default" },
@@ -380,7 +386,7 @@ export function TempAccessWizard({ open, onOpenChange, editGrant }) {
     [perms],
   );
 
-  // Fetch tabs for a module on demand, then default every tab to ["view"]
+  // Fetch tabs for a module on demand, then default every tab to its View
   // the first time they load for a module that's enabled and untouched —
   // mirrors the static-catalog wizard's immediate "all tabs → view" default.
   // (In edit mode, the effects above populate real selections afterward.)
@@ -391,7 +397,14 @@ export function TempAccessWizard({ open, onOpenChange, editGrant }) {
     setTabsByModule((prev) => ({ ...prev, [moduleKey]: null }));
     try {
       const details = await getModuleDetails(mod.uuid);
-      const tabs = (details.tabs || []).map((t) => ({ key: t.tab_code, label: t.tab_name, uuid: t.tab_uuid }));
+      const tabs = (details.tabs || []).map((t) => ({
+        key: t.tab_code,
+        label: t.tab_name,
+        uuid: t.tab_uuid,
+        permissions: (t.permissions || [])
+          .filter((permission) => permission.is_active !== false)
+          .map((permission) => permission.action_code),
+      }));
       setTabsByModule((prev) => ({ ...prev, [moduleKey]: tabs }));
       if (isEditMode) return; // let the edit-mode effect fill selections instead
       setPerms((p) => {
@@ -400,7 +413,7 @@ export function TempAccessWizard({ open, onOpenChange, editGrant }) {
         if (Object.keys(cur.tabs || {}).length > 0) return p; // already customized
         return {
           ...p,
-          [moduleKey]: { enabled: true, tabs: Object.fromEntries(tabs.map((t) => [t.key, ["view"]])) },
+          [moduleKey]: { enabled: true, tabs: Object.fromEntries(tabs.map((t) => [t.key, defaultActionsForTab(t)])) },
         };
       });
     } catch (err) {
@@ -429,7 +442,10 @@ export function TempAccessWizard({ open, onOpenChange, editGrant }) {
     setPerms((p) => {
       const cur = p[mod] ?? { enabled: true, tabs: {} };
       const tabs = { ...cur.tabs };
-      if (on) tabs[tab] = tabs[tab]?.length ? tabs[tab] : ["view"];
+      if (on) {
+        const tabSpec = tabsByModule[mod]?.find((item) => item.key === tab);
+        tabs[tab] = tabs[tab]?.length ? tabs[tab] : defaultActionsForTab(tabSpec);
+      }
       else delete tabs[tab];
       return { ...p, [mod]: { ...cur, enabled: true, tabs } };
     });
@@ -439,16 +455,29 @@ export function TempAccessWizard({ open, onOpenChange, editGrant }) {
     setPerms((p) => {
       const cur = p[mod] ?? { enabled: true, tabs: {} };
       const set = new Set(cur.tabs[tab] ?? []);
-      if (on) { set.add(act); set.add("view"); } else set.delete(act);
+      if (act === "view" && !on) {
+        set.clear();
+      } else if (on) {
+        set.add(act);
+        if (tabsByModule[mod]?.find((item) => item.key === tab)?.permissions?.includes("view")) set.add("view");
+      } else {
+        set.delete(act);
+      }
       return { ...p, [mod]: { ...cur, enabled: true, tabs: { ...cur.tabs, [tab]: Array.from(set) } } };
     });
   };
 
-  const bulkSetModule = (mod, acts) => {
+  const bulkSetModule = (mod, acts = null) => {
     const tabs = tabsByModule[mod] ?? [];
     setPerms((p) => ({
       ...p,
-      [mod]: { enabled: true, tabs: Object.fromEntries(tabs.map((t) => [t.key, [...acts]])) },
+      [mod]: {
+        enabled: true,
+        tabs: Object.fromEntries(tabs.map((t) => [
+          t.key,
+          acts === null ? [...(t.permissions ?? [])] : acts.filter((action) => t.permissions?.includes(action)),
+        ])),
+      },
     }));
   };
 
@@ -695,7 +724,7 @@ export function TempAccessWizard({ open, onOpenChange, editGrant }) {
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule, ["view"])}>All view-only</Button>
                   <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule, ["view", "create", "update"])}>Read/Write</Button>
-                  <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule, ALL_ACTIONS.map((a) => a.key))}>Full</Button>
+                  <Button size="sm" variant="outline" onClick={() => bulkSetModule(activeModule)}>Full</Button>
                 </div>
                 {activeTabs === undefined || activeTabs === null ? (
                   <p className="text-sm text-muted-foreground">Loading sub-screens…</p>
@@ -713,10 +742,10 @@ export function TempAccessWizard({ open, onOpenChange, editGrant }) {
                         </label>
                         {on && (
                           <div className="mt-2 flex flex-wrap gap-3 pl-6">
-                            {ALL_ACTIONS.map((a) => (
-                              <label key={a.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                                <Checkbox checked={acts.includes(a.key)} onCheckedChange={(v) => toggleAction(activeModule, t.key, a.key, Boolean(v))} />
-                                {a.label}
+                            {t.permissions.map((action) => (
+                              <label key={action} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                <Checkbox checked={acts.includes(action)} onCheckedChange={(v) => toggleAction(activeModule, t.key, action, Boolean(v))} />
+                                {actionLabel(action)}
                               </label>
                             ))}
                           </div>

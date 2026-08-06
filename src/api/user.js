@@ -4,12 +4,19 @@ export const getRoles = async ({
   active_only = false,
   page = 1,
   limit = 20,
+  institute_uuid,
+  include_global_roles = true,
 } = {}) => {
-  const { data } = await api.get("/super/roles", {
+  const endpoint = institute_uuid
+    ? `/super/roles/institute/${institute_uuid}`
+    : "/super/roles";
+
+  const { data } = await api.get(endpoint, {
     params: {
       active_only,
       page,
       limit,
+      ...(institute_uuid ? { include_global_roles } : {}),
     },
   });
 
