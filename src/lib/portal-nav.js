@@ -75,7 +75,7 @@ const adminGroups = [
     items: [
       { title: "Fees & Finance", url: "/fees", icon: IndianRupee },
       { title: "Expenses", url: "/expenses", icon: Receipt },
-      { title: "Infrastructure", url: "/admin/infrastructure", icon: Network },
+      { title: "Infrastructure", url: "/infrastructure", icon: Network },
       { title: "Assets", url: "/assets", icon: Boxes },
       { title: "Transport", url: "/transport", icon: Bus },
       { title: "Hostel", url: "/hostel", icon: Building2 },

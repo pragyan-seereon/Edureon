@@ -15,6 +15,17 @@ import { getInstitutes,createRole, getRoleDetails, updateRole, deleteRole as del
 // import { customRolesApi } from "../lib/store";
 
 const SCOPE_OPTIONS = ["Institute"];
+// The role API accepts only these action codes. Module metadata can include
+// UI-only actions such as "close", "issue", and "cancel".
+const VALID_PERMISSION_ACTIONS = new Set([
+  "view", "create", "update", "delete", "export", "import",
+  "archive", "restore", "move", "approve", "enroll", "reject",
+  "reinstate",
+]);
+
+const validActions = (actions = []) =>
+  actions.filter((action) => VALID_PERMISSION_ACTIONS.has(action));
+
 function toWizardScope(apiScope) {
   const match = SCOPE_OPTIONS.find(
     (s) => s.toUpperCase() === (apiScope || "").toUpperCase()
@@ -72,12 +83,14 @@ const buildPermissions = () =>
   enabledModules.flatMap((modKey) => {
     const spec = modules.find((m) => m.key === modKey);
     const modPerms = perms[modKey];
-    return Object.entries(modPerms.tabs).map(([tabKey, actions]) => {
+    return Object.entries(modPerms.tabs).flatMap(([tabKey, actions]) => {
       const tab = spec.tabs?.find((t) => t.key === tabKey);
+      const permittedActions = validActions(actions);
+      if (!tab?.uuid || permittedActions.length === 0) return [];
       return {
         module_uuid: spec.uuid,
-        tab_uuid: tab?.uuid,
-        actions,
+        tab_uuid: tab.uuid,
+        actions: permittedActions,
       };
     });
   });

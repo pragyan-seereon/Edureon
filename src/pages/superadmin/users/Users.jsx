@@ -1,3 +1,5 @@
+/* eslint-disable no-constant-binary-expression */
+/* eslint-disable no-undef */
 import { PageContainer, PageHeader } from "../../../components/page-shell";
 import { KpiCard } from "../../../components/kpi-card";
 import { Card, CardContent,  } from "../../../components/ui/card";
@@ -129,10 +131,23 @@ function getUserRoles(u) {
 }
 
 function normalizeUser(u) {
-  const roleName = u.legacy_role?.role_name || u.legacy_role?.role_code || "Unknown";
+  const memberships = Array.isArray(u.institute_memberships) ? u.institute_memberships : [];
 
-  const membership = Array.isArray(u.institute_memberships) ? u.institute_memberships[0] : null;
-  const instituteId = membership?.institute_id ?? membership?.institute_uuid ?? null;
+  // Build a per-institute list: { instituteId, instituteName, roles: [names] }
+  const instituteRoles = memberships.map((m) => ({
+    instituteId: m.institute_uuid ?? m.institute_id,
+    instituteName: m.institute_name ?? m.institute_uuid ?? m.institute_id,
+    roles: Array.isArray(m.roles) ? m.roles.map((r) => r.role_name) : [],
+  }));
+
+  // Flat, de-duplicated list of every role the user holds across all institutes
+  const allRoleNames = [...new Set(instituteRoles.flatMap((im) => im.roles))];
+  const roleNames = allRoleNames.length
+    ? allRoleNames
+    : [u.legacy_role?.role_name || u.legacy_role?.role_code || "Unknown"];
+
+  const primaryMembership = memberships.find((m) => m.is_primary) ?? memberships[0] ?? null;
+  const instituteId = primaryMembership?.institute_uuid ?? primaryMembership?.institute_id ?? null;
 
   let status = "Active";
   if (u.is_locked) status = "Locked";
@@ -146,8 +161,9 @@ function normalizeUser(u) {
     name: u.display_name || u.email?.split("@")[0] || "Unnamed User",
     email: u.email,
     phone: u.phone,
-    role: [roleName],
-    instituteId,
+    role: roleNames,                    // now ALL roles, not just legacy_role
+    instituteId,                        // kept for backwards compat (filters, etc.)
+    instituteMemberships: instituteRoles, // NEW: full institute→roles breakdown
     status,
     lastLogin: u.last_login_at ? new Date(u.last_login_at).toLocaleString() : null,
     createdAt: u.created_at ? u.created_at.slice(0, 10) : null,
@@ -167,7 +183,7 @@ function exportUsersToExcel(users, instMap) {
                      ? "All Institutes"
                      : (instMap[u.instituteId] ?? u.instituteId ?? ""),
     "Status":      u.status ?? "Active",
-    "Last Login":  u.lastLogin ?? "",
+    // "Last Login":  u.lastLogin ?? "",
     "Created At":  u.createdAt ?? "",
   }));
 
@@ -200,6 +216,19 @@ function passwordScore(pw = "") {
   if (/\d/.test(pw))           s += 15;
   if (/[^A-Za-z0-9]/.test(pw)) s += 10;
   return Math.min(s, 100);
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateUserDetails({ name, email, autoPassword, password }) {
+  const errors = {};
+  if (!name?.trim()) errors.name = "Full name is required.";
+  if (!email?.trim()) errors.email = "Email address is required.";
+  else if (!EMAIL_PATTERN.test(email.trim())) errors.email = "Enter a valid email address.";
+  if (autoPassword === false && password?.length < 6) {
+    errors.password = "Password must be at least 6 characters.";
+  }
+  return errors;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -236,12 +265,45 @@ function RoleBadgeList({ roles }) {
   );
 }
 
+function InstituteRoleCell({ user }) {
+  const isSuperAdmin = getUserRoles(user).includes("Super Admin");
+  if (isSuperAdmin) return <span className="text-sm">All Institutes</span>;
+
+  const memberships = user.instituteMemberships || [];
+  if (memberships.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1 py-0.5">
+      {memberships.map((m) => (
+        <div key={m.instituteId} className="text-xs leading-tight">
+          <span className="font-medium">{m.instituteName}</span>
+          {m.roles.length > 0 && (
+            <span className="text-muted-foreground"> · {m.roles.join(", ")}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 // Multi-select dropdown for assigning one or more roles to a user
 function RoleMultiSelect({ roles, value, onChange, valueKey = "role_name" }) {
   const [open, setOpen] = useState(false);
   const selectedRoles = Array.isArray(value) ? value : value ? [value] : [];
+  const isAdminRole = (role) =>
+    String(role?.role_code || "").toUpperCase() === "ADMIN" ||
+    String(role?.role_name || "").trim().toUpperCase() === "ADMIN";
+  const adminRole = roles.find(isAdminRole);
+  const adminSelected = Boolean(adminRole && selectedRoles.includes(adminRole[valueKey]));
 
   const toggle = (roleValue) => {
+    const role = roles.find((item) => item[valueKey] === roleValue);
+    if (isAdminRole(role)) {
+      onChange(selectedRoles.includes(roleValue) ? [] : [roleValue]);
+      return;
+    }
+    if (adminSelected) return;
     onChange(
       selectedRoles.includes(roleValue)
         ? selectedRoles.filter((r) => r !== roleValue)
@@ -276,12 +338,16 @@ function RoleMultiSelect({ roles, value, onChange, valueKey = "role_name" }) {
             {roles.map((role) => {
               const roleValue = role[valueKey];
               const checked = selectedRoles.includes(roleValue);
+              const disabled = adminSelected && !isAdminRole(role);
               return (
                 <button
                   key={role.role_uuid}
                   type="button"
+                  disabled={disabled}
                   onClick={() => toggle(roleValue)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 text-left text-sm"
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-sm ${
+                    disabled ? "cursor-not-allowed opacity-50" : "hover:bg-muted/50"
+                  }`}
                 >
                   <span className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center ${
                     checked ? "bg-primary border-primary" : "border-muted-foreground/40"
@@ -346,11 +412,12 @@ function ToggleRow({ label, desc, checked, onCheckedChange }) {
   );
 }
 
-function Field({ label, children, className = "" }) {
+function Field({ label, children, className = "", error }) {
   return (
     <div className={`space-y-1.5 ${className}`}>
       <Label className="text-xs font-medium">{label}</Label>
       {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
@@ -825,7 +892,7 @@ const setSortKey = (key) => {
                   <SortableHead className="w-40" label="Role(s)"     sortKey="role"      sort={sort} onSort={setSortKey} />
                   <TableHead    className="w-44">Institute(s)</TableHead>
                   <SortableHead className="w-24" label="Status"      sortKey="status"    sort={sort} onSort={setSortKey} />
-                  <TableHead    className="w-32">Last Login</TableHead>
+                  {/* <TableHead    className="w-32">Last Login</TableHead> */}
                   <SortableHead className="w-28" label="Created"     sortKey="createdAt" sort={sort} onSort={setSortKey} />
                   <TableHead    className="w-40 text-right">Actions</TableHead>
                 </TableRow>
@@ -849,6 +916,7 @@ const setSortKey = (key) => {
                   paginated.map((u) => {
                     const isLocked = (u.status ?? "Active") === "Locked";
                     const isSuspended = (u.status ?? "Active") === "Suspended";
+                    // eslint-disable-next-line no-unused-vars
                     const userIsSuperAdmin = getUserRoles(u).includes("Super Admin");
                     return (
                       <TableRow key={u.id}>
@@ -873,11 +941,11 @@ const setSortKey = (key) => {
                         </TableCell>
                         <TableCell className="truncate text-sm text-muted-foreground">{u.email}</TableCell>
                         <TableCell><RoleBadgeList roles={u.role} /></TableCell>
-                        <TableCell className="truncate text-sm">
-                          {userIsSuperAdmin ? "All Institutes" : (instMap[u.instituteId] ?? u.instituteId)}
-                        </TableCell>
-                        <TableCell><StatusBadge status={u.status ?? "Active"} /></TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{u.lastLogin  ?? "—"}</TableCell>
+<TableCell className="text-sm">
+  <InstituteRoleCell user={u} />
+</TableCell>                      
+  <TableCell><StatusBadge status={u.status ?? "Active"} /></TableCell>
+                        {/* <TableCell className="text-xs text-muted-foreground">{u.lastLogin  ?? "—"}</TableCell> */}
                         <TableCell className="text-xs text-muted-foreground">{u.createdAt  ?? "—"}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
@@ -1002,6 +1070,7 @@ function InstituteRoleAssignmentRow({ assignment, institutes, onChange, onRemove
 
   useEffect(() => {
     if (!assignment.instituteId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoles([]);
       return;
     }
@@ -1073,8 +1142,12 @@ function CreateUserModal({ institutes, onClose }) {
   const [assignments, setAssignments] = useState([
     { id: crypto.randomUUID(), instituteId: "", roleUuids: [] },
   ]);
+  const [errors, setErrors] = useState({});
 
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k, v) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    setErrors((current) => ({ ...current, [k]: undefined }));
+  };
   const updateAssignment = (id, changes) => {
     setAssignments((current) => current.map((assignment) => (
       assignment.id === id ? { ...assignment, ...changes } : assignment
@@ -1088,18 +1161,10 @@ function CreateUserModal({ institutes, onClose }) {
   };
 
   const submit = async () => {
-  if (!form.name.trim()) {
-    toast.error("Full name is required");
-    return;
-  }
-
-  if (!form.email.trim()) {
-    toast.error("Email is required");
-    return;
-  }
-
-  if (!form.autoPassword && form.password.length < 6) {
-    toast.error("Password must be at least 6 characters");
+  const detailErrors = validateUserDetails(form);
+  setErrors(detailErrors);
+  if (Object.keys(detailErrors).length > 0) {
+    toast.error("Correct the highlighted fields");
     return;
   }
 
@@ -1112,7 +1177,7 @@ function CreateUserModal({ institutes, onClose }) {
     const payload = {
       display_name: form.name.trim(),
       email: form.email.trim(),
-      phone: form.phone,
+      phone: form.phone.trim() || null,
       institute_assignments: assignments.map((assignment, index) => (
         {
           institute_uuid: assignment.instituteId,
@@ -1146,14 +1211,14 @@ function CreateUserModal({ institutes, onClose }) {
       <ModalHeader title="Create  User"  onClose={onClose} />
       <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
         
-        <Field label={<>Full Name <span className="text-destructive">*</span></>}>
-          <Input value={form.name}  onChange={(e) => set("name",  e.target.value)} placeholder="Meera Iyer" />
+        <Field label={<>Full Name <span className="text-destructive">*</span></>} error={errors.name}>
+          <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Meera Iyer" aria-invalid={Boolean(errors.name)} />
         </Field>
-        <Field label={<>Email Address <span className="text-destructive">*</span></>}>
-          <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="meera@institute.edu.in" />
+        <Field label={<>Email Address <span className="text-destructive">*</span></>} error={errors.email}>
+          <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="meera@institute.edu.in" aria-invalid={Boolean(errors.email)} />
         </Field>
         <Field label="Phone Number">
-          <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 …" />
+          <Input type="tel" inputMode="numeric" value={form.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 15))} placeholder="9876543210" />
         </Field>
         <div className="sm:col-span-2 space-y-3 rounded-lg border bg-muted/10 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -1211,8 +1276,8 @@ function CreateUserModal({ institutes, onClose }) {
             if (v) set("password", "");
           }} />
           {!form.autoPassword && (
-            <Field label={<>Password <span className="text-destructive">*</span></>}>
-              <Input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder="Minimum 6 characters" />
+            <Field label={<>Password <span className="text-destructive">*</span></>} error={errors.password}>
+              <Input type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder="Minimum 6 characters" aria-invalid={Boolean(errors.password)} />
               <PasswordStrengthBar password={form.password} />
             </Field>
           )}
@@ -1237,6 +1302,7 @@ function EditUserModal({ user, institutes,roles, onClose }) {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     name:        user.name        ?? "",
+    email:       user.email       ?? "",
     phone:       user.phone       ?? "",
     roles:       initialRoles,
     instituteId: user.instituteId ?? "",
@@ -1249,6 +1315,7 @@ function EditUserModal({ user, institutes,roles, onClose }) {
   const [assignments, setAssignments] = useState([
     { id: crypto.randomUUID(), instituteId: user.instituteId ?? "", roleUuids: initialRoleUuids },
   ]);
+  const [errors, setErrors] = useState({});
 
   // Fetch the full, fresh record for this user when the modal opens,
   // and re-populate the form from it (list-row data can be stale/thin).
@@ -1271,6 +1338,7 @@ const fresh = normalizeUser(detail.data ?? detail, roles);
         setForm((f) => ({
           ...f,
           name: fresh.name ?? f.name,
+          email: fresh.email ?? f.email,
           phone: fresh.phone ?? f.phone,
           roles: getUserRoles(fresh).length ? getUserRoles(fresh) : f.roles,
           instituteId: fresh.instituteId ?? f.instituteId,
@@ -1308,6 +1376,7 @@ const fresh = normalizeUser(detail.data ?? detail, roles);
       if (changed) setRoleWarning(true);
     }
     setForm((f) => ({ ...f, [k]: v }));
+    setErrors((current) => ({ ...current, [k]: undefined }));
   };
   const updateAssignment = (id, changes) => {
     setAssignments((current) => current.map((assignment) => (
@@ -1327,6 +1396,13 @@ const fresh = normalizeUser(detail.data ?? detail, roles);
  const [saving, setSaving] = useState(false);
 
 const submit = async () => {
+  const detailErrors = validateUserDetails(form);
+  setErrors(detailErrors);
+  if (Object.keys(detailErrors).length > 0) {
+    toast.error("Correct the highlighted fields");
+    return;
+  }
+
   if (assignments.some((assignment) => !assignment.instituteId || assignment.roleUuids.length === 0)) {
     toast.error("Select an institute and at least one role for every assignment");
     return;
@@ -1337,7 +1413,8 @@ const submit = async () => {
 
     const payload = {
       display_name: form.name.trim(),
-      phone: form.phone,
+      email: form.email.trim(),
+      phone: form.phone.trim() || null,
       institute_assignments: assignments.map((assignment, index) => ({
         institute_uuid: assignment.instituteId,
         department_uuid: null,
@@ -1380,22 +1457,14 @@ const submit = async () => {
           </div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label={<>Full Name <span className="text-destructive">*</span></>}>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <Field label={<>Full Name <span className="text-destructive">*</span></>} error={errors.name}>
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} aria-invalid={Boolean(errors.name)} />
           </Field>
-          <Field label="Email Address">
-            <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-muted/40 text-sm text-muted-foreground">
-              <span className="truncate flex-1">{user.email}</span>
-              <div className="relative group">
-                <Info className="h-3.5 w-3.5 shrink-0 cursor-help" />
-                <div className="absolute right-0 top-5 z-10 hidden group-hover:block w-48 p-2 rounded bg-foreground text-background text-[10px] shadow-lg">
-                  Email cannot be changed after account creation
-                </div>
-              </div>
-            </div>
+          <Field label={<>Email Address <span className="text-destructive">*</span></>} error={errors.email}>
+            <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} aria-invalid={Boolean(errors.email)} />
           </Field>
           <Field label="Phone Number">
-            <Input type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+            <Input type="tel" inputMode="numeric" value={form.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 15))} />
           </Field>
           {false && <>
           <Field label={<>Role(s) <span className="text-destructive">*</span></>}>
@@ -1547,7 +1616,7 @@ function ViewUserPanel({ user, instMap, institutes, roles, onClose }) {
               ["Institute(s)", userIsSuperAdmin ? "All Institutes" : (instMap[user.instituteId] ?? user.instituteId)],
               ["Created By",   user.createdBy   || "System"],
               ["Created At",   user.createdAt   || "—"],
-              ["Last Login",   user.lastLogin   || "—"],
+              // ["Last Login",   user.lastLogin   || "—"],
             ].map(([label, val]) => (
               <div key={label} className="flex items-center justify-between px-5 py-2.5 text-sm">
                 <span className="text-xs text-muted-foreground">{label}</span>

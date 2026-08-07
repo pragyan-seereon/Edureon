@@ -55,7 +55,7 @@ export function AppSidebar() {
     return () => { active = false; };
   }, []);
 
- const role = authorizationContext?.role_codes?.[0] || user?.role_code;
+const role = authorizationContext?.role_codes?.[0] || user?.role_code;
 
 const groups = navForUser(role, {
   permissions: authorizationContext?.permissions ?? user?.permissions,

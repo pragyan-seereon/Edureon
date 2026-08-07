@@ -30,7 +30,7 @@ import TeacherAttendance from "./pages/teacher/TeacherAttendance";
 import TeacherClasses from "./pages/teacher/TeacherClasses";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherLeave from "./pages/teacher/TeacherLeave";
-import TeacherNotices from "./pages/teacher/TeacherNotices";
+import SuperadminNotices from "./pages/superadmin/Notices";
 import TeacherLessonPlans from "./pages/teacher/lessonplans/TeacherLessonPlans";
 import TeacherLessonPlansDetails from "./pages/teacher/lessonplans/TeacherLessonPlansDetails";
 import TeacherMaterials from "./pages/teacher/materials/TeacherMaterials"
@@ -146,7 +146,7 @@ const router = createBrowserRouter([
       { path: "/teacher/lesson-plans/:id",  element: <TeacherLessonPlansDetails />, },
       { path: "/teacher/materials", element: <TeacherMaterials /> },
       { path: "/teacher/materials/:id", element: <TeacherMaterialsDetails /> },
-      { path: "/notices", element: <TeacherNotices /> },
+      { path: "/notices", element: <SuperadminNotices /> },
       //instution admin routes
       
       { path: "/admin/audit", element: <AdminAudit /> },

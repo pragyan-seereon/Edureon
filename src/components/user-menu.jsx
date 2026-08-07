@@ -23,6 +23,7 @@ import {
   Settings,
 } from "lucide-react";
 import { toast } from "sonner";
+import { logout } from "../api/auth";
 // const SWITCHABLE = [
 //   {
 //     role: "super_admin",
@@ -50,15 +51,24 @@ export function UserMenu() {
   // eslint-disable-next-line no-unused-vars
   const navigate = useNavigate();
   if (!user) return null;
-const onLogout = () => {
-  localStorage.removeItem("user");
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-  localStorage.removeItem("session_uuid");
 
-  toast.success("Signed out");
+  const roleName = user.role_name || user.role_code || user.role || "—";
+const onLogout = async () => {
+  try {
+    await logout();
+  } catch (error) {
+    console.error("Logout API call failed:", error);
+    // proceed with local cleanup even if the API call fails
+  } finally {
+    localStorage.removeItem("user");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("session_uuid");
 
-  window.location.href = "/login";
+    toast.success("Signed out");
+
+    window.location.href = "/login";
+  }
 };
   // const onSwitch = (role, label) => {
   //   switchRole(role);
@@ -79,9 +89,8 @@ const onLogout = () => {
             <span className="text-xs font-medium max-w-[120px] truncate">
               {user.name}
             </span>
-            <span className="text-[10px] text-muted-foreground">
-                {user.role_name}
-
+          <span className="text-[10px] text-muted-foreground">
+                {roleName}
             </span>
           </div>
         </Button>
@@ -104,7 +113,7 @@ const onLogout = () => {
                 variant="secondary"
                 className="mt-1 text-[9px] uppercase tracking-wider"
               >
-                {user.role_name}
+                {roleName}
               </Badge>
             </div>
           </div>

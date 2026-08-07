@@ -181,7 +181,7 @@ export default function Communication() {
 
         <Card className="border-border/60">
           <CardHeader>
-            <CardTitle className="text-base">Compose Notice</CardTitle>
+              <CardTitle className="text-base">Compose Notice</CardTitle>
             <CardDescription>
               Publishes to the live notice board
             </CardDescription>
