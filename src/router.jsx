@@ -143,7 +143,7 @@ const router = createBrowserRouter([
       { path: "/notifications", element: <Notifications /> },
       //admin academic routes
       { path: "/admissions", element: <Admissions /> },
-      { path: "/admissions/:id", element: <AdmissionsDetails /> },
+      { path: "/admin/admissions/:id", element: <AdmissionsDetails /> },
       { path: "/students", element: <Students /> },
       { path: "/students/:id", element: <StudentDetails /> },
       { path: "/id-cards", element: <IdCardPage /> },
