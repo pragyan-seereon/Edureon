@@ -5,6 +5,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { portalHomeForRole } from "../lib/portal-nav";
 import { getAuthorizationContext, selectInstitute } from "../api/auth";
 import useAuthStore from "../store/authStore";
+import useInstituteStore from "../store/instituteStore";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -59,6 +60,7 @@ export default function InstituteSelection() {
       localStorage.setItem("scholaris.auth.user", JSON.stringify(selectedUser));
       localStorage.setItem("active_institute_uuid", selectedUser.selected_institute_uuid);
       useAuthStore.getState().setInstituteUUID(selectedUser.selected_institute_uuid);
+      useInstituteStore.getState().setActiveInstitute(selectedUser.selected_institute_uuid);
       navigate(portalHomeForRole(primaryRole));
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to select this institute");

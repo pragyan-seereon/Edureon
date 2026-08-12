@@ -53,6 +53,7 @@ export function UserMenu() {
   if (!user) return null;
 
   const roleName = user.role_name || user.role_code || user.role || "—";
+  
 const onLogout = async () => {
   try {
     await logout();

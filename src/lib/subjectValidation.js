@@ -427,3 +427,87 @@ export function mapApiErrorToDepartmentFieldErrors(err) {
 
   return errors;
 }
+
+
+export const NOTICE_VALIDATION_MESSAGES = {
+  START_DATE_REQUIRED: "Start date required.",
+  TITLE_REQUIRED: "Title required.",
+  BODY_REQUIRED: "Description required.",
+  DUPLICATE_NOTICE: "A notice with this title already exists for this date range.",
+};
+
+/**
+ * Client-side validation for the Notice / Event / Holiday form.
+ *
+ * @param {Object} form            - { start_date, end_date, title, body }
+ * @param {Array}  existingNotices - full list of notices already loaded
+ * @param {string|number|null} editUuid - notice_uuid currently being edited
+ * @returns {Object} errors
+ */
+export function validateNoticeForm(form, existingNotices = [], editUuid = null) {
+  const errors = {};
+
+  const startDate = normalizeDate(form.start_date);
+  const endDate = normalizeDate(form.end_date) || startDate;
+  const title = (form.title ?? "").trim();
+
+  // ---- Required checks ----
+  if (!startDate) {
+    errors.start_date = NOTICE_VALIDATION_MESSAGES.START_DATE_REQUIRED;
+  }
+  if (!title) {
+    errors.title = NOTICE_VALIDATION_MESSAGES.TITLE_REQUIRED;
+  }
+ 
+
+// ---- Duplicate check: same title + same (normalized) date range ----
+const others = existingNotices.filter(
+  (n) =>
+    (n.notice_uuid ?? n.event_uuid ?? n.holiday_uuid ?? n.draft_uuid ?? n.uuid ?? n.id) !==
+    editUuid,
+);
+
+  if (!errors.start_date && !errors.title && startDate && title) {
+    const dup = others.some((n) => {
+      const nStart = normalizeDate(n.start_date ?? n.startDate);
+      const nEnd = normalizeDate(n.end_date ?? n.endDate) || nStart;
+      const nTitle = (n.title ?? "").trim().toLowerCase();
+      return (
+        nStart === startDate &&
+        nEnd === endDate &&
+        nTitle === title.toLowerCase()
+      );
+    });
+    if (dup) errors.title = NOTICE_VALIDATION_MESSAGES.DUPLICATE_NOTICE;
+  }
+
+  return errors;
+}
+
+export function isNoticeFormValid(errors) {
+  return Object.keys(errors).length === 0;
+}
+
+export function mapApiErrorToNoticeFieldErrors(err) {
+  const message =
+    err?.response?.data?.detail ||
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    "";
+
+  const lower = message.toLowerCase();
+  const errors = {};
+
+  if (lower.includes("exist") || lower.includes("duplicate")) {
+    errors.title = NOTICE_VALIDATION_MESSAGES.DUPLICATE_NOTICE;
+  } else if (lower.includes("title")) {
+    errors.title = message || NOTICE_VALIDATION_MESSAGES.TITLE_REQUIRED;
+  } else if (lower.includes("date")) {
+    errors.start_date = message || NOTICE_VALIDATION_MESSAGES.START_DATE_REQUIRED;
+  } else if (lower.includes("description") || lower.includes("body")) {
+    errors.body = message || NOTICE_VALIDATION_MESSAGES.BODY_REQUIRED;
+  }
+
+  return errors;
+}

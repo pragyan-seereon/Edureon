@@ -84,6 +84,19 @@ const adminGroups = [
       { title: "Communication", url: "/communication", icon: MessageSquare },
     ],
   },
+    {
+    label: "Communication",
+    items: [
+      { title: "Notices", url: "/notices", icon: Megaphone },
+      { title: "Communication", url: "/communication", icon: MessageSquare },
+      { title: "Class maintenance", url: "/classroom-maintenance", icon: GraduationCap },
+      { title: "Id Cards", url: "/id-cards", icon: IdCard },
+      { title: "Get Pass", url: "/gate-pass", icon: ShieldCheck },
+
+
+
+    ],
+  },
   {
     label: "Account",
     items: [
@@ -170,7 +183,7 @@ const superGroups = [
     items: [
       { title: "Notices", url: "/notices", icon: Megaphone },
       { title: "Communication", url: "/communication", icon: MessageSquare },
-      { title: "Class maintenance", url: "/maintenance", icon: GraduationCap },
+      { title: "Class maintenance", url: "/classroom-maintenance", icon: GraduationCap },
       { title: "Id Cards", url: "/id-cards", icon: IdCard },
       { title: "Get Pass", url: "/gate-pass", icon: ShieldCheck },
 
@@ -318,7 +331,8 @@ const NAV_MODULE_CODES = {
   "Take Attendance": ["attendance"], "Lesson Plans": ["lesson_plans"], "Study Materials": ["study_materials", "materials"],
   "Leave Application": ["leave"], Results: ["examinations", "results"], Fees: ["fees"],
   "My Children": ["students"], Institutes: ["institutes"], Users: ["users"],
-  Subscriptions: ["subscriptions"], Transactions: ["transactions"], "Security & Sessions": ["security"],
+  Subscriptions: ["subscriptions"], Transactions: ["transactions"], "Security & Sessions": ["security"],"Get Pass": ["gate_pass"],
+  "Class maintenance": ["classroom_maintenance"],
 };
 
 const flattenPermissions = (raw = []) =>

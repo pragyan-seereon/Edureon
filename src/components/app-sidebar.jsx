@@ -18,6 +18,11 @@ import { initials } from "../lib/auth";
 import { navForUser, portalLabelForRole } from "../lib/portal-nav";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { getAuthorizationContext } from "../api/auth";
+import useInstituteStore from "../store/instituteStore";
+
+const getInstituteId = (institute) => institute?.institute_uuid ?? institute?.uuid ?? institute?.id;
+const getInstituteName = (institute) => institute?.institute_name ?? institute?.name ?? "Institute";
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -25,7 +30,15 @@ export function AppSidebar() {
   const isActive = (url) =>
     url === "/" ? pathname === "/" : pathname.startsWith(url);
   const [authorizationContext, setAuthorizationContext] = useState(null);
+  const activeInstituteId = useInstituteStore((state) => state.activeInstituteId);
   const user = JSON.parse(localStorage.getItem("user") || "null");
+  const assignedInstitutes = Array.isArray(user?.institutes) ? user.institutes : [];
+  const activeInstitute = assignedInstitutes.find(
+    (institute) => getInstituteId(institute) === activeInstituteId,
+  ) || user?.active_institute;
+  const activeInstituteName = activeInstituteId === "__all__"
+    ? "All schools"
+    : getInstituteName(activeInstitute);
 
   useEffect(() => {
     let active = true;
@@ -53,7 +66,7 @@ export function AppSidebar() {
         // Retain the login response if the context endpoint is temporarily unavailable.
       });
     return () => { active = false; };
-  }, []);
+  }, [activeInstituteId]);
 
 const role = authorizationContext?.role_codes?.[0] || user?.role_code;
 
@@ -80,6 +93,11 @@ const portalLabel = portalLabelForRole(role);
               <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60">
                 {portalLabel}
               </span>
+              {activeInstituteId !== "__all__" && activeInstitute && (
+                <span className="truncate text-[10px] text-sidebar-foreground/60">
+                  {activeInstituteName}
+                </span>
+              )}
             </div>
           )}
         </Link>
@@ -139,9 +157,9 @@ const portalLabel = portalLabelForRole(role);
                 <span className="text-xs font-medium text-sidebar-foreground truncate">
                   {user?.name ?? "Guest"}
                 </span>
-                <span className="text-[10px] text-sidebar-foreground/60 truncate">
+                {/* <span className="text-[10px] text-sidebar-foreground/60 truncate">
                   {user?.designation ?? "—"}
-                </span>
+                </span> */}
               </div>
             </div>
           ) : (
