@@ -366,3 +366,148 @@ export function mapApiErrorToCalendarFieldErrors(err) {
 
   return errors;
 }
+
+export const DEPARTMENT_VALIDATION_MESSAGES = {
+  NAME_REQUIRED: "Department name is required",
+  NAME_DUPLICATE: "Department already exists.",
+};
+
+/**
+ * Client-side validation for the Department form.
+ *
+ * @param {Object} form                - { name }
+ * @param {Array}  existingDepartments - full list already loaded (raw API objects,
+ *                                       must carry department_uuid + department_name)
+ * @param {string|number|null} editUuid - department_uuid currently being edited
+ * @returns {Object} errors - { name?: string }
+ */
+export function validateDepartmentForm(form, existingDepartments = [], editUuid = null) {
+  const errors = {};
+
+  const name = (form.name ?? "").trim();
+
+  if (!name) {
+    errors.name = DEPARTMENT_VALIDATION_MESSAGES.NAME_REQUIRED;
+  }
+
+  const others = existingDepartments.filter((d) => d.department_uuid !== editUuid);
+
+  if (!errors.name && name) {
+    const nameExists = others.some(
+      (d) => (d.department_name ?? "").trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (nameExists) errors.name = DEPARTMENT_VALIDATION_MESSAGES.NAME_DUPLICATE;
+  }
+
+  return errors;
+}
+
+export function isDepartmentFormValid(errors) {
+  return Object.keys(errors).length === 0;
+}
+
+/**
+ * Maps a backend 409/duplicate error to the same errors shape,
+ * for cases where two people create the same department at once.
+ */
+export function mapApiErrorToDepartmentFieldErrors(err) {
+  const message =
+    err?.response?.data?.detail ||
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    "";
+
+  const lower = message.toLowerCase();
+  const errors = {};
+
+  if (lower.includes("name") || lower.includes("exist")) {
+    errors.name = message || DEPARTMENT_VALIDATION_MESSAGES.NAME_DUPLICATE;
+  }
+
+  return errors;
+}
+
+
+export const NOTICE_VALIDATION_MESSAGES = {
+  START_DATE_REQUIRED: "Start date required.",
+  TITLE_REQUIRED: "Title required.",
+  BODY_REQUIRED: "Description required.",
+  DUPLICATE_NOTICE: "A notice with this title already exists for this date range.",
+};
+
+/**
+ * Client-side validation for the Notice / Event / Holiday form.
+ *
+ * @param {Object} form            - { start_date, end_date, title, body }
+ * @param {Array}  existingNotices - full list of notices already loaded
+ * @param {string|number|null} editUuid - notice_uuid currently being edited
+ * @returns {Object} errors
+ */
+export function validateNoticeForm(form, existingNotices = [], editUuid = null) {
+  const errors = {};
+
+  const startDate = normalizeDate(form.start_date);
+  const endDate = normalizeDate(form.end_date) || startDate;
+  const title = (form.title ?? "").trim();
+
+  // ---- Required checks ----
+  if (!startDate) {
+    errors.start_date = NOTICE_VALIDATION_MESSAGES.START_DATE_REQUIRED;
+  }
+  if (!title) {
+    errors.title = NOTICE_VALIDATION_MESSAGES.TITLE_REQUIRED;
+  }
+ 
+
+// ---- Duplicate check: same title + same (normalized) date range ----
+const others = existingNotices.filter(
+  (n) =>
+    (n.notice_uuid ?? n.event_uuid ?? n.holiday_uuid ?? n.draft_uuid ?? n.uuid ?? n.id) !==
+    editUuid,
+);
+
+  if (!errors.start_date && !errors.title && startDate && title) {
+    const dup = others.some((n) => {
+      const nStart = normalizeDate(n.start_date ?? n.startDate);
+      const nEnd = normalizeDate(n.end_date ?? n.endDate) || nStart;
+      const nTitle = (n.title ?? "").trim().toLowerCase();
+      return (
+        nStart === startDate &&
+        nEnd === endDate &&
+        nTitle === title.toLowerCase()
+      );
+    });
+    if (dup) errors.title = NOTICE_VALIDATION_MESSAGES.DUPLICATE_NOTICE;
+  }
+
+  return errors;
+}
+
+export function isNoticeFormValid(errors) {
+  return Object.keys(errors).length === 0;
+}
+
+export function mapApiErrorToNoticeFieldErrors(err) {
+  const message =
+    err?.response?.data?.detail ||
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    "";
+
+  const lower = message.toLowerCase();
+  const errors = {};
+
+  if (lower.includes("exist") || lower.includes("duplicate")) {
+    errors.title = NOTICE_VALIDATION_MESSAGES.DUPLICATE_NOTICE;
+  } else if (lower.includes("title")) {
+    errors.title = message || NOTICE_VALIDATION_MESSAGES.TITLE_REQUIRED;
+  } else if (lower.includes("date")) {
+    errors.start_date = message || NOTICE_VALIDATION_MESSAGES.START_DATE_REQUIRED;
+  } else if (lower.includes("description") || lower.includes("body")) {
+    errors.body = message || NOTICE_VALIDATION_MESSAGES.BODY_REQUIRED;
+  }
+
+  return errors;
+}

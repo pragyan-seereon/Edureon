@@ -86,8 +86,6 @@ import {
   walletApi,
   useSectionChangeRequests,
   sectionChangeApi,
-  useDepartments,        
-  departmentsApi,        
   SUBJECT_TYPES,
 } from "../../../lib/store";
 import { DataHealth } from "../../../components/data-health";
@@ -107,6 +105,13 @@ import {
   deleteClass,
   getClassByUUID,
 } from "../../../api/class";
+import {
+  getDepartments,
+  getDepartmentByUUID,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+} from "../../../api/department";
 import { getUnassignedStudents,assignStudentsToSection } from "../../../api/assignstudent.js";
 import { getPromotionStudents,promoteStudents, } from "../../../api/promotions";
 import {getSectionAssignmentStudents , moveStudentsToSection , getStreamAssignedStudents,applyStreamChange  } from "../../../api/transfer";
@@ -120,6 +125,8 @@ import {
   mapApiErrorToSectionFieldErrors,
   validateCalendarForm,
   mapApiErrorToCalendarFieldErrors,
+  validateDepartmentForm,           
+  mapApiErrorToDepartmentFieldErrors,
 } from "../../../lib/subjectValidation";
 import {
   getRooms,
@@ -132,13 +139,13 @@ import {
   getSectionByUUID,
   getStudentsBySection,
 } from "../../../api/section";
-import {
-  getAcademicCalendar,
-  createAcademicCalendar,
-  updateAcademicCalendar,
-  deleteAcademicCalendar,
-  getAcademicCalendarByUUID,
-} from "../../../api/academicCalendar";
+// import {
+//   getAcademicCalendar,
+//   createAcademicCalendar,
+//   updateAcademicCalendar,
+//   deleteAcademicCalendar,
+//   getAcademicCalendarByUUID,
+// } from "../../../api/academicCalendar";
 
 import { Calendar } from "../../../components/ui/calendar";
 import {
@@ -3383,67 +3390,130 @@ const handleSecNewClassChange = (v) => {
 }
 // ================= Departments Tab =================
 function DepartmentsTab() {
-  const departments = useDepartments();
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(false);
+
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState(null);
   const [name, setName] = useState("");
-  const [head, setHead] = useState("");
   const [description, setDescription] = useState("");
-  const [subjectIds, setSubjectIds] = useState([]);
+  const [status, setStatus] = useState("ACTIVE");
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
   const [subjectList, setSubjectList] = useState([]);
 
+ const fetchDepartments = async () => {
+  try {
+    setLoading(true);
+    const res = await getDepartments();
+    setDepartments(res || []);   // ✅ res is already the array
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to fetch departments");
+  } finally {
+    setLoading(false);
+  }
+};
+
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await getSubjects();
-        setSubjectList(res.data || []);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    load();
+    fetchDepartments();
+    getSubjects()
+      .then((res) => setSubjectList(res.data || []))
+      .catch((err) => console.error(err));
   }, []);
 
   const reset = () => {
     setName("");
-    setHead("");
     setDescription("");
-    setSubjectIds([]);
+    setStatus("ACTIVE");
+    setErrors({});
     setEdit(null);
   };
+
   const openNew = () => {
     reset();
     setOpen(true);
   };
-  const openEdit = (d) => {
-    setEdit(d);
-    setName(d.name);
-    setHead(d.head ?? "");
-    setDescription(d.description ?? "");
-    setSubjectIds(d.subjectIds ?? []);
+
+ const openEdit = async (d) => {
+  try {
+    setLoading(true);
+    const res = await getDepartmentByUUID(d.department_uuid);
+    const dept = res;   // ✅ was res.data
+    setEdit(dept);
+    setName(dept.department_name ?? "");
+    setDescription(dept.description ?? "");
+    setStatus(dept.status ?? "ACTIVE");
+    setErrors({});
     setOpen(true);
-  };
-  const toggleSubject = (id) =>
-    setSubjectIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  } catch (err) {
+    console.error(err);
+    toast.error("Failed to load department");
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const save = () => {
-    if (!name.trim()) return toast.error("Department name is required");
-    if (edit) {
-      departmentsApi.update(edit.id, { name, head, description, subjectIds });
-      toast.success(`${name} updated`);
-    } else {
-      departmentsApi.add({ name, head, description, subjectIds });
-      toast.success(`${name} created`);
+ const save = async () => {
+  const clientErrors = validateDepartmentForm(
+    { name },
+    departments,
+    edit?.department_uuid ?? null,
+  );
+  if (Object.keys(clientErrors).length > 0) {
+    setErrors(clientErrors);
+    return;
+  }
+  setErrors({});
+
+    const payload = {
+      department_name: name.trim(),
+      description: description.trim() || null,
+      status,
+    };
+
+    setSubmitting(true);
+    try {
+      if (edit) {
+        await updateDepartment(edit.department_uuid, payload);
+        toast.success(`${name} updated`);
+      } else {
+        await createDepartment(payload);
+        toast.success(`${name} created`);
+      }
+      fetchDepartments();
+      setOpen(false);
+      reset();
+    } catch (err) {
+      console.error(err);
+      const apiErrors = mapApiErrorToDepartmentFieldErrors(err);
+      if (Object.keys(apiErrors).length > 0) {
+        setErrors(apiErrors);
+      } else {
+        toast.error(
+          err?.response?.data?.message ||
+            (edit ? "Failed to update department" : "Failed to create department"),
+        );
+      }
+    } finally {
+      setSubmitting(false);
     }
-    setOpen(false);
-    reset();
   };
 
-  const subjectsForDept = (d) => {
-    const byId = subjectList.filter((s) => (d.subjectIds ?? []).includes(s.subject_uuid));
-    if (byId.length > 0) return byId;
-    return subjectList.filter((s) => s.department === d.name);
+  const handleDelete = async (d) => {
+    try {
+      await deleteDepartment(d.department_uuid);
+      toast.success(`${d.department_name} removed`);
+      fetchDepartments();
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || "Failed to delete department");
+    }
   };
+
+  const subjectsForDept = (d) =>
+    subjectList.filter((s) => s.department === d.department_name);
 
   return (
     <div className="space-y-4">
@@ -3451,9 +3521,7 @@ function DepartmentsTab() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle className="text-base">Departments</CardTitle>
-            <CardDescription>
-              Group subjects and faculty under academic departments. One department can own many subjects.
-            </CardDescription>
+           
           </div>
           <Button size="sm" className="gradient-primary border-0" onClick={openNew}>
             <Plus className="h-4 w-4" /> New Department
@@ -3464,70 +3532,51 @@ function DepartmentsTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Department</TableHead>
-                <TableHead>Head</TableHead>
-                <TableHead>Subjects</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="w-24 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {departments.length === 0 && (
+              {!loading && departments.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
                     No departments yet.
                   </TableCell>
                 </TableRow>
               )}
-              {departments
-                .filter((d) => !d.archived)
-                .map((d) => {
-                  const subs = subjectsForDept(d);
-                  return (
-                    <TableRow key={d.id}>
-                      <TableCell className="font-medium">{d.name}</TableCell>
-                      <TableCell className="text-sm">{d.head || "—"}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1 max-w-md">
-                          {subs.length === 0 && (
-                            <span className="text-xs text-muted-foreground">No subjects assigned</span>
-                          )}
-                          {subs.slice(0, 6).map((s) => (
-                            <Badge key={s.subject_uuid} variant="secondary" className="text-[10px]">
-                              {s.subject_name}
-                            </Badge>
-                          ))}
-                          {subs.length > 6 && (
-                            <Badge variant="outline" className="text-[10px]">
-                              +{subs.length - 6} more
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell
-                        className="text-xs text-muted-foreground max-w-xs truncate"
-                        title={d.description}
+              {departments.map((d) => {
+                const subs = subjectsForDept(d);
+                return (
+                  <TableRow key={d.department_uuid}>
+                    <TableCell className="font-medium">{d.department_name}</TableCell>
+                    <TableCell>
+                      <Badge variant={d.status === "ACTIVE" ? "default" : "outline"}>
+                        {d.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell
+                      className="text-xs text-muted-foreground max-w-xs truncate"
+                      title={d.description}
+                    >
+                      {d.description || "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(d)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => handleDelete(d)}
                       >
-                        {d.description || "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(d)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive"
-                          onClick={() => {
-                            departmentsApi.remove(d.id);
-                            toast.success(`${d.name} removed`);
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -3543,57 +3592,53 @@ function DepartmentsTab() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{edit ? "Edit Department" : "New Department"}</DialogTitle>
-            <DialogDescription>Assign one or many subjects to this department.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label className="text-xs">Name *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Department Head</Label>
-                <Input value={head} onChange={(e) => setHead(e.target.value)} placeholder="e.g. Mr. R. Verma" />
-              </div>
-              <div>
-                <Label className="text-xs">Subjects selected</Label>
-                <Input disabled value={`${subjectIds.length} subject${subjectIds.length === 1 ? "" : "s"}`} />
-              </div>
+<Label className="text-xs">
+  Name <span className="text-destructive">*</span>
+</Label>
+              <Input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
+                }}
+                placeholder="e.g. Mathematics"
+                className={
+                  errors.name ? "border-destructive focus-visible:ring-destructive" : ""
+                }
+              />
+              {errors.name && (
+                <p className="text-xs text-destructive flex items-center gap-1 mt-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {errors.name}
+                </p>
+              )}
             </div>
             <div>
               <Label className="text-xs">Description</Label>
               <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Assign Subjects</Label>
-              <div className="rounded-md border max-h-56 overflow-y-auto p-2 space-y-1">
-                {subjectList.length === 0 && (
-                  <div className="text-xs text-muted-foreground py-4 text-center">
-                    No subjects available. Add subjects first.
-                  </div>
-                )}
-                {subjectList.map((s) => (
-                  <label
-                    key={s.subject_uuid}
-                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1.5 py-1"
-                  >
-                    <Checkbox
-                      checked={subjectIds.includes(s.subject_uuid)}
-                      onCheckedChange={() => toggleSubject(s.subject_uuid)}
-                    />
-                    <span className="flex-1">{s.subject_name}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">{s.subject_code}</span>
-                  </label>
-                ))}
-              </div>
+              <Label className="text-xs">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button className="gradient-primary border-0" onClick={save}>
-              {edit ? "Save" : "Create"}
+            <Button className="gradient-primary border-0" onClick={save} disabled={submitting}>
+              {submitting ? "Saving..." : edit ? "Save" : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>
