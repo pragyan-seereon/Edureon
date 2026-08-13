@@ -23,7 +23,7 @@ const seed = [
   { id: "GP-1040", passType: "Visitor", name: "Rajesh Kumar", deptClass: "Vendor — CoolFix", contact: "+91 90011 22334", outTime: "16:00", inTime: "16:45", purpose: "AC maintenance pickup", vehicleNo: "DL 1A XY 9090", authority: "Admin Officer", accompaniedBy: "Security — Gate 2", status: "Returned" },
 ];
 
-export default function GatePass() {
+export default function Gatepass() {
   const [items, setItems] = useState(seed);
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(null);

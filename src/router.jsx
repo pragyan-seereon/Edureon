@@ -73,7 +73,7 @@ import SubjectDetail from "./pages/admin/academic/SubjectDetail";
 import SectionDetail from "./pages/admin/academic/SectionDetail";
 import StudentArchive from "./pages/admin/academic/Studentarchive";
 import IdCardPage from "./pages/superadmin/Idcarddesigner";
-import GatePassPage from "./pages/superadmin/GatePass";
+import GatePassPage from "./pages/superadmin/Gatepass";
 import AdminMaintenance from "./pages/superadmin/Adminmaintenance";
 import StudentExamsPage from "./pages/students/StudentExams";
 import MyTimetable from "./pages/students/Mytimetable";
