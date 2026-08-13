@@ -30,7 +30,7 @@ import TeacherAttendance from "./pages/teacher/TeacherAttendance";
 import TeacherClasses from "./pages/teacher/TeacherClasses";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherLeave from "./pages/teacher/TeacherLeave";
-import TeacherNotices from "./pages/teacher/TeacherNotices";
+import SuperadminNotices from "./pages/superadmin/Notices";
 import TeacherLessonPlans from "./pages/teacher/lessonplans/TeacherLessonPlans";
 import TeacherLessonPlansDetails from "./pages/teacher/lessonplans/TeacherLessonPlansDetails";
 import TeacherMaterials from "./pages/teacher/materials/TeacherMaterials"
@@ -77,6 +77,12 @@ import GatePassPage from "./pages/superadmin/GatePass";
 import AdminMaintenance from "./pages/superadmin/AdminMaintenance";
 import StudentExamsPage from "./pages/students/StudentExams";
 import MyTimetable from "./pages/students/Mytimetable";
+import Calendar from "./pages/students/Calendar";
+import StudentWallet from "./pages/students/Wallet";
+import StudentGatePass from "./pages/students/Gatepass";
+import StudentTransport from "./pages/students/Transport";
+import InstituteSelection from "./pages/InstituteSelection";
+
 const router = createBrowserRouter([
   {
     element: <AppLayout />,
@@ -92,6 +98,7 @@ const router = createBrowserRouter([
 
       { path: "/signup", element: <Signup />},
       { path: "/forgot-password", element: <ForgotPassword /> },
+      { path: "/select-institute", element: <InstituteSelection /> },
 
       //superadmin routes
       { path: "/super/dashboard",element: <SuperAdminDashboard /> },
@@ -119,12 +126,16 @@ const router = createBrowserRouter([
       { path: "/student/attendance", element: <Attendance /> },
       { path: "/student/assignments", element: <Assignments /> },
       { path: "/student/results", element: <Results /> },
+      { path: "/student/calendar", element: <Calendar /> },
       { path: "/student/materials", element: <StudyMaterials /> },
       { path: "/student/notices", element: <Notices /> },
       { path: "/student/fees", element: <Fees /> },
       { path: "/student/library", element: <Library /> },
       { path: "/student/exams", element: <StudentExamsPage /> },
       { path: "/student/timetable", element: <MyTimetable /> },
+      { path: "/student/wallet", element: <StudentWallet /> },
+      { path: "/student/gate-pass", element: <StudentGatePass /> },
+      { path: "/student/transport", element: <StudentTransport /> },
 
       //teacher routes
       { path: "/teacher/dashboard", element: <TeacherDashboard /> },
@@ -135,7 +146,7 @@ const router = createBrowserRouter([
       { path: "/teacher/lesson-plans/:id",  element: <TeacherLessonPlansDetails />, },
       { path: "/teacher/materials", element: <TeacherMaterials /> },
       { path: "/teacher/materials/:id", element: <TeacherMaterialsDetails /> },
-      { path: "/notices", element: <TeacherNotices /> },
+      { path: "/notices", element: <SuperadminNotices /> },
       //instution admin routes
       
       { path: "/admin/audit", element: <AdminAudit /> },
@@ -143,7 +154,7 @@ const router = createBrowserRouter([
       { path: "/notifications", element: <Notifications /> },
       //admin academic routes
       { path: "/admissions", element: <Admissions /> },
-      { path: "/admissions/:id", element: <AdmissionsDetails /> },
+      { path: "/admin/admissions/:id", element: <AdmissionsDetails /> },
       { path: "/students", element: <Students /> },
       { path: "/students/:id", element: <StudentDetails /> },
       { path: "/id-cards", element: <IdCardPage /> },

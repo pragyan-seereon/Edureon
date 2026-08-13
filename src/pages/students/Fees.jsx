@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { PageContainer, PageHeader } from "../../components/page-shell";
 import {
   Card,
@@ -10,6 +11,12 @@ import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Progress } from "../../components/ui/progress";
 import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "../../components/ui/tabs";
+import {
   Table,
   TableBody,
   TableCell,
@@ -17,246 +24,395 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
-import { Download, IndianRupee, CreditCard } from "lucide-react";
+import {
+  Download,
+  IndianRupee,
+  ShieldCheck,
+  Receipt,
+  CreditCard,
+} from "lucide-react";
 import { KpiCard } from "../../components/kpi-card";
 import { toast } from "sonner";
-const installments = [
-  {
-    name: "Term 1 — Tuition",
-    amount: 48000,
-    dueDate: "15 Apr 2025",
-    status: "Paid",
-    paidOn: "12 Apr 2025",
-  },
-  {
-    name: "Term 1 — Transport",
-    amount: 12000,
-    dueDate: "15 Apr 2025",
-    status: "Paid",
-    paidOn: "12 Apr 2025",
-  },
-  {
-    name: "Term 2 — Tuition",
-    amount: 48000,
-    dueDate: "30 Sep 2025",
-    status: "Paid",
-    paidOn: "28 Sep 2025",
-  },
-  {
-    name: "Term 2 — Transport",
-    amount: 12000,
-    dueDate: "30 Sep 2025",
-    status: "Paid",
-    paidOn: "28 Sep 2025",
-  },
-  {
-    name: "Term 3 — Tuition",
-    amount: 48000,
-    dueDate: "30 Nov 2025",
-    status: "Due",
-    paidOn: "—",
-  },
-  {
-    name: "Term 3 — Transport",
-    amount: 12000,
-    dueDate: "30 Nov 2025",
-    status: "Due",
-    paidOn: "—",
-  },
-  {
-    name: "Annual — Activity Fee",
-    amount: 8000,
-    dueDate: "31 Mar 2026",
-    status: "Upcoming",
-    paidOn: "—",
-  },
+
+// --- Static demo data (swap for real API/store data as needed) ---
+
+const feeStructure = {
+  name: "Standard Fee Structure — 2025-26",
+  dueDay: 10,
+  graceDays: 5,
+  components: [
+    { label: "Tuition Fee", frequency: "Monthly", amount: 4000 },
+    { label: "Transport Fee", frequency: "Monthly", amount: 1000 },
+    { label: "Activity Fee", frequency: "Annual", amount: 8000 },
+  ],
+};
+
+const monthlyTotal = feeStructure.components
+  .filter((c) => c.frequency === "Monthly")
+  .reduce((s, c) => s + c.amount, 0);
+
+const annualExtras = feeStructure.components
+  .filter((c) => c.frequency === "Annual")
+  .reduce((s, c) => s + c.amount, 0);
+
+const annualTotal = monthlyTotal * 12 + annualExtras;
+
+const monthLines = [
+  { ym: "2025-04", label: "April 2025", monthly: monthlyTotal, lateFee: 0, paid: true },
+  { ym: "2025-05", label: "May 2025", monthly: monthlyTotal, lateFee: 0, paid: true },
+  { ym: "2025-06", label: "June 2025", monthly: monthlyTotal, lateFee: 0, paid: true },
+  { ym: "2025-07", label: "July 2025", monthly: monthlyTotal, lateFee: 0, paid: true },
+  { ym: "2025-08", label: "August 2025", monthly: monthlyTotal, lateFee: 0, paid: true },
+  { ym: "2025-09", label: "September 2025", monthly: monthlyTotal, lateFee: 0, paid: true },
+  { ym: "2025-10", label: "October 2025", monthly: monthlyTotal, lateFee: 200, paid: false },
+  { ym: "2025-11", label: "November 2025", monthly: monthlyTotal, lateFee: 0, paid: false },
 ];
+
 const history = [
   {
-    receipt: "RCP-1042",
+    id: "RCP-1042",
     date: "28 Sep 2025",
-    amount: 60000,
+    amount: 5000,
     mode: "UPI",
     txn: "ICICI/UPI/28092025/871",
+    note: "Tuition, Transport",
   },
   {
-    receipt: "RCP-0921",
+    id: "RCP-0921",
     date: "12 Apr 2025",
-    amount: 60000,
+    amount: 5000,
     mode: "NetBanking",
     txn: "HDFC/NB/12042025/004",
+    note: "Tuition, Transport",
   },
 ];
-const inr = (n) => "₹" + n.toLocaleString("en-IN");
-const statusColor = {
-  Paid: "bg-success/10 text-success border-success/20",
-  Due: "bg-warning/15 text-warning border-warning/20",
-  Upcoming: "bg-muted text-muted-foreground border-border",
-};
+
+const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+
 export default function Fees() {
-  const total = installments.reduce((s, i) => s + i.amount, 0);
-  const paid = installments
-    .filter((i) => i.status === "Paid")
-    .reduce((s, i) => s + i.amount, 0);
-  const due = installments
-    .filter((i) => i.status === "Due")
-    .reduce((s, i) => s + i.amount, 0);
-  const pct = Math.round((paid / total) * 100);
+  const [payOpen, setPayOpen] = useState(false);
+  const [payTarget, setPayTarget] = useState(null);
+
+  const totalDue = useMemo(
+    () =>
+      monthLines
+        .filter((l) => !l.paid)
+        .reduce((s, l) => s + l.monthly + l.lateFee, 0),
+    []
+  );
+  const totalLate = useMemo(
+    () => monthLines.reduce((s, l) => s + l.lateFee, 0),
+    []
+  );
+  const paidAmt = useMemo(
+    () =>
+      monthLines
+        .filter((l) => l.paid)
+        .reduce((s, l) => s + l.monthly, 0) + annualExtras,
+    []
+  );
+  const pct = annualTotal
+    ? Math.min(100, Math.round((paidAmt / annualTotal) * 100))
+    : 0;
+
+  const openPay = (amount, label, ym) => {
+    setPayTarget({ amount, label, ym });
+    setPayOpen(true);
+  };
+
+  const handlePay = () => {
+    toast.success("Redirecting to UPI…", {
+      description: `${inr(payTarget?.amount ?? 0)} · Razorpay`,
+    });
+    setPayOpen(false);
+  };
+
   return (
     <PageContainer>
       <PageHeader
         eyebrow="Student Portal · Fees"
         title="My Fees"
-        description="Installment schedule, payment history and instant downloads of receipts."
+        description={`Fee structure assigned: ${feeStructure.name}`}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard
           label="Annual Fee"
-          value={inr(total)}
+          value={inr(annualTotal)}
           icon={<IndianRupee className="h-5 w-5" />}
           tone="primary"
         />
         <KpiCard
-          label="Paid"
-          value={inr(paid)}
+          label="Fees Paid"
+          value={inr(paidAmt)}
           icon={<IndianRupee className="h-5 w-5" />}
           tone="success"
         />
         <KpiCard
-          label="Due Now"
-          value={inr(due)}
+          label="Fees Due"
+          value={inr(totalDue)}
           icon={<IndianRupee className="h-5 w-5" />}
           tone="warning"
         />
         <KpiCard
-          label="Progress"
-          value={pct + "%"}
+          label="Late Fee"
+          value={inr(totalLate)}
           icon={<IndianRupee className="h-5 w-5" />}
           tone="info"
         />
       </div>
 
       <Card className="border-border/60 mb-6">
-        <CardHeader className="pb-2">
-          <CardTitle className="font-display text-base">
-            Term 3 — Pay Now
-          </CardTitle>
-          <CardDescription>Due 30 Nov 2025</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="text-3xl font-display font-semibold">
-                {inr(due)}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Tuition ₹48,000 · Transport ₹12,000
-              </div>
+        <CardContent className="p-5 flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex-1">
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-muted-foreground">
+                Payment progress — 2025-26
+              </span>
+              <span className="font-semibold">
+                {inr(paidAmt)} / {inr(annualTotal)}
+              </span>
             </div>
-            <Button
-              size="lg"
-              className="gradient-primary border-0"
-              onClick={() =>
-                toast.success("Redirecting to UPI…", {
-                  description: "₹60,000 · Razorpay",
-                })
-              }
-            >
-              <CreditCard className="h-5 w-5" />
-              Pay ₹{due.toLocaleString("en-IN")}
-            </Button>
+            <Progress value={pct} className="h-2" />
+            <div className="mt-2 text-xs text-muted-foreground">
+              {totalDue > 0
+                ? `${inr(totalDue)} outstanding including ${inr(
+                    totalLate
+                  )} late fee.`
+                : "All dues cleared. Thank you!"}
+            </div>
           </div>
-          <Progress value={pct} className="h-2" />
-          <div className="text-xs text-muted-foreground mt-2">
-            {inr(paid)} of {inr(total)} paid this academic year
-          </div>
+          <Button
+            className="gradient-primary border-0 shrink-0"
+            disabled={totalDue <= 0}
+            onClick={() => openPay(totalDue, "All outstanding dues")}
+          >
+            <CreditCard className="h-5 w-5" />
+            Pay Now {totalDue > 0 && `· ${inr(totalDue)}`}
+          </Button>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border-border/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="font-display text-base">
-              Installment Schedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Installment</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {installments.map((i) => (
-                  <TableRow key={i.name}>
-                    <TableCell className="text-sm">{i.name}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {i.dueDate}
-                    </TableCell>
-                    <TableCell className="text-right text-sm font-semibold">
-                      {inr(i.amount)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={statusColor[i.status]}
-                      >
-                        {i.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="status">
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="status">Fee Status</TabsTrigger>
+          <TabsTrigger value="structure">Fee Structure</TabsTrigger>
+          <TabsTrigger value="history">Payment History</TabsTrigger>
+        </TabsList>
 
-        <Card className="border-border/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="font-display text-base">
-              Payment History
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {history.map((h) => (
-              <div
-                key={h.receipt}
-                className="flex items-center gap-3 p-3 border rounded-md"
-              >
-                <div className="h-9 w-9 rounded-md flex items-center justify-center bg-success/10 text-success shrink-0">
-                  <IndianRupee className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">
-                    {inr(h.amount)} · {h.mode}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {h.date} · {h.receipt}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground font-mono">
-                    {h.txn}
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    toast.success("Receipt " + h.receipt + " downloaded")
-                  }
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Receipt
+        <TabsContent value="status" className="mt-4">
+          <Card className="border-border/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="font-display text-base">
+                Month-wise Status
+              </CardTitle>
+              <CardDescription>
+                Late fee applies after day {feeStructure.dueDay} +{" "}
+                {feeStructure.graceDays} grace days.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead className="text-right">Monthly Fee</TableHead>
+                    <TableHead className="text-right">Late Fee</TableHead>
+                    <TableHead className="text-right">Payable</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthLines.map((l) => (
+                    <TableRow key={l.ym}>
+                      <TableCell className="font-medium">{l.label}</TableCell>
+                      <TableCell className="text-right">
+                        {inr(l.monthly)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {l.lateFee ? (
+                          <span className="text-destructive">
+                            {inr(l.lateFee)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {l.paid ? "—" : inr(l.monthly + l.lateFee)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            l.paid
+                              ? "bg-success/10 text-success border-success/20"
+                              : l.lateFee
+                              ? "bg-destructive/10 text-destructive border-destructive/20"
+                              : "bg-warning/15 text-warning border-warning/20"
+                          }
+                        >
+                          {l.paid ? "Paid" : l.lateFee ? "Overdue" : "Due"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!l.paid && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              openPay(l.monthly + l.lateFee, l.label, l.ym)
+                            }
+                          >
+                            Pay
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="structure" className="mt-4">
+          <Card className="border-border/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="font-display text-base">
+                {feeStructure.name}
+              </CardTitle>
+              <CardDescription>
+                Monthly {inr(monthlyTotal)} · Annual {inr(annualTotal)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Component</TableHead>
+                    <TableHead>Frequency</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {feeStructure.components.map((c, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-medium">{c.label}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px]">
+                          {c.frequency}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {inr(c.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <Card className="border-border/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="font-display text-base flex items-center gap-2">
+                <Receipt className="h-4 w-4" />
+                Payment History
+              </CardTitle>
+              <CardDescription>
+                Receipts from the school fee counter and online payments
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Receipt</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Mode</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Slip</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {history.map((h) => (
+                    <TableRow key={h.id}>
+                      <TableCell className="font-mono text-xs">
+                        {h.id}
+                      </TableCell>
+                      <TableCell>{h.date}</TableCell>
+                      <TableCell>{h.mode}</TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {inr(h.amount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            toast.success("Receipt " + h.id + " downloaded")
+                          }
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {history.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center text-sm text-muted-foreground py-8"
+                      >
+                        No payments recorded.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <div className="mt-4 text-[11px] text-muted-foreground flex items-center gap-1.5">
+        <ShieldCheck className="h-3.5 w-3.5" />
+        Payments are processed on a secure gateway. Receipts are available
+        instantly.
+      </div>
+
+      {/* Simple pay confirmation, since no Razorpay dialog component is wired up here.
+          Swap this block for <RazorpayDialog /> if that component exists in your project. */}
+      {payOpen && payTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <Card className="w-full max-w-sm border-border/60">
+            <CardHeader>
+              <CardTitle className="font-display text-base">
+                Confirm Payment
+              </CardTitle>
+              <CardDescription>{payTarget.label}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="text-3xl font-display font-semibold">
+                {inr(payTarget.amount)}
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setPayOpen(false)}>
+                  Cancel
+                </Button>
+                <Button className="gradient-primary border-0" onClick={handlePay}>
+                  <CreditCard className="h-4 w-4" />
+                  Pay {inr(payTarget.amount)}
                 </Button>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </PageContainer>
   );
 }

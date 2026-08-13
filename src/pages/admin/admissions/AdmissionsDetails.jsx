@@ -40,15 +40,13 @@
 //   Trash2,
 //   Archive,
 //   IndianRupee,
-//   GraduationCap,
-//   // eslint-disable-next-line no-unused-vars
-//   Send,
 //   CheckCircle2,
 //   Circle,
 //   Clock,
 //   Save,
 //   FileUp,
 //   ShieldCheck,
+//   RefreshCw,
 // } from "lucide-react";
 
 // import {
@@ -66,11 +64,10 @@
 //   getFollowups,
 //   completeFollowup,
 //   deleteFollowup,
-//   getSections 
-  
+//   getSections,
+//   reinstateAdmission,
 // } from "../../../api/admissions";
 // import { getClasses } from "../../../api/class";
-// import { updateStudent } from "../../../api/students";
 
 // import { useState, useEffect, useRef } from "react";
 // import { toast } from "sonner";
@@ -83,79 +80,45 @@
 //   "Doc Verification": "bg-accent/15 text-accent-foreground",
 //   "Fee Payment": "bg-chart-5/15 text-chart-5",
 //   Enrolled: "bg-success/15 text-success",
+//   Rejected: "bg-destructive/15 text-destructive",
 // };
 
 // export default function AdmissionsDetails() {
 //   const { id } = useParams();
 //   const navigate = useNavigate();
-// const [inq, setInq] = useState(null);
-// const [history, setHistory] = useState([]);
-// const [stages, setStages] = useState([]);
-// const [counselors, setCounselors] = useState([]);
-//   const photoInputRef = useRef(null);
-//   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-//  const [classes, setClasses] = useState([]);
-// const [sections, setSections] = useState([]);
-
-// useEffect(() => {
-//   loadData();
-// }, [id]);
-
-// const loadData = async () => {
-//   try {
-
-//     const admissionRes =
-//       await getAdmissionByUuid(id);
-
-//     const historyRes =
-//   await getAdmissionStageHistory(id);
-
-// const counselorRes =
-//   await getAdmissionCounselors();
-
-// setCounselors(
-//   counselorRes.data
-// );
-
-//     const stagesRes =
-//       await getStages();
-
-//     setInq(admissionRes.data);
-
-//     setHistory(
-//   historyRes.data.data || []
-// );
-
-//     setStages(stagesRes.data.data);
-//     const activityRes =
-//       await getAdmissionActivityLogs(id);
-//     setActivity(activityRes.data);
-
-//     const followupRes =
-//       await getFollowups(id);
-
-//     setActivity(
-//       activityRes.data
-//     );
-
-//     setFollowups(
-//       followupRes.data
-//     );
-//   }
-//   catch (err) {
-//     console.log(err);
-//   }
-// };
-
-
-
-//   // eslint-disable-next-line no-unused-vars
+//   const [inq, setInq] = useState(null);
+//   const [history, setHistory] = useState([]);
+//   const [stages, setStages] = useState([]);
+//   const [counselors, setCounselors] = useState([]);
 //   const [commOpen, setCommOpen] = useState(false);
-//   // eslint-disable-next-line no-unused-vars
 //   const [comm, setComm] = useState({ channel: "Email", subject: "", body: "" });
 //   const [fu, setFu] = useState({ due: "", note: "" });
 //   const [followups, setFollowups] = useState([]);
-// const [activity, setActivity] = useState([]);
+//   const [activity, setActivity] = useState([]);
+
+//   useEffect(() => {
+//     loadData();
+//   }, [id]);
+
+//   const loadData = async () => {
+//     try {
+//       const admissionRes = await getAdmissionByUuid(id);
+//       const historyRes = await getAdmissionStageHistory(id);
+//       const counselorRes = await getAdmissionCounselors();
+//       const stagesRes = await getStages();
+//       const activityRes = await getAdmissionActivityLogs(id);
+//       const followupRes = await getFollowups(id);
+
+//       setInq(admissionRes.data);
+//       setHistory(historyRes.data.data || []);
+//       setCounselors(counselorRes.data);
+//       setStages(stagesRes.data.data);
+//       setActivity(activityRes.data);
+//       setFollowups(followupRes.data);
+//     } catch (err) {
+//       console.log(err);
+//     }
+//   };
 
 //   if (!inq) {
 //     return (
@@ -174,272 +137,221 @@
 //     );
 //   }
 
-// // const activity = [];
-// (inq.followUps || [])
-// const notes = [];
-// const visibleStages = stages.filter(
-//   (s) => s.stage_name !== "Rejected"
-// );
-
-// const stageIdx = visibleStages.findIndex(
-//   (s) => s.stage_name === inq?.stage?.stage_name
-// );
-
-
-// const nextStage =
-//   stages[stageIdx + 1];
-
-// // const progress = Math.round(((stageIdx + 1) / ADM_STAGES.length) * 100);
-// const progress = Math.round(
-//   ((stageIdx + 1) / visibleStages.length) * 100
-// );
-
-// const docs = [
-//   inq.birth_certificate_file,
-//   inq.student_aadhaar_file,
-//   inq.transfer_certificate_file,
-//   inq.previous_marksheet_file,
-//   inq.parent_id_file,
-//   inq.address_proof_file,
-//   inq.passport_photo_file,
-//   inq.medical_certificate_file
-// ];
-
-// const docsOk = docs.filter(Boolean).length;
-// const docsTotal = docs.length;
-
-
-// const enroll = async () => {
-//  try {
-//   const res = await enrollStudent(id, nextStage.id);
-//   console.log("Enroll:", res);
-
-//   try {
-//     await loadData();
-//   } catch (e) {
-//     console.error("loadData failed:", e);
-//   }
-
-//   toast.success("Student enrolled successfully");
-
-// } catch (err) {
-//   console.error("Enroll failed:", err);
-//   toast.error(
-//     err.response?.data?.detail ||
-//     err.response?.data?.message ||
-//     "Failed to update stage"
+//   // Filter out Rejected stage from visible stages
+//   const visibleStages = stages.filter(
+//     (s) => s.stage_name !== "Rejected"
 //   );
-// }
-// };
 
+//   // Find index in visible stages (not including Rejected)
+//   const stageIdx = visibleStages.findIndex(
+//     (s) => s.stage_name === inq?.stage?.stage_name
+//   );
+
+//   // Calculate progress based on visible stages
+//   const progress = stageIdx >= 0 
+//     ? Math.round(((stageIdx + 1) / visibleStages.length) * 100)
+//     : 0;
+
+//   const nextStage = stages[stageIdx + 1];
+//   const isRejected = inq.stage?.stage_name === "Rejected";
+
+//   const docs = [
+//     inq.birth_certificate_file,
+//     inq.student_aadhaar_file,
+//     inq.transfer_certificate_file,
+//     inq.previous_marksheet_file,
+//     inq.parent_id_file,
+//     inq.address_proof_file,
+//     inq.passport_photo_file,
+//     inq.caste_certificate_file
+//   ];
+
+//   const docsOk = docs.filter(Boolean).length;
+//   const docsTotal = docs.length;
 
 //   return (
 //     <PageContainer>
 //       <PageHeader
-//   eyebrow={
-//     <Link
-//       to="/admin/admissions"
-//       className="hover:text-primary inline-flex items-center"
-//     >
-//       <ChevronLeft className="h-3.5 w-3.5" />
-//       Admissions Pipeline
-//     </Link>
-//   }
-//   title={inq.full_name}
-//   // description={`${inq.admission_no} · Class ${inq.class_name} · Source: ${inq.source?.name || ""} · Counselor: ${inq.counselor_name || ""}`}
-//     description={`
-//     ${inq.admission_no || "-"} ·
-//     Class ${inq.class_name || "-"} ·
-//     Source: ${inq.source?.name || "-"} ·
-//     Counselor: ${inq.counselor_name || "-"}
-//     `}
-//   actions={
-//     <div className="flex items-center gap-2">
-// <Button
-//   variant="outline"
-//   size="sm"
-//   onClick={async () => {
-//     try {
+//         eyebrow={
+//           <Link
+//             to="/admin/admissions"
+//             className="hover:text-primary inline-flex items-center"
+//           >
+//             <ChevronLeft className="h-3.5 w-3.5" />
+//             Admissions Pipeline
+//           </Link>
+//         }
+//         title={inq.full_name}
+//         description={`
+//           ${inq.admission_no || "-"} ·
+//           Class ${inq.class_name || "-"} ·
+//           Source: ${inq.source?.name || "-"} ·
+//           Counselor: ${inq.counselor_name || "-"}
+//         `}
+//         actions={
+//           <div className="flex items-center gap-2">
+//             <Button
+//               variant="outline"
+//               size="sm"
+//               onClick={async () => {
+//                 try {
+//                   if (inq.is_archived) {
+//                     await restoreAdmission(inq.admission_uuid);
+//                     toast.success("Restored");
+//                   } else {
+//                     await archiveAdmission(inq.admission_uuid);
+//                     toast.success("Archived");
+//                   }
+//                   await loadData();
+//                 } catch (err) {
+//                   toast.error(err.response?.data?.detail || "Operation failed");
+//                 }
+//               }}
+//             >
+//               <Archive className="h-4 w-4" />
+//               {inq.is_archived ? "Restore" : "Archive"}
+//             </Button>
 
-//       if (inq.is_archived) {
+//             <Button
+//               variant="outline"
+//               size="sm"
+//               className="text-destructive"
+//               onClick={async () => {
+//                 try {
+//                   await deleteAdmission(id);
+//                   toast.success("Admission deleted successfully");
+//                   navigate("/admin/admissions");
+//                 } catch (err) {
+//                   toast.error(err.response?.data?.detail || "Delete failed");
+//                 }
+//               }}
+//             >
+//               <Trash2 className="h-4 w-4" />
+//               Delete
+//             </Button>
 
-//         await restoreAdmission(
-//           inq.admission_uuid
-//         );
-
-//         toast.success("Restored");
-
-//       } else {
-
-//         await archiveAdmission(
-//           inq.admission_uuid
-//         );
-
-//         toast.success("Archived");
-
-//       }
-
-//       await loadData();
-
-//     } catch (err) {
-
-//       toast.error(
-//         err.response?.data?.detail ||
-//         "Operation failed"
-//       );
-
-//     }
-//   }}
-// >
-//   <Archive className="h-4 w-4" />
-
-//   {inq.is_archived
-//     ? "Restore"
-//     : "Archive"}
-
-// </Button>
-
-// <Button
-//   variant="outline"
-//   size="sm"
-//   className="text-destructive"
-//   onClick={async () => {
-//     try {
-
-//       await deleteAdmission(id);
-
-//       toast.success(
-//         "Admission deleted successfully"
-//       );
-
-//       navigate(
-//         "/admin/admissions"
-//       );
-
-//     } catch (err) {
-
-//       toast.error(
-//         err.response?.data?.detail ||
-//         "Delete failed"
-//       );
-
-//     }
-//   }}
-// >
-//   <Trash2 className="h-4 w-4 " />
-//   Delete
-// </Button>
-     
-// {nextStage && (
-//   <Button
-//     size="sm"
-//     className="gradient-primary border-0"
-//     onClick={async () => {
-//       try {
-
-//         await enrollStudent(
-//           id,
-//           nextStage.id
-//         );
-
-//         await loadData();
-
-//         toast.success(
-//           `Moved to ${nextStage.stage_name}`
-//         );
-
-//       } catch (err) {
-
-//         toast.error(
-//           err.response?.data?.detail ||
-//           "Failed to update stage"
-//         );
-
-//       }
-//     }}
-//   >
-//     Move to {nextStage.stage_name}
-//     <ArrowRight className="h-4 w-4" />
-//   </Button>
-// )}
-     
-    
-
-//     </div>
-//   }
-// />
-      
+//             {isRejected ? (
+//               <Button
+//                 size="sm"
+//                 className="bg-green-600 hover:bg-green-700 text-white border-0"
+//                 onClick={async () => {
+//                   try {
+//                     await reinstateAdmission(inq.admission_uuid);
+//                     await loadData();
+//                     toast.success("Admission reinstated successfully");
+//                   } catch (err) {
+//                     toast.error(err.response?.data?.detail || "Failed to reinstate");
+//                   }
+//                 }}
+//               >
+//                 <RefreshCw className="h-4 w-4" />
+//                 Reinstate
+//               </Button>
+//             ) : nextStage && inq.stage?.stage_name !== "Enrolled" ? (
+//               <Button
+//                 size="sm"
+//                 className="gradient-primary border-0"
+//                 onClick={async () => {
+//                   try {
+//                     await enrollStudent(id, nextStage.id);
+//                     await loadData();
+//                     toast.success(`Moved to ${nextStage.stage_name}`);
+//                   } catch (err) {
+//                     toast.error(err.response?.data?.detail || "Failed to update stage");
+//                   }
+//                 }}
+//               >
+//                 Move to {nextStage.stage_name}
+//                 <ArrowRight className="h-4 w-4" />
+//               </Button>
+//             ) : null}
+//           </div>
+//         }
+//       />
 
 //       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
 //         <Card className="lg:col-span-2 border-border/60">
 //           <CardContent className="p-5">
 //             <div className="flex items-center gap-4 mb-5">
-//             <Avatar className="h-20 w-20">
-//             {inq.passport_photo_file ? (
-//               <img
-//                 src={inq.passport_photo_file}
-//                 alt={inq.full_name}
-//                 className="h-full w-full object-cover rounded-full"
-//               />
-//             ) : (
-//               <AvatarFallback className="bg-primary/10 text-primary text-lg">
-//                 {inq.full_name
-//                   ?.split(" ")
-//                   .map((n) => n[0])
-//                   .join("")}
-//               </AvatarFallback>
-//             )}
-//           </Avatar>
+//               <Avatar className="h-20 w-20">
+//                 {inq.passport_photo_file ? (
+//                   <img
+//                     src={inq.passport_photo_file}
+//                     alt={inq.full_name}
+//                     className="h-full w-full object-cover rounded-full"
+//                   />
+//                 ) : (
+//                   <AvatarFallback className="bg-primary/10 text-primary text-lg">
+//                     {inq.full_name
+//                       ?.split(" ")
+//                       .map((n) => n[0])
+//                       .join("")}
+//                   </AvatarFallback>
+//                 )}
+//               </Avatar>
 //               <div className="flex-1">
 //                 <Badge className={stageColor[inq.stage?.stage_name]}>
 //                   {inq.stage?.stage_name}
 //                 </Badge>
 //                 <div className="text-xs text-muted-foreground mt-1">
-//                  Created {new Date(inq.created_at).toLocaleDateString()}
-//                  Updated {new Date(inq.updated_at).toLocaleDateString()}
+//                   Created {new Date(inq.created_at).toLocaleDateString()}
+//                   Updated {new Date(inq.updated_at).toLocaleDateString()}
 //                 </div>
 //               </div>
 //             </div>
+            
 //             <div className="space-y-2">
 //               <div className="flex justify-between text-xs">
 //                 <span className="text-muted-foreground">Pipeline progress</span>
-//                 <span className="font-semibold">{progress}%</span>
+//                 <span className="font-semibold">
+//                   {isRejected ? "Rejected" : `${progress}%`}
+//                 </span>
 //               </div>
-//               <Progress value={progress} className="h-2" />
+//               <Progress 
+//                 value={isRejected ? 0 : progress} 
+//                 className="h-2" 
+//               />
 //               <div className="grid grid-cols-7 gap-1 mt-3">
-//               {visibleStages.map((stage, i) => (
-//                 <button
-//                   key={stage.id}
-//                   onClick={async () => {
-//                     try {
-//                       await enrollStudent(
-//                           id,
-//                           stage.id
-//                         );
-
-//                       await loadData();
-
-//                       toast.success(
-//                         `Moved to ${stage.stage_name}`
-//                       );
-
-//                     } catch (err) {
-//                       toast.error(
-//                         err.response?.data?.detail ||
-//                         "Failed to update stage"
-//                       );
-//                     }
-//                   }}
-//                   className={`text-[9px] py-1.5 rounded border ${
-//                     i <= stageIdx
-//                       ? "bg-primary text-primary-foreground border-primary"
-//                       : "border-border/60 hover:bg-muted"
-//                   }`}
-//                 >
-//                   {stage.stage_name.split(" ")[0]}
-//                 </button>
-//               ))}                
+//                 {visibleStages.map((stage, i) => {
+//                   const isActive = i <= stageIdx && !isRejected;
+                  
+//                   return (
+//                     <button
+//                       key={stage.id}
+//                       onClick={async () => {
+//                         if (isRejected) {
+//                           toast.warning("Please use the Reinstate button above to restore this admission");
+//                           return;
+//                         }
+                        
+//                         try {
+//                           await enrollStudent(id, stage.id);
+//                           await loadData();
+//                           toast.success(`Moved to ${stage.stage_name}`);
+//                         } catch (err) {
+//                           toast.error(err.response?.data?.detail || "Failed to update stage");
+//                         }
+//                       }}
+//                       className={`text-[9px] py-1.5 rounded border transition-colors ${
+//                         isActive
+//                           ? "bg-primary text-primary-foreground border-primary"
+//                           : isRejected
+//                           ? "border-border/60 text-muted-foreground/50 cursor-not-allowed opacity-50"
+//                           : "border-border/60 hover:bg-muted"
+//                       }`}
+//                       disabled={isRejected}
+//                       title={isRejected ? "Please reinstate the admission first" : ""}
+//                     >
+//                       {stage.stage_name.split(" ")[0]}
+//                     </button>
+//                   );
+//                 })}
 //               </div>
+//               {isRejected && (
+//                 <div className="text-xs text-destructive mt-2 flex items-center gap-1">
+//                   <span>⚠️ This admission is rejected. Click the "Reinstate" button above to restore it to its previous stage.</span>
+//                 </div>
+//               )}
 //             </div>
 //           </CardContent>
 //         </Card>
@@ -456,7 +368,7 @@
 //               <Button size="sm" variant="outline" onClick={() => { setComm({ channel: "SMS", subject: "Update", body: "" }); setCommOpen(true); }}>
 //                 <MessageSquare className="h-3.5 w-3.5" /> SMS
 //               </Button>
-//               <Button size="sm" variant="outline" onClick={() => toast.success(`Calling ${inq.phone}…`)}>
+//               <Button size="sm" variant="outline" onClick={() => toast.success(`Calling ${inq.primary_phone}…`)}>
 //                 <Phone className="h-3.5 w-3.5" /> Call
 //               </Button>
 //               <Button size="sm" variant="outline" onClick={() => { setComm({ channel: "WhatsApp", subject: "Update", body: "" }); setCommOpen(true); }}>
@@ -465,54 +377,29 @@
 //             </div>
 //             <div className="pt-2 border-t">
 //               <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Assign Counselor</div>
-// <Select
-//   value={inq?.counselor_name || ""}
-//   onValueChange={async (value) => {
-//     try {
-
-//       await updateAdmission(
-//         id,
-//         {
-//           counselor_name: value
-//         }
-//       );
-
-//       setInq({
-//         ...inq,
-//         counselor_name: value
-//       });
-
-//       toast.success(
-//         `Assigned to ${value}`
-//       );
-
-//     } catch (err) {
-
-//       toast.error(
-//         "Failed to assign counselor"
-//       );
-
-//     }
-//   }}
-// >
-//   <SelectTrigger className="h-8">
-//     <SelectValue placeholder="Select..." />
-//   </SelectTrigger>
-
-//   <SelectContent>
-
-//     {(counselors || []).map((c) => (
-//       <SelectItem
-//         key={c.id}
-//         value={c.counselor_name}
-//       >
-//         {c.counselor_name}
-//       </SelectItem>
-//     ))}
-
-//   </SelectContent>
-
-// </Select>
+//               <Select
+//                 value={inq?.counselor_name || ""}
+//                 onValueChange={async (value) => {
+//                   try {
+//                     await updateAdmission(id, { counselor_name: value });
+//                     setInq({ ...inq, counselor_name: value });
+//                     toast.success(`Assigned to ${value}`);
+//                   } catch (err) {
+//                     toast.error("Failed to assign counselor");
+//                   }
+//                 }}
+//               >
+//                 <SelectTrigger className="h-8">
+//                   <SelectValue placeholder="Select..." />
+//                 </SelectTrigger>
+//                 <SelectContent>
+//                   {(counselors || []).map((c) => (
+//                     <SelectItem key={c.id} value={c.counselor_name}>
+//                       {c.counselor_name}
+//                     </SelectItem>
+//                   ))}
+//                 </SelectContent>
+//               </Select>
 //             </div>
 //           </CardContent>
 //         </Card>
@@ -530,56 +417,44 @@
 //           <TabsTrigger value="progress">Progress</TabsTrigger>
 //         </TabsList>
 
-//         {/* ── PERSONAL ── mirrors NewInquiryDialog personal tab */}
 //         <TabsContent value="personal" className="mt-4">
-//           <PersonalTab inq={inq} id={id} />
+//           <PersonalTab inq={inq} id={id} loadData={loadData} />
 //         </TabsContent>
 
-//         {/* ── ACADEMIC ── mirrors NewInquiryDialog academic tab */}
 //         <TabsContent value="academic" className="mt-4">
-//           <AcademicTab inq={inq} id={id} />
+//           <AcademicTab inq={inq} id={id} loadData={loadData} />
 //         </TabsContent>
 
-//         {/* ── GUARDIAN ── mirrors NewInquiryDialog guardian tab (contact + address) */}
 //         <TabsContent value="guardian" className="mt-4">
-//           <GuardianTab inq={inq} id={id} />
+//           <GuardianTab inq={inq} id={id} loadData={loadData} />
 //         </TabsContent>
 
-//         {/* ── SERVICES ── mirrors NewInquiryDialog services tab */}
 //         <TabsContent value="services" className="mt-4">
-//           <ServicesTab inq={inq} id={id} />
+//           <ServicesTab inq={inq} id={id} loadData={loadData} />
 //         </TabsContent>
 
-//         {/* ── MEDICAL ── mirrors NewInquiryDialog medical tab */}
 //         <TabsContent value="medical" className="mt-4">
-//           <MedicalTab inq={inq} id={id} />
+//           <MedicalTab inq={inq} id={id} loadData={loadData} />
 //         </TabsContent>
 
-//         {/* ── DOCUMENTS ── mirrors NewInquiryDialog docs tab */}
 //         <TabsContent value="documents" className="mt-4">
-//           <DocumentsTab
-//     inq={inq}
-//     id={id}
-//     loadData={loadData}
-// />
+//           <DocumentsTab inq={inq} id={id} loadData={loadData} />
 //         </TabsContent>
 
-//         {/* ── PAYMENT ── */}
 //         <TabsContent value="payment" className="mt-4">
 //           <Card>
 //             <CardContent className="p-5 space-y-3">
 //               <div className="grid md:grid-cols-3 gap-3">
-//                 <Stat icon={<IndianRupee className="h-4 w-4" />} label="Fee total" value={`₹${(inq.feeTotal || 0).toLocaleString("en-IN")}`} />
-//                 <Stat icon={<IndianRupee className="h-4 w-4" />} label="Paid" value={`₹${(inq.feePaid || 0).toLocaleString("en-IN")}`} />
-//                 <Stat icon={<IndianRupee className="h-4 w-4" />} label="Balance" value={`₹${((inq.feeTotal || 0) - (inq.feePaid || 0)).toLocaleString("en-IN")}`} />
+//                 <Stat icon={<IndianRupee className="h-4 w-4" />} label="Fee total" value={`₹${(inq.fee_total || 0).toLocaleString("en-IN")}`} />
+//                 <Stat icon={<IndianRupee className="h-4 w-4" />} label="Paid" value={`₹${(inq.fee_paid || 0).toLocaleString("en-IN")}`} />
+//                 <Stat icon={<IndianRupee className="h-4 w-4" />} label="Balance" value={`₹${((inq.fee_total || 0) - (inq.fee_paid || 0)).toLocaleString("en-IN")}`} />
 //               </div>
-//               <Progress value={Math.round(((inq.feePaid || 0) / (inq.feeTotal || 1)) * 100)} />
+//               <Progress value={Math.round(((inq.fee_paid || 0) / (inq.fee_total || 1)) * 100)} />
 //               <div className="flex gap-2">
 //                 <Input type="number" placeholder="Amount" id="payamt" />
 //                 <Button onClick={() => {
 //                   const el = document.getElementById("payamt");
 //                   const v = Number(el?.value || 0);
-//                   // if (v > 0) { inquiriesApi.update(id, { feePaid: (inq.feePaid || 0) + v }); el.value = ""; toast.success(`₹${v.toLocaleString("en-IN")} collected`); }
 //                 }}>
 //                   <IndianRupee className="h-4 w-4" /> Collect
 //                 </Button>
@@ -588,7 +463,6 @@
 //           </Card>
 //         </TabsContent>
 
-//         {/* ── PROGRESS ── */}
 //         <TabsContent value="progress" className="mt-4">
 //           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 //             <Card>
@@ -596,40 +470,21 @@
 //               <CardContent className="p-5 pt-2">
 //                 <div className="relative">
 //                   {stages.map((stage, i) => {
-//                     const completedStages =
-//                       Array.isArray(history)
-//                         ? history.map(
-//                             h => h.to_stage
-//                           )
-//                         : [];
+//                     const completedStages = Array.isArray(history)
+//                       ? history.map(h => h.to_stage)
+//                       : [];
 
-//                   const isPast =
-//                     completedStages.includes(stage.stage_name) &&
-//                     stage.stage_name !== inq.stage?.stage_name;
-
-//                   const isCurrent =
-//                     stage.stage_name ===
-//                     inq.stage?.stage_name;
-
-//                   const isFuture =
-//                     !completedStages.includes(
-//                       stage.stage_name
-//                     );
-//                     // const histEntry = (inq.history || []).find((h) => h.stage === stage);
-//                     const stageHistory =
-//                       Array.isArray(history)
-//                         ? history
-//                             .filter(
-//                               h =>
-//                                 h.to_stage ===
-//                                 stage.stage_name
-//                             )
-//                             .sort(
-//                               (a, b) =>
-//                                 new Date(b.moved_at) -
-//                                 new Date(a.moved_at)
-//                             )[0]
-//                         : null;
+//                     const isPast = completedStages.includes(stage.stage_name) &&
+//                       stage.stage_name !== inq.stage?.stage_name;
+//                     const isCurrent = stage.stage_name === inq.stage?.stage_name;
+//                     const isFuture = !completedStages.includes(stage.stage_name);
+                    
+//                     const stageHistory = Array.isArray(history)
+//                       ? history
+//                           .filter(h => h.to_stage === stage.stage_name)
+//                           .sort((a, b) => new Date(b.moved_at) - new Date(a.moved_at))[0]
+//                       : null;
+                    
 //                     return (
 //                       <div key={stage.id} className="flex gap-3 relative">
 //                         {i < stages.length - 1 && (
@@ -648,25 +503,16 @@
 //                         </div>
 //                         <div className="pb-5 flex-1 min-w-0">
 //                           <div className="flex items-center gap-2 flex-wrap">
-//                             {/* <span className={`text-sm font-medium ${isFuture ? "text-muted-foreground" : "text-foreground"}`}>{stage}</span> */}
-//                             <span
-//   className={`text-sm font-medium ${
-//     isFuture ? "text-muted-foreground" : "text-foreground"
-//   }`}
-// >
-//   {stage.stage_name}
-// </span>
+//                             <span className={`text-sm font-medium ${isFuture ? "text-muted-foreground" : "text-foreground"}`}>
+//                               {stage.stage_name}
+//                             </span>
 //                             {isCurrent && <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20 h-4 px-1.5">Current</Badge>}
 //                             {isPast && <Badge variant="outline" className="text-[10px] text-success border-success/30 h-4 px-1.5">Done</Badge>}
 //                           </div>
-//                             {stageHistory ? (
+//                           {stageHistory ? (
 //                             <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
 //                               <Clock className="h-3 w-3 shrink-0" />
-
-//                               {new Date(
-//                                 stageHistory.moved_at
-//                               ).toLocaleString()}
-                              
+//                               {new Date(stageHistory.moved_at).toLocaleString()}
 //                             </div>
 //                           ) : isFuture ? (
 //                             <div className="text-[11px] text-muted-foreground/50 mt-0.5">Not reached yet</div>
@@ -688,155 +534,96 @@
 //                     <Input className="md:col-span-2" placeholder="Note (e.g. discuss scholarship)" value={fu.note} onChange={(e) => setFu({ ...fu, note: e.target.value })} />
 //                   </div>
 //                   <Button
-//   size="sm"
-//   disabled={!fu.due || !fu.note}
-//   onClick={async () => {
-//     try {
-
-//       const formData = new FormData();
-
-      
-
-// formData.append(
-//   "followup_date",
-//   fu.due
-// );
-
-// formData.append(
-//   "notes",
-//   fu.note
-// );
-
-// await createFollowup(
-//   id,
-//   formData
-// );
-//       const response =
-//         await getFollowups(id);
-
-//       setFollowups(
-//         response.data
-//       );
-
-//       setFu({
-//         due: "",
-//         note: ""
-//       });
-
-//       toast.success(
-//         "Follow-up added"
-//       );
-
-//     } catch (err) {
-
-//       toast.error(
-//         err.response?.data?.detail ||
-//         "Failed to add follow-up"
-//       );
-
-//     }
-//   }}
-// >
-//   <Calendar className="h-4 w-4" />
-//   Schedule
-// </Button>
-// <div className="divide-y border rounded-md mt-1">
-//   {followups.length === 0 && (
-//     <div className="p-4 text-xs text-muted-foreground text-center">
-//       No follow-ups yet.
-//     </div>
-//   )}
-
-//   {followups.map((f) => (
-//     <div
-//       key={f.id}
-//       className="flex items-center gap-3 p-4"
-//     >
-//       <Checkbox
-//         checked={f.is_completed}
-//         onCheckedChange={async () => {
-//           try {
-//             await completeFollowup(f.id);
-
-//             const res = await getFollowups(id);
-//             setFollowups(res.data);
-
-//             toast.success("Follow-up completed");
-//           } catch (err) {
-//             toast.error("Failed");
-//           }
-//         }}
-//       />
-
-//       <div className="flex-1">
-//         <div
-//           className={`text-sm ${
-//             f.is_completed
-//               ? "line-through text-muted-foreground"
-//               : ""
-//           }`}
-//         >
-//           {f.notes}
-//         </div>
-
-//         <div className="text-[11px] text-muted-foreground">
-//           Due {f.followup_date}
-//         </div>
-//       </div>
-
-//       <Button
-//         size="icon"
-//         variant="ghost"
-//         className="text-destructive"
-//         onClick={async () => {
-//           try {
-//             await deleteFollowup(f.id);
-
-//             const res = await getFollowups(id);
-//             setFollowups(res.data);
-
-//             toast.success("Deleted");
-//           } catch (err) {
-//             toast.error("Delete failed");
-//           }
-//         }}
-//       >
-//         <Trash2 className="h-4 w-4" />
-//       </Button>
-//     </div>
-//   ))}
-// </div>
+//                     size="sm"
+//                     disabled={!fu.due || !fu.note}
+//                     onClick={async () => {
+//                       try {
+//                         const formData = new FormData();
+//                         formData.append("followup_date", fu.due);
+//                         formData.append("notes", fu.note);
+//                         await createFollowup(id, formData);
+//                         const response = await getFollowups(id);
+//                         setFollowups(response.data);
+//                         setFu({ due: "", note: "" });
+//                         toast.success("Follow-up added");
+//                       } catch (err) {
+//                         toast.error(err.response?.data?.detail || "Failed to add follow-up");
+//                       }
+//                     }}
+//                   >
+//                     <Calendar className="h-4 w-4" />
+//                     Schedule
+//                   </Button>
+//                   <div className="divide-y border rounded-md mt-1">
+//                     {followups.length === 0 && (
+//                       <div className="p-4 text-xs text-muted-foreground text-center">
+//                         No follow-ups yet.
+//                       </div>
+//                     )}
+//                     {followups.map((f) => (
+//                       <div key={f.id} className="flex items-center gap-3 p-4">
+//                         <Checkbox
+//                           checked={f.is_completed}
+//                           onCheckedChange={async () => {
+//                             try {
+//                               await completeFollowup(f.id);
+//                               const res = await getFollowups(id);
+//                               setFollowups(res.data);
+//                               toast.success("Follow-up completed");
+//                             } catch (err) {
+//                               toast.error("Failed");
+//                             }
+//                           }}
+//                         />
+//                         <div className="flex-1">
+//                           <div className={`text-sm ${f.is_completed ? "line-through text-muted-foreground" : ""}`}>
+//                             {f.notes}
+//                           </div>
+//                           <div className="text-[11px] text-muted-foreground">
+//                             Due {f.followup_date}
+//                           </div>
+//                         </div>
+//                         <Button
+//                           size="icon"
+//                           variant="ghost"
+//                           className="text-destructive"
+//                           onClick={async () => {
+//                             try {
+//                               await deleteFollowup(f.id);
+//                               const res = await getFollowups(id);
+//                               setFollowups(res.data);
+//                               toast.success("Deleted");
+//                             } catch (err) {
+//                               toast.error("Delete failed");
+//                             }
+//                           }}
+//                         >
+//                           <Trash2 className="h-4 w-4" />
+//                         </Button>
+//                       </div>
+//                     ))}
+//                   </div>
 //                 </CardContent>
 //               </Card>
 
 //               <Card>
-//   <CardHeader className="pb-2">
-//     <CardTitle className="text-base">
-//       Activity Log
-//     </CardTitle>
-//   </CardHeader>
-
-//   <CardContent className="space-y-4">
-//     {activity.map((a) => (
-//       <div
-//         key={a.id}
-//         className="flex gap-3"
-//       >
-//         <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
-
-//         <div>
-//           <div className="text-2sm font-medium">
-//             {a.activity}
-//           </div>
-
-//           <div className="text-sm text-muted-foreground">
-//             You · {new Date(a.created_at).toLocaleString()}
-//           </div>
-//         </div>
-//       </div>
-//     ))}
-//   </CardContent>
-// </Card>
+//                 <CardHeader className="pb-2">
+//                   <CardTitle className="text-base">Activity Log</CardTitle>
+//                 </CardHeader>
+//                 <CardContent className="space-y-4">
+//                   {activity.map((a) => (
+//                     <div key={a.id} className="flex gap-3">
+//                       <div className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />
+//                       <div>
+//                         <div className="text-2sm font-medium">{a.activity}</div>
+//                         <div className="text-sm text-muted-foreground">
+//                           You · {new Date(a.created_at).toLocaleString()}
+//                         </div>
+//                       </div>
+//                     </div>
+//                   ))}
+//                 </CardContent>
+//               </Card>
 //             </div>
 //           </div>
 //         </TabsContent>
@@ -845,165 +632,193 @@
 //   );
 // }
 
-// /* ════════════════════════════════════════════
-//    TAB PANELS — each mirrors the exact fields
-//    from NewInquiryDialog tabs
-//    ════════════════════════════════════════════ */
-
-// /* ── PERSONAL TAB
-//    Mirrors: NewInquiryDialog "personal" tab
-//    Fields: name, admissionNo, dob, gender, blood, aadhar, nationality, category
-// */
-// function PersonalTab({ inq, id }) {
+// /* ── PERSONAL TAB ── */
+// function PersonalTab({ inq, id, loadData }) {
 //   const [d, setD] = useState({
-//     name: inq.full_name || "",
-//     admissionNo:inq.admission_no  || "",
+//     full_name: inq.full_name || "",
+//     admission_no: inq.admission_no || "",
 //     dob: inq.dob || "",
-//     gender: inq.gender || "Male",
-//     blood: inq.blood_group  || "",
-//     aadhar: inq.aadhaar_no  || "",
-//     nationality: inq.nationality || "Indian",
-//     category: inq.category || "General",
+//     gender: inq.gender || "",
+//     blood_group: inq.blood_group || "",
+//     aadhaar_no: inq.aadhaar_no || "",
+//     nationality: inq.nationality || "",
+//     category: inq.category || "",
+//     admission_date: inq.admission_date || "",
+//     joining_date: inq.joining_date || "",
+//     religion: inq.religion || "",
+//     siblings: inq.siblings || "",
+//     rfid_card_no: inq.rfid_card_no || "",
+//     gps_tracker_id: inq.gps_tracker_id || "",
 //   });
+
+//   useEffect(() => {
+//     setD({
+//       full_name: inq.full_name || "",
+//       admission_no: inq.admission_no || "",
+//       dob: inq.dob || "",
+//       gender: inq.gender || "",
+//       blood_group: inq.blood_group || "",
+//       aadhaar_no: inq.aadhaar_no || "",
+//       nationality: inq.nationality || "",
+//       category: inq.category || "",
+//       admission_date: inq.admission_date || "",
+//       joining_date: inq.joining_date || "",
+//       religion: inq.religion || "",
+//       siblings: inq.siblings || "",
+//       rfid_card_no: inq.rfid_card_no || "",
+//       gps_tracker_id: inq.gps_tracker_id || "",
+//     });
+//   }, [inq]);
+
 //   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
 //   const saveAll = async () => {
-//   try {
-
-//   await updateAdmission(
-//   id,
-//   {
-//     full_name: d.name,
-//     admission_no: d.admissionNo,
-//     dob: d.dob,
-//     gender: d.gender,
-//     blood_group: d.blood,
-//     aadhaar_no: d.aadhar,
-//     nationality: d.nationality,
-//     category: d.category
-//   }
-// );
-
-//     toast.success("Academic details saved");
-
-//   } catch (err) {
-
-//     toast.error("Save failed");
-
-//   }
-// };
+//     try {
+//       await updateAdmission(id, d);
+//       await loadData();
+//       toast.success("Personal details saved");
+//     } catch (err) {
+//       toast.error("Save failed");
+//     }
+//   };
 
 //   return (
 //     <Card>
 //       <CardContent className="p-5 space-y-4">
 //         <div className="grid md:grid-cols-2 gap-4">
 //           <F label="Full name">
-//             <Input value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Riya Mehra" />
+//             <Input value={d.full_name} onChange={(e) => set("full_name", e.target.value)} placeholder="Riya Mehra" />
 //           </F>
 //           <F label="Admission No">
-//             <Input value={d.admissionNo} onChange={(e) => set("admissionNo", e.target.value)} className="font-mono" />
+//             <Input value={d.admission_no} onChange={(e) => set("admission_no", e.target.value)} className="font-mono" />
 //           </F>
 //           <F label="Date of birth">
 //             <Input type="date" value={d.dob} onChange={(e) => set("dob", e.target.value)} />
 //           </F>
 //           <F label="Gender">
 //             <Select value={d.gender} onValueChange={(v) => set("gender", v)}>
-//               <SelectTrigger><SelectValue /></SelectTrigger>
-//               <SelectContent>{["Male", "Female", "Other"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>
+//               <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+//               <SelectContent>
+//                 <SelectItem value="Male">Male</SelectItem>
+//                 <SelectItem value="Female">Female</SelectItem>
+//                 <SelectItem value="Other">Other</SelectItem>
+//               </SelectContent>
 //             </Select>
 //           </F>
 //           <F label="Blood group">
-//             <Select value={d.blood} onValueChange={(v) => set("blood", v)}>
+//             <Select value={d.blood_group} onValueChange={(v) => set("blood_group", v)}>
 //               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-//               <SelectContent>{["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>
+//               <SelectContent>
+//                 {["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((x) => (
+//                   <SelectItem key={x} value={x}>{x}</SelectItem>
+//                 ))}
+//               </SelectContent>
 //             </Select>
 //           </F>
-//           <F label="Student Aadhar">
-//             <Input value={d.aadhar} onChange={(e) => set("aadhar", e.target.value)} placeholder="XXXX-XXXX-1234" />
+//           <F label="Student Aadhaar">
+//             <Input value={d.aadhaar_no} onChange={(e) => set("aadhaar_no", e.target.value)} placeholder="123456789012" maxLength={12} />
 //           </F>
 //           <F label="Nationality">
-//             <Input value={d.nationality} onChange={(e) => set("nationality", e.target.value)} />
+//             <Input value={d.nationality} onChange={(e) => set("nationality", e.target.value)} placeholder="Indian" />
 //           </F>
 //           <F label="Category">
 //             <Select value={d.category} onValueChange={(v) => set("category", v)}>
-//               <SelectTrigger><SelectValue /></SelectTrigger>
-//               <SelectContent>{["General", "OBC", "SC", "ST", "EWS"].map((x) => <SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent>
+//               <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+//               <SelectContent>
+//                 {["General", "OBC", "SC", "ST", "EWS"].map((x) => (
+//                   <SelectItem key={x} value={x}>{x}</SelectItem>
+//                 ))}
+//               </SelectContent>
 //             </Select>
+//           </F>
+//           <F label="Admission Date">
+//             <Input type="date" value={d.admission_date} onChange={(e) => set("admission_date", e.target.value)} />
+//           </F>
+//           <F label="Joining Date">
+//             <Input type="date" value={d.joining_date} onChange={(e) => set("joining_date", e.target.value)} />
+//           </F>
+//           <F label="Religion">
+//             <Input value={d.religion} onChange={(e) => set("religion", e.target.value)} placeholder="Hindu / Muslim / Sikh" />
+//           </F>
+//           <F label="Siblings">
+//             <Input type="number" min={0} value={d.siblings} onChange={(e) => set("siblings", e.target.value)} placeholder="0" />
+//           </F>
+//           <F label="RFID Card No">
+//             <Input value={d.rfid_card_no} onChange={(e) => set("rfid_card_no", e.target.value)} placeholder="RFID-123456" />
+//           </F>
+//           <F label="GPS Tracker ID">
+//             <Input value={d.gps_tracker_id} onChange={(e) => set("gps_tracker_id", e.target.value)} placeholder="GPS-123456" />
 //           </F>
 //         </div>
 //         <div className="flex justify-end pt-2 border-t">
-//           <Button onClick={saveAll} className="gap-1.5"><Save className="h-4 w-4" />Save Personal Details</Button>
+//           <Button onClick={saveAll} className="gap-1.5">
+//             <Save className="h-4 w-4" />Save Personal Details
+//           </Button>
 //         </div>
 //       </CardContent>
 //     </Card>
 //   );
 // }
 
-// /* ── ACADEMIC TAB
-//    Mirrors: NewInquiryDialog "academic" tab
-//    Fields: class, section, rollNo, previousSchool, previousClass, board,
-//            lastPercent, attendance, stream, sessionYear
-// */
-
-// function AcademicTab({ inq, id }) {
-
+// /* ── ACADEMIC TAB ── */
+// function AcademicTab({ inq, id, loadData }) {
 //   const [classes, setClasses] = useState([]);
 //   const [sections, setSections] = useState([]);
 
 //   const [d, setD] = useState({
-//     class_uuid: inq.class_uuid ?? "",
-//     section_uuid: inq.section_uuid ?? "",
-//     rollNo: inq.roll_no ?? "",
-//     previousSchool: inq.previous_school ?? "",
-//     previousClass: inq.previous_class ?? "",
-//     board: inq.board ?? "CBSE",
-//     lastPercent: inq.last_aggregate_percentage ?? "",
-//     attendance: inq.attendance_percentage ?? "",
-//     stream: inq.stream ?? "",
-//     sessionYear: inq.session_year ?? "",
+//     class_uuid: inq.class_uuid || "",
+//     section_uuid: inq.section_uuid || "",
+//     roll_no: inq.roll_no || "",
+//     previous_school: inq.previous_school || "",
+//     previous_class: inq.previous_class || "",
+//     board: inq.board || "",
+//     last_aggregate_percentage: inq.last_aggregate_percentage || "",
+//     attendance_percentage: inq.attendance_percentage || "",
+//     stream: inq.stream || "",
+//     session_year: inq.session_year || "",
 //   });
+
+//   useEffect(() => {
+//     setD({
+//       class_uuid: inq.class_uuid || "",
+//       section_uuid: inq.section_uuid || "",
+//       roll_no: inq.roll_no || "",
+//       previous_school: inq.previous_school || "",
+//       previous_class: inq.previous_class || "",
+//       board: inq.board || "",
+//       last_aggregate_percentage: inq.last_aggregate_percentage || "",
+//       attendance_percentage: inq.attendance_percentage || "",
+//       stream: inq.stream || "",
+//       session_year: inq.session_year || "",
+//     });
+//   }, [inq]);
 
 //   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
-//   useEffect(() => {
-//   setD({
-//     class_uuid: inq.class_uuid ?? "",
-//     section_uuid: inq.section_uuid ?? "",
-//     rollNo: inq.roll_no ?? "",
-//     previousSchool: inq.previous_school ?? "",
-//     previousClass: inq.previous_class ?? "",
-//     board: inq.board ?? "CBSE",
-//     lastPercent: inq.last_aggregate_percentage ?? "",
-//     attendance: inq.attendance_percentage ?? "",
-//     stream: inq.stream ?? "",
-//     sessionYear: inq.session_year ?? "",
-//   });
-// }, [inq]);
 
-//  const loadSections = async (classUuid) => {
-//   try {
-//     const res = await getSections(classUuid);
-//     const list = res.data?.data || res.data || [];
-//     setSections(Array.isArray(list) ? list : []);
-//   } catch (err) {
-//     console.log(err);
-//     setSections([]);
-//   }
-// };
-
-// const loadClasses = async () => {
-//   try {
-//     const res = await getClasses();
-//     const list = res.data?.data || res.data || res;
-//     setClasses(Array.isArray(list) ? list : []);
-
-//     if (inq.class_uuid) {
-//       loadSections(inq.class_uuid);
+//   const loadSections = async (classUuid) => {
+//     try {
+//       const res = await getSections(classUuid);
+//       const list = res.data?.data || res.data || [];
+//       setSections(Array.isArray(list) ? list : []);
+//     } catch (err) {
+//       console.log(err);
+//       setSections([]);
 //     }
-//   } catch (err) {
-//     console.log(err);
-//     setClasses([]);
-//   }
-// };
+//   };
+
+//   const loadClasses = async () => {
+//     try {
+//       const res = await getClasses();
+//       const list = res.data?.data || res.data || res;
+//       setClasses(Array.isArray(list) ? list : []);
+//       if (inq.class_uuid) {
+//         loadSections(inq.class_uuid);
+//       }
+//     } catch (err) {
+//       console.log(err);
+//       setClasses([]);
+//     }
+//   };
 
 //   useEffect(() => {
 //     loadClasses();
@@ -1017,40 +832,18 @@
 
 //   const saveAll = async () => {
 //     try {
-//     await updateAdmission(id, {
-//   class_uuid: d.class_uuid,
-//   section_uuid: d.section_uuid,
-//   roll_no: d.rollNo,
-//   previous_school: d.previousSchool,
-//   previous_class: d.previousClass,
-//   board: d.board,
-//   last_aggregate_percentage: d.lastPercent,
-//   attendance_percentage: d.attendance,
-//   stream: d.stream,
-//   session_year: d.sessionYear,
-// });
-
-// const res = await getAdmissionByUuid(id);
-
-// setD({
-//   class_uuid: res.data.class_uuid ?? "",
-//   section_uuid: res.data.section_uuid ?? "",
-//   rollNo: res.data.roll_no ?? "",
-//   previousSchool: res.data.previous_school ?? "",
-//   previousClass: res.data.previous_class ?? "",
-//   board: res.data.board ?? "CBSE",
-//   lastPercent: res.data.last_aggregate_percentage ?? "",
-//   attendance: res.data.attendance_percentage ?? "",
-//   stream: res.data.stream ?? "",
-//   sessionYear: res.data.session_year ?? "",
-// });
-
-// toast.success("Academic details saved");
-
+//       await updateAdmission(id, d);
+//       await loadData();
+//       toast.success("Academic details saved");
 //     } catch (err) {
 //       toast.error("Save failed");
 //     }
 //   };
+
+//   const selectedClass = classes.find((c) => c.class_uuid === d.class_uuid);
+//   const className = (selectedClass?.class_name || "").toUpperCase();
+//   const showStream = className === "XI" || className === "XII" || 
+//                       className === "CLASS 11" || className === "CLASS 12";
 
 //   return (
 //     <Card>
@@ -1060,29 +853,15 @@
 //             <Select
 //               value={d.class_uuid}
 //               onValueChange={(v) => {
-//   set("class_uuid", v);
-//   set("section_uuid", "");
-
-//   const selectedClass = classes.find(
-//     (c) => c.class_uuid === v
-//   );
-
-//   const className = (
-//     selectedClass?.class_name || ""
-//   ).toUpperCase();
-
-//   const showStream =
-//     className === "XI" ||
-//     className === "XII" ||
-//     className === "CLASS 11" ||
-//     className === "CLASS 12";
-
-//   if (!showStream) {
-//     set("stream", "");
-//   }
-
-//   loadSections(v);
-// }}
+//                 set("class_uuid", v);
+//                 set("section_uuid", "");
+//                 const selected = classes.find((c) => c.class_uuid === v);
+//                 const name = (selected?.class_name || "").toUpperCase();
+//                 const show = name === "XI" || name === "XII" || 
+//                              name === "CLASS 11" || name === "CLASS 12";
+//                 if (!show) set("stream", "");
+//                 loadSections(v);
+//               }}
 //             >
 //               <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
 //               <SelectContent>
@@ -1096,10 +875,7 @@
 //           </F>
 
 //           <F label="Section">
-//             <Select
-//               value={d.section_uuid}
-//               onValueChange={(v) => set("section_uuid", v)}
-//             >
+//             <Select value={d.section_uuid} onValueChange={(v) => set("section_uuid", v)}>
 //               <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
 //               <SelectContent>
 //                 {sections.map((s) => (
@@ -1111,78 +887,62 @@
 //             </Select>
 //           </F>
 
+//           {showStream && (
+//             <F label="Stream">
+//               <Select value={d.stream} onValueChange={(v) => set("stream", v)}>
+//                 <SelectTrigger><SelectValue placeholder="Select stream" /></SelectTrigger>
+//                 <SelectContent>
+//                   <SelectItem value="Science">Science</SelectItem>
+//                   <SelectItem value="Commerce">Commerce</SelectItem>
+//                   <SelectItem value="Arts">Arts</SelectItem>
+//                 </SelectContent>
+//               </Select>
+//             </F>
+//           )}
+
+//           <F label="Session Year">
+//             <Select value={d.session_year} onValueChange={(v) => set("session_year", v)}>
+//               <SelectTrigger><SelectValue placeholder="Select session" /></SelectTrigger>
+//               <SelectContent>
+//                 <SelectItem value="2025-26">2025-26</SelectItem>
+//                 <SelectItem value="2026-27">2026-27</SelectItem>
+//                 <SelectItem value="2027-28">2027-28</SelectItem>
+//                 <SelectItem value="2028-29">2028-29</SelectItem>
+//               </SelectContent>
+//             </Select>
+//           </F>
+
 //           <F label="Roll No">
-//             <Input value={d.rollNo} onChange={(e) => set("rollNo", e.target.value)} />
+//             <Input value={d.roll_no} onChange={(e) => set("roll_no", e.target.value)} placeholder="1" />
 //           </F>
 
 //           <F label="Board">
 //             <Select value={d.board} onValueChange={(v) => set("board", v)}>
-//               <SelectTrigger><SelectValue /></SelectTrigger>
+//               <SelectTrigger><SelectValue placeholder="Select board" /></SelectTrigger>
 //               <SelectContent>
-//                 {["CBSE", "ICSE", "State Board", "IB"].map((x) => (
+//                 {["CBSE", "ICSE", "State Board", "IB", "IGCSE", "Other"].map((x) => (
 //                   <SelectItem key={x} value={x}>{x}</SelectItem>
 //                 ))}
 //               </SelectContent>
 //             </Select>
 //           </F>
 
-//          {(() => {
-//   const selectedClass = classes.find(
-//     (c) => c.class_uuid === d.class_uuid
-//   );
-
-//   const className = (
-//     selectedClass?.class_name || ""
-//   ).toUpperCase();
-
-//   const showStream =
-//     className === "XI" ||
-//     className === "XII" ||
-//     className === "CLASS 11" ||
-//     className === "CLASS 12";
-
-//   return showStream ? (
-//     <F label="Stream">
-//       <Select
-//         value={d.stream}
-//         onValueChange={(v) => set("stream", v)}
-//       >
-//         <SelectTrigger>
-//           <SelectValue placeholder="Select stream" />
-//         </SelectTrigger>
-
-//         <SelectContent>
-//           <SelectItem value="Science">Science</SelectItem>
-//           <SelectItem value="Commerce">Commerce</SelectItem>
-//           <SelectItem value="Arts">Arts</SelectItem>
-//         </SelectContent>
-//       </Select>
-//     </F>
-//   ) : null;
-// })()}
-
-//           <F label="Session year">
-//             <Input
-//               value={d.sessionYear}
-//               onChange={(e) => set("sessionYear", e.target.value)}
-//               placeholder="2026-2027"
-//             />
+//           <F label="Previous School">
+//             <Input value={d.previous_school} onChange={(e) => set("previous_school", e.target.value)} placeholder="DAV Public School" />
 //           </F>
 
-//           <F label="Previous school">
-//             <Input value={d.previousSchool} onChange={(e) => set("previousSchool", e.target.value)} placeholder="School name" />
+//           <F label="Previous Class">
+//             <Input value={d.previous_class} onChange={(e) => set("previous_class", e.target.value)} placeholder="Class IX" />
 //           </F>
 
-//           <F label="Previous class">
-//             <Input value={d.previousClass} onChange={(e) => set("previousClass", e.target.value)} />
-//           </F>
-
-//           <F label="Last aggregate %">
-//             <Input type="number" value={d.lastPercent} onChange={(e) => set("lastPercent", e.target.value)} placeholder="85" />
+//           <F label="Last Aggregate %">
+//             <Input type="number" min={0} max={100} value={d.last_aggregate_percentage} 
+//                    onChange={(e) => set("last_aggregate_percentage", e.target.value)} placeholder="87" />
 //           </F>
 
 //           <F label="Attendance %">
-//             <Input type="number" value={d.attendance} onChange={(e) => set("attendance", e.target.value)} placeholder="95" />
+//             <Input type="number" min={0} max={100} value={d.attendance_percentage} 
+//                    onChange={(e) => set("attendance_percentage", e.target.value)} placeholder="95" />
 //           </F>
 //         </div>
 
@@ -1196,179 +956,229 @@
 //   );
 // }
 
-// /* ── GUARDIAN TAB
-//    Mirrors: NewInquiryDialog "guardian" tab
-//    Fields: parent (father/guardian), motherName, phone, email, parentOccupation,
-//            parentIncome, emergencyContact, birthCertificateNo,
-//            address, city, state, pin
-// */
-// function GuardianTab({ inq, id }) {
+// /* ── GUARDIAN TAB ── */
+// function GuardianTab({ inq, id, loadData }) {
 //   const [d, setD] = useState({
-//     parent: inq.father_name  || "",
-//     motherName: inq.mother_name  || "",
-//     phone: inq.primary_phone  || "",
+//     father_name: inq.father_name || "",
+//     father_profession: inq.father_profession || "",
+//     father_dob: inq.father_dob || "",
+//     father_aadhaar_no: inq.father_aadhaar_no || "",
+//     mother_name: inq.mother_name || "",
+//     mother_profession: inq.mother_profession || "",
+//     mother_dob: inq.mother_dob || "",
+//     mother_aadhaar_no: inq.mother_aadhaar_no || "",
+//     guardian_name: inq.guardian_name || "",
+//     guardian_profession: inq.guardian_profession || "",
+//     guardian_dob: inq.guardian_dob || "",
+//     guardian_mobile_no: inq.guardian_mobile_no || "",
+//     primary_phone: inq.primary_phone || "",
+//     alternate_mobile_no: inq.alternate_mobile_no || "",
 //     email: inq.email || "",
-//     parentOccupation: inq.occupation  || "",
-//     parentIncome: inq.annual_income  || "",
-//     emergencyContact: inq.emergency_contact  || "",
-//     birthCertificateNo: inq.birth_certificate_no  || "",
-//     address: inq.residential_address  || "",
+//     alternate_email: inq.alternate_email || "",
+//     residential_address: inq.residential_address || "",
+//     permanent_address: inq.permanent_address || "",
 //     city: inq.city || "",
 //     state: inq.state || "",
-//     pin: inq.pin_code  || "",
+//     pin_code: inq.pin_code || "",
+//     birth_certificate_no: inq.birth_certificate_no || "",
 //   });
+
+//   useEffect(() => {
+//     setD({
+//       father_name: inq.father_name || "",
+//       father_profession: inq.father_profession || "",
+//       father_dob: inq.father_dob || "",
+//       father_aadhaar_no: inq.father_aadhaar_no || "",
+//       mother_name: inq.mother_name || "",
+//       mother_profession: inq.mother_profession || "",
+//       mother_dob: inq.mother_dob || "",
+//       mother_aadhaar_no: inq.mother_aadhaar_no || "",
+//       guardian_name: inq.guardian_name || "",
+//       guardian_profession: inq.guardian_profession || "",
+//       guardian_dob: inq.guardian_dob || "",
+//       guardian_mobile_no: inq.guardian_mobile_no || "",
+//       primary_phone: inq.primary_phone || "",
+//       alternate_mobile_no: inq.alternate_mobile_no || "",
+//       email: inq.email || "",
+//       alternate_email: inq.alternate_email || "",
+//       residential_address: inq.residential_address || "",
+//       permanent_address: inq.permanent_address || "",
+//       city: inq.city || "",
+//       state: inq.state || "",
+//       pin_code: inq.pin_code || "",
+//       birth_certificate_no: inq.birth_certificate_no || "",
+//     });
+//   }, [inq]);
+
 //   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
-// const saveAll = async () => {
-
-//   try {
-
-//     await updateAdmission(
-//   id,
-//   {
-//     father_name: d.parent,
-//     mother_name: d.motherName,
-//     primary_phone: d.phone,
-//     email: d.email,
-//     occupation: d.parentOccupation,
-//     annual_income: d.parentIncome,
-//     emergency_contact: d.emergencyContact,
-//     birth_certificate_no: d.birthCertificateNo,
-//     residential_address: d.address,
-//     city: d.city,
-//     state: d.state,
-//     pin_code: d.pin
-//   }
-// );
-
-//     toast.success(
-//       "Guardian details saved"
-//     );
-
-//   } catch (err) {
-
-//     toast.error("Save failed");
-
-//   }
-
-// };
+//   const saveAll = async () => {
+//     try {
+//       await updateAdmission(id, d);
+//       await loadData();
+//       toast.success("Guardian details saved");
+//     } catch (err) {
+//       toast.error("Save failed");
+//     }
+//   };
 
 //   return (
 //     <Card>
 //       <CardContent className="p-5 space-y-4">
 //         <div className="grid md:grid-cols-2 gap-4">
-//           <F label="Father / Guardian">
-//             <Input value={d.parent} onChange={(e) => set("parent", e.target.value)} placeholder="Anil Mehra" />
+//           <F label="Father's Name">
+//             <Input value={d.father_name} onChange={(e) => set("father_name", e.target.value)} placeholder="Anil Mehra" />
 //           </F>
-//           <F label="Mother's name">
-//             <Input value={d.motherName} onChange={(e) => set("motherName", e.target.value)} />
+//           <F label="Father's Profession">
+//             <Input value={d.father_profession} onChange={(e) => set("father_profession", e.target.value)} placeholder="Business / Service" />
 //           </F>
-//           <F label="Primary phone">
-//             <Input value={d.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+91 ..." />
+//           <F label="Father's DOB">
+//             <Input type="date" value={d.father_dob} onChange={(e) => set("father_dob", e.target.value)} />
+//           </F>
+//           <F label="Father's Aadhaar">
+//             <Input value={d.father_aadhaar_no} onChange={(e) => set("father_aadhaar_no", e.target.value)} placeholder="123456789012" maxLength={12} />
+//           </F>
+
+//           <F label="Mother's Name">
+//             <Input value={d.mother_name} onChange={(e) => set("mother_name", e.target.value)} placeholder="Sunita Mehra" />
+//           </F>
+//           <F label="Mother's Profession">
+//             <Input value={d.mother_profession} onChange={(e) => set("mother_profession", e.target.value)} placeholder="Homemaker / Teacher" />
+//           </F>
+//           <F label="Mother's DOB">
+//             <Input type="date" value={d.mother_dob} onChange={(e) => set("mother_dob", e.target.value)} />
+//           </F>
+//           <F label="Mother's Aadhaar">
+//             <Input value={d.mother_aadhaar_no} onChange={(e) => set("mother_aadhaar_no", e.target.value)} placeholder="123456789012" maxLength={12} />
+//           </F>
+
+//           <F label="Guardian Name">
+//             <Input value={d.guardian_name} onChange={(e) => set("guardian_name", e.target.value)} placeholder="Emergency contact" />
+//           </F>
+//           <F label="Guardian Profession">
+//             <Input value={d.guardian_profession} onChange={(e) => set("guardian_profession", e.target.value)} placeholder="Service / Business" />
+//           </F>
+//           <F label="Guardian DOB">
+//             <Input type="date" value={d.guardian_dob} onChange={(e) => set("guardian_dob", e.target.value)} />
+//           </F>
+//           <F label="Guardian Mobile">
+//             <Input value={d.guardian_mobile_no} onChange={(e) => set("guardian_mobile_no", e.target.value)} placeholder="9876543210" maxLength={10} />
+//           </F>
+
+//           <F label="Primary Phone">
+//             <Input value={d.primary_phone} onChange={(e) => set("primary_phone", e.target.value)} placeholder="9876543210" maxLength={10} />
+//           </F>
+//           <F label="Alternate Phone">
+//             <Input value={d.alternate_mobile_no} onChange={(e) => set("alternate_mobile_no", e.target.value)} placeholder="9876543210" maxLength={10} />
 //           </F>
 //           <F label="Email">
 //             <Input type="email" value={d.email} onChange={(e) => set("email", e.target.value)} placeholder="parent@mail.com" />
 //           </F>
-//           <F label="Occupation">
-//             <Input value={d.parentOccupation} onChange={(e) => set("parentOccupation", e.target.value)} placeholder="Business / Service" />
+//           <F label="Alternate Email">
+//             <Input type="email" value={d.alternate_email} onChange={(e) => set("alternate_email", e.target.value)} placeholder="alt@mail.com" />
 //           </F>
-//           <F label="Annual income">
-//             <Input type="number" value={d.parentIncome} onChange={(e) => set("parentIncome", e.target.value)} placeholder="1200000" />
+
+//           <F label="Residential Address" wide>
+//             <Textarea rows={2} value={d.residential_address} onChange={(e) => set("residential_address", e.target.value)} placeholder="House no, street, locality" />
 //           </F>
-//           <F label="Emergency contact">
-//             <Input value={d.emergencyContact} onChange={(e) => set("emergencyContact", e.target.value)} placeholder="+91 ..." />
-//           </F>
-//           <F label="Birth certificate no">
-//             <Input value={d.birthCertificateNo} onChange={(e) => set("birthCertificateNo", e.target.value)} />
-//           </F>
-//           <F label="Residential address" wide>
-//             <Textarea rows={2} value={d.address} onChange={(e) => set("address", e.target.value)} placeholder="House no, street, locality" />
+//           <F label="Permanent Address" wide>
+//             <Textarea rows={2} value={d.permanent_address} onChange={(e) => set("permanent_address", e.target.value)} placeholder="House no, street, locality" />
 //           </F>
 //           <F label="City">
 //             <Input value={d.city} onChange={(e) => set("city", e.target.value)} placeholder="Delhi" />
 //           </F>
 //           <F label="State">
-//             <Input value={d.state} onChange={(e) => set("state", e.target.value)} />
+//             <Input value={d.state} onChange={(e) => set("state", e.target.value)} placeholder="Delhi" />
 //           </F>
 //           <F label="PIN">
-//             <Input value={d.pin} onChange={(e) => set("pin", e.target.value)} placeholder="110001" />
+//             <Input value={d.pin_code} onChange={(e) => set("pin_code", e.target.value)} placeholder="110001" maxLength={6} />
+//           </F>
+//           <F label="Birth Certificate No">
+//             <Input value={d.birth_certificate_no} onChange={(e) => set("birth_certificate_no", e.target.value)} placeholder="BC-12345" />
 //           </F>
 //         </div>
 //         <div className="flex justify-end pt-2 border-t">
-//           <Button onClick={saveAll} className="gap-1.5"><Save className="h-4 w-4" />Save Guardian Details</Button>
+//           <Button onClick={saveAll} className="gap-1.5">
+//             <Save className="h-4 w-4" />Save Guardian Details
+//           </Button>
 //         </div>
 //       </CardContent>
 //     </Card>
 //   );
 // }
 
-// /* ── SERVICES TAB
-//    Mirrors: NewInquiryDialog "services" tab
-//    Fields: feeStatus, transportRequired, hostelRequired
-//    NOTE: transport_required / hostel_required come back from the API as
-//    booleans, so we map boolean <-> "Yes"/"No" string on load and on save.
-// */
-// function ServicesTab({ inq, id }) {
+// /* ── SERVICES TAB ── */
+// function ServicesTab({ inq, id, loadData }) {
 //   const [d, setD] = useState({
-//     feeStatus: inq.fee_status || "Pending",
-//     transportRequired: inq.transport_required ? "Yes" : "No",
-//     hostelRequired: inq.hostel_required ? "Yes" : "No",
+//     fee_status: inq.fee_status || "",
+//     transport_required: inq.transport_required ? "Yes" : "No",
+//     mode_of_conveyance: inq.mode_of_conveyance || "",
+//     hostel_required: inq.hostel_required ? "Yes" : "No",
 //   });
+
+//   useEffect(() => {
+//     setD({
+//       fee_status: inq.fee_status || "",
+//       transport_required: inq.transport_required ? "Yes" : "No",
+//       mode_of_conveyance: inq.mode_of_conveyance || "",
+//       hostel_required: inq.hostel_required ? "Yes" : "No",
+//     });
+//   }, [inq]);
+
 //   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
 //   const saveAll = async () => {
-
-//   try {
-
-//     await updateAdmission(
-//       id,
-//       {
-//         fee_status: d.feeStatus,
-//         transport_required: d.transportRequired === "Yes",
-//         hostel_required: d.hostelRequired === "Yes"
-//       }
-//     );
-
-//     toast.success(
-//       "Services saved"
-//     );
-
-//   } catch (err) {
-
-//     toast.error(
-//       "Save failed"
-//     );
-
-//   }
-
-// };
+//     try {
+//       await updateAdmission(id, {
+//         fee_status: d.fee_status,
+//         transport_required: d.transport_required === "Yes",
+//         mode_of_conveyance: d.mode_of_conveyance,
+//         hostel_required: d.hostel_required === "Yes",
+//       });
+//       await loadData();
+//       toast.success("Services saved");
+//     } catch (err) {
+//       toast.error("Save failed");
+//     }
+//   };
 
 //   return (
 //     <Card>
 //       <CardContent className="p-5 space-y-4">
 //         <div className="grid md:grid-cols-2 gap-4">
-//           <F label="Fee status">
-//             <Select value={d.feeStatus} onValueChange={(v) => set("feeStatus", v)}>
-//               <SelectTrigger><SelectValue /></SelectTrigger>
+//           <F label="Fee Status">
+//             <Select value={d.fee_status} onValueChange={(v) => set("fee_status", v)}>
+//               <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
 //               <SelectContent>
-//                 <SelectItem value="Paid">Paid</SelectItem>
-//                 <SelectItem value="Pending">Pending</SelectItem>
-//                 <SelectItem value="Overdue">Overdue</SelectItem>
+//                 <SelectItem value="PAID">Paid</SelectItem>
+//                 <SelectItem value="PARTIAL">Partial</SelectItem>
+//                 <SelectItem value="PENDING">Pending</SelectItem>
 //               </SelectContent>
 //             </Select>
 //           </F>
-//           <F label="Transport required">
-//             <Select value={d.transportRequired} onValueChange={(v) => set("transportRequired", v)}>
-//               <SelectTrigger><SelectValue /></SelectTrigger>
+//           <F label="Transport Required">
+//             <Select value={d.transport_required} onValueChange={(v) => set("transport_required", v)}>
+//               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
 //               <SelectContent>
 //                 <SelectItem value="No">No</SelectItem>
 //                 <SelectItem value="Yes">Yes</SelectItem>
 //               </SelectContent>
 //             </Select>
 //           </F>
-//           <F label="Hostel required">
-//             <Select value={d.hostelRequired} onValueChange={(v) => set("hostelRequired", v)}>
-//               <SelectTrigger><SelectValue /></SelectTrigger>
+//           <F label="Mode of Conveyance">
+//             <Select value={d.mode_of_conveyance} onValueChange={(v) => set("mode_of_conveyance", v)}>
+//               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+//               <SelectContent>
+//                 <SelectItem value="School Bus">School Bus</SelectItem>
+//                 <SelectItem value="Personal Vehicle">Personal Vehicle</SelectItem>
+//                 <SelectItem value="Public Transport">Public Transport</SelectItem>
+//                 <SelectItem value="Walking">Walking</SelectItem>
+//               </SelectContent>
+//             </Select>
+//           </F>
+//           <F label="Hostel Required">
+//             <Select value={d.hostel_required} onValueChange={(v) => set("hostel_required", v)}>
+//               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
 //               <SelectContent>
 //                 <SelectItem value="No">No</SelectItem>
 //                 <SelectItem value="Yes">Yes</SelectItem>
@@ -1377,48 +1187,36 @@
 //           </F>
 //         </div>
 //         <div className="flex justify-end pt-2 border-t">
-//           <Button onClick={saveAll} className="gap-1.5"><Save className="h-4 w-4" />Save Services</Button>
+//           <Button onClick={saveAll} className="gap-1.5">
+//             <Save className="h-4 w-4" />Save Services
+//           </Button>
 //         </div>
 //       </CardContent>
 //     </Card>
 //   );
 // }
 
-// /* ── MEDICAL TAB
-//    Mirrors: NewInquiryDialog "medical" tab
-//    Fields: medicalNotes
-// */
-// function MedicalTab({ inq, id }) {
+// /* ── MEDICAL TAB ── */
+// function MedicalTab({ inq, id, loadData }) {
 //   const [d, setD] = useState({
-//     medicalNotes: inq.medical_notes  || "",
+//     medical_notes: inq.medical_notes || "",
 //   });
+
+//   useEffect(() => {
+//     setD({ medical_notes: inq.medical_notes || "" });
+//   }, [inq]);
+
 //   const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
 
-// const saveAll = async () => {
-
-//   try {
-
-//     await updateAdmission(
-//   id,
-//   {
-//     medical_notes: d.medicalNotes
-//   }
-// );
-
-//     toast.success(
-//       "Medical notes saved"
-//     );
-
-//   } catch (err) {
-
-//     toast.error(
-//       "Save failed"
-//     );
-
-//   }
-
-// };
-
+//   const saveAll = async () => {
+//     try {
+//       await updateAdmission(id, d);
+//       await loadData();
+//       toast.success("Medical notes saved");
+//     } catch (err) {
+//       toast.error("Save failed");
+//     }
+//   };
 
 //   return (
 //     <Card>
@@ -1426,80 +1224,34 @@
 //         <F label="Medical notes / allergies / special care" wide>
 //           <Textarea
 //             rows={6}
-//             value={d.medicalNotes}
-//             onChange={(e) => set("medicalNotes", e.target.value)}
+//             value={d.medical_notes}
+//             onChange={(e) => set("medical_notes", e.target.value)}
 //             placeholder="Allergies, medication, special care instructions"
 //           />
 //         </F>
 //         <div className="flex justify-end pt-2 border-t">
-//           <Button onClick={saveAll} className="gap-1.5"><Save className="h-4 w-4" />Save Medical Notes</Button>
+//           <Button onClick={saveAll} className="gap-1.5">
+//             <Save className="h-4 w-4" />Save Medical Notes
+//           </Button>
 //         </div>
 //       </CardContent>
 //     </Card>
 //   );
 // }
 
-// /* ── DOCUMENTS TAB
-//    Two states only:
-//    A) doc.ok = true  → submitted — show preview/view button (reads doc.dataUrl stored in store)
-//    B) doc.ok = false → not provided — upload zone → inline preview → Save
-//       On Save: file is read as dataUrl and stored on the doc object in the store
-// */
+// /* ── DOCUMENTS TAB ── */
 // function DocumentsTab({ inq, id, loadData }) {
 //   const docs = [
-//   {
-//     name: "Birth Certificate",
-//     field: "birth_certificate_file",
-//     url: inq.birth_certificate_file,
-//     ok: !!inq.birth_certificate_file
-//   },
-//   {
-//     name: "Aadhar Card",
-//     field: "student_aadhaar_file",
-//     url: inq.student_aadhaar_file,
-//     ok: !!inq.student_aadhaar_file
-//   },
-//   {
-//     name: "Transfer Certificate",
-//     field: "transfer_certificate_file",
-//     url: inq.transfer_certificate_file,
-//     ok: !!inq.transfer_certificate_file
-//   },
-//   {
-//     name: "Previous Marksheet",
-//     field: "previous_marksheet_file",
-//     url: inq.previous_marksheet_file,
-//     ok: !!inq.previous_marksheet_file
-//   },
-//   {
-//     name: "Parent ID Proof",
-//     field: "parent_id_file",
-//     url: inq.parent_id_file,
-//     ok: !!inq.parent_id_file
-//   },
-//   {
-//     name: "Address Proof",
-//     field: "address_proof_file",
-//     url: inq.address_proof_file,
-//     ok: !!inq.address_proof_file
-//   },
-//   {
-//     name: "Passport Photo",
-//     field: "passport_photo_file",
-//     url: inq.passport_photo_file,
-//     ok: !!inq.passport_photo_file
-//   },
-//   {
-//     name: "Medical Certificate",
-//     field: "medical_certificate_file",
-//     url: inq.medical_certificate_file,
-//     ok: !!inq.medical_certificate_file
-//   }
-// ];
+//     { name: "Birth Certificate", field: "birth_certificate_file", url: inq.birth_certificate_file, ok: !!inq.birth_certificate_file },
+//     { name: "Student Aadhaar", field: "student_aadhaar_file", url: inq.student_aadhaar_file, ok: !!inq.student_aadhaar_file },
+//     { name: "Transfer Certificate", field: "transfer_certificate_file", url: inq.transfer_certificate_file, ok: !!inq.transfer_certificate_file },
+//     { name: "Previous Marksheet", field: "previous_marksheet_file", url: inq.previous_marksheet_file, ok: !!inq.previous_marksheet_file },
+//     { name: "Parent ID Proof", field: "parent_id_file", url: inq.parent_id_file, ok: !!inq.parent_id_file },
+//     { name: "Address Proof", field: "address_proof_file", url: inq.address_proof_file, ok: !!inq.address_proof_file },
+//     { name: "Passport Photo", field: "passport_photo_file", url: inq.passport_photo_file, ok: !!inq.passport_photo_file },
+//     { name: "Caste Certificate", field: "caste_certificate_file", url: inq.caste_certificate_file, ok: !!inq.caste_certificate_file }
+//   ];
 
-
-
-//   // localFiles only tracked for docs not yet submitted
 //   const [localFiles, setLocalFiles] = useState(() =>
 //     Object.fromEntries(docs.filter((d) => !d.ok).map((d) => [d.name, null]))
 //   );
@@ -1515,51 +1267,26 @@
 
 //   const removeLocal = (name) => setLocalFiles((f) => ({ ...f, [name]: null }));
 
-//   // Read file as dataUrl, persist to store so submitted docs can be previewed later
- 
-// const saveLocal = async (name) => {
+//   const saveLocal = async (name) => {
+//     const file = localFiles[name];
+//     if (!file) return;
+//     try {
+//       const doc = docs.find(d => d.name === name);
+//       const formData = new FormData();
+//       formData.append(doc.field, file);
+//       await updateAdmission(id, formData);
+//       await loadData();
+//       toast.success(`${name} uploaded successfully`);
+//       setLocalFiles((f) => ({ ...f, [name]: null }));
+//     } catch (err) {
+//       toast.error("Upload failed");
+//     }
+//   };
 
-//   const file = localFiles[name];
-
-//   if (!file) return;
-
-//   try {
-
-//     const doc = docs.find(
-//       d => d.name === name
-//     );
-
-//     const formData = new FormData();
-
-//     formData.append(
-//       doc.field,
-//       file
-//     );
-
-//     await updateAdmission(
-//       id,
-//       formData
-//     );
-
-//     toast.success(
-//       `${name} uploaded successfully`
-//     );
-
-//     await loadData();      // ← refresh parent data
-
-//   }
-//   catch (err) {
-
-//     toast.error("Upload failed");
-
-//   }
-
-// };
-// const openPreviewFromUrl = (doc) => {
+//   const openPreviewFromUrl = (doc) => {
 //     if (!doc.url) return;
-
 //     window.open(doc.url, "_blank");
-// };
+//   };
 
 //   const openPreviewFromFile = (name, file) => {
 //     setPreviewTarget({
@@ -1578,7 +1305,6 @@
 //     <>
 //       <Card>
 //         <CardContent className="p-5">
-//           {/* Header */}
 //           <div className="flex items-center justify-between mb-4">
 //             <p className="text-xs text-muted-foreground">
 //               Documents submitted at inquiry are shown below. Upload any missing ones.
@@ -1593,72 +1319,35 @@
 //               const submitted = doc.ok;
 //               const localFile = localFiles[doc.name];
 //               const inputId = `doc-${doc.name.replace(/\s+/g, "-")}`;
-//               const hasStoredPreview = submitted && !!doc.url;
-             
 
-//               /* ═══ STATE A: submitted — show preview if dataUrl available ═══ */
 //               if (submitted) {
 //                 return (
 //                   <div key={doc.name} className="rounded-md border border-success/30 bg-success/5 overflow-hidden">
-//                     {/* Header row */}
 //                     <div className="flex items-center gap-3 p-3">
 //                       <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
 //                       <div className="flex-1 min-w-0">
 //                         <div className="text-sm font-medium">{doc.name}</div>
-//                       <div className="text-[11px] text-muted-foreground mt-0.5">
-//                         Submitted at inquiry
-//                       </div>
+//                         <div className="text-[11px] text-muted-foreground mt-0.5">Submitted at inquiry</div>
 //                       </div>
 //                       <div className="flex items-center gap-2 shrink-0">
 //                         <Badge className="bg-success/15 text-success border-success/20 text-[10px] gap-1">
 //                           <ShieldCheck className="h-3 w-3" /> Submitted
 //                         </Badge>
-//                         {hasStoredPreview && (
-//                           <Button
-//                             size="sm"
-//                             variant="outline"
-//                             className="h-7 gap-1 text-[11px]"
-//                             onClick={() => openPreviewFromUrl(doc)}
-//                           >
+//                         {doc.url && (
+//                           <Button size="sm" variant="outline" className="h-7 gap-1 text-[11px]" onClick={() => openPreviewFromUrl(doc)}>
 //                             <FileCheck2 className="h-3.5 w-3.5" /> View
 //                           </Button>
 //                         )}
 //                       </div>
 //                     </div>
-
-//                     {/* Image thumbnail if stored */}
-                  
-//                   window.open(doc.url, "_blank");
-//                     {/* PDF / other pill if stored */}
-//                  {hasStoredPreview && (
-//                   <div
-//                     className="mx-3 mb-3 flex items-center gap-2.5 rounded-md border border-success/20 bg-background px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
-//                     onClick={() => openPreviewFromUrl(doc)}
-//                   >
-//                     <div className="h-9 w-9 rounded bg-success/10 flex items-center justify-center shrink-0">
-//                       <FileCheck2 className="h-4 w-4 text-success" />
-//                     </div>
-
-//                     <div className="flex-1 min-w-0">
-//                       <div className="text-xs font-medium truncate">
-//                         {doc.name}
-//                       </div>
-
-//                       <div className="text-[10px] text-muted-foreground">
-//                         Click to preview
-//                       </div>
-//                     </div>
-//                   </div>
-//                 )}
-//                     {/* No dataUrl — doc was submitted at creation before this feature existed */}
-//                     {!hasStoredPreview && (
-//                       <div className="mx-3 mb-3 flex items-center gap-3 rounded-md border border-success/20 bg-background px-3 py-2.5">
+//                     {doc.url && (
+//                       <div className="mx-3 mb-3 flex items-center gap-2.5 rounded-md border border-success/20 bg-background px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => openPreviewFromUrl(doc)}>
 //                         <div className="h-9 w-9 rounded bg-success/10 flex items-center justify-center shrink-0">
 //                           <FileCheck2 className="h-4 w-4 text-success" />
 //                         </div>
 //                         <div className="flex-1 min-w-0">
 //                           <div className="text-xs font-medium truncate">{doc.name}</div>
-//                           <div className="text-[10px] text-muted-foreground">File on record · submitted during inquiry creation</div>
+//                           <div className="text-[10px] text-muted-foreground">Click to preview</div>
 //                         </div>
 //                       </div>
 //                     )}
@@ -1666,108 +1355,50 @@
 //                 );
 //               }
 
-//               /* ═══ STATE B: not provided — upload zone ═══ */
 //               return (
-//                 <div
-//                   key={doc.name}
-//                   className={`rounded-md border overflow-hidden transition-colors ${
-//                     localFile ? "border-primary/40 bg-primary/5" : "border-border/60"
-//                   }`}
-//                 >
-//                   {/* Header row */}
+//                 <div key={doc.name} className={`rounded-md border overflow-hidden transition-colors ${localFile ? "border-primary/40 bg-primary/5" : "border-border/60"}`}>
 //                   <div className="flex items-center gap-3 p-3">
 //                     <FileUp className={`h-4 w-4 shrink-0 ${localFile ? "text-primary" : "text-muted-foreground/50"}`} />
 //                     <div className="flex-1 min-w-0">
 //                       <div className="text-sm font-medium">{doc.name}</div>
 //                       {localFile ? (
-//                         <div className="text-[11px] text-muted-foreground truncate mt-0.5">
-//                           {localFile.name} · {formatBytes(localFile.size)}
-//                         </div>
+//                         <div className="text-[11px] text-muted-foreground truncate mt-0.5">{localFile.name} · {formatBytes(localFile.size)}</div>
 //                       ) : (
 //                         <div className="text-[11px] text-muted-foreground/60 mt-0.5">Not provided at inquiry</div>
 //                       )}
 //                     </div>
-
 //                     {localFile ? (
 //                       <div className="flex items-center gap-1.5 shrink-0">
-//                         <Button
-//                           size="sm"
-//                           variant="outline"
-//                           className="h-7 gap-1 text-[11px]"
-//                           onClick={() => openPreviewFromFile(doc.name, localFile)}
-//                         >
+//                         <Button size="sm" variant="outline" className="h-7 gap-1 text-[11px]" onClick={() => openPreviewFromFile(doc.name, localFile)}>
 //                           <FileCheck2 className="h-3.5 w-3.5" /> View
 //                         </Button>
-//                         <Button
-//                           size="sm"
-//                           className="h-7 gap-1 text-[11px] gradient-primary border-0"
-//                           onClick={() => saveLocal(doc.name)}
-//                         >
+//                         <Button size="sm" className="h-7 gap-1 text-[11px] gradient-primary border-0" onClick={() => saveLocal(doc.name)}>
 //                           <Save className="h-3.5 w-3.5" /> Save
 //                         </Button>
-//                         <Button
-//                           size="sm"
-//                           variant="ghost"
-//                           className="h-7 text-[11px] text-muted-foreground"
-//                           onClick={() => removeLocal(doc.name)}
-//                         >
+//                         <Button size="sm" variant="ghost" className="h-7 text-[11px] text-muted-foreground" onClick={() => removeLocal(doc.name)}>
 //                           Remove
 //                         </Button>
 //                       </div>
 //                     ) : (
-//                       <Button
-//                         size="sm"
-//                         variant="outline"
-//                         className="h-7 gap-1 text-[11px] shrink-0"
-//                         onClick={() => inputRefs.current[doc.name]?.click()}
-//                       >
+//                       <Button size="sm" variant="outline" className="h-7 gap-1 text-[11px] shrink-0" onClick={() => inputRefs.current[doc.name]?.click()}>
 //                         <FileUp className="h-3.5 w-3.5" /> Upload
 //                       </Button>
 //                     )}
-
-//                     <input
-//                       ref={(el) => (inputRefs.current[doc.name] = el)}
-//                       id={inputId}
-//                       type="file"
-//                       accept=".pdf,.jpg,.jpeg,.png"
-//                       className="hidden"
-//                       onChange={(e) => { handleFile(doc.name, e.target.files); e.target.value = ""; }}
-//                     />
+//                     <input ref={(el) => (inputRefs.current[doc.name] = el)} id={inputId} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { handleFile(doc.name, e.target.files); e.target.value = ""; }} />
 //                   </div>
-
-//                   {/* Drag-drop zone — only when no file chosen */}
 //                   {!localFile && (
-//                     <div
-//                       className="mx-3 mb-3 border-2 border-dashed rounded-md p-3 text-center text-xs text-muted-foreground cursor-pointer hover:border-primary/40 hover:text-primary/70 transition-colors"
-//                       onDragOver={(e) => e.preventDefault()}
-//                       onDrop={(e) => { e.preventDefault(); handleFile(doc.name, e.dataTransfer.files); }}
-//                       onClick={() => inputRefs.current[doc.name]?.click()}
-//                     >
+//                     <div className="mx-3 mb-3 border-2 border-dashed rounded-md p-3 text-center text-xs text-muted-foreground cursor-pointer hover:border-primary/40 hover:text-primary/70 transition-colors" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleFile(doc.name, e.dataTransfer.files); }} onClick={() => inputRefs.current[doc.name]?.click()}>
 //                       <FileUp className="h-4 w-4 mx-auto mb-1 opacity-40" />
 //                       Drag & drop or click · PDF / JPG / PNG · max 5 MB
 //                     </div>
 //                   )}
-
-//                   {/* Inline image preview */}
 //                   {localFile && localFile.type.startsWith("image/") && (
-//                     <div
-//                       className="mx-3 mb-3 rounded-md overflow-hidden border cursor-pointer"
-//                       onClick={() => openPreviewFromFile(doc.name, localFile)}
-//                     >
-//                       <img
-//                         src={URL.createObjectURL(localFile)}
-//                         alt={doc.name}
-//                         className="w-full max-h-36 object-contain bg-white"
-//                       />
+//                     <div className="mx-3 mb-3 rounded-md overflow-hidden border cursor-pointer" onClick={() => openPreviewFromFile(doc.name, localFile)}>
+//                       <img src={URL.createObjectURL(localFile)} alt={doc.name} className="w-full max-h-36 object-contain bg-white" />
 //                     </div>
 //                   )}
-
-//                   {/* PDF pill */}
 //                   {localFile && localFile.type === "application/pdf" && (
-//                     <div
-//                       className="mx-3 mb-3 flex items-center gap-2.5 rounded-md border bg-background px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
-//                       onClick={() => openPreviewFromFile(doc.name, localFile)}
-//                     >
+//                     <div className="mx-3 mb-3 flex items-center gap-2.5 rounded-md border bg-background px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => openPreviewFromFile(doc.name, localFile)}>
 //                       <div className="h-8 w-8 rounded bg-destructive/10 flex items-center justify-center shrink-0">
 //                         <FileCheck2 className="h-4 w-4 text-destructive" />
 //                       </div>
@@ -1784,7 +1415,6 @@
 //         </CardContent>
 //       </Card>
 
-//       {/* Lightbox */}
 //       {previewTarget && (
 //         <DocLightbox doc={previewTarget} onClose={() => setPreviewTarget(null)} />
 //       )}
@@ -1792,17 +1422,11 @@
 //   );
 // }
 
-// /* Simple full-screen lightbox */
+// /* ── DOC LIGHTBOX ── */
 // function DocLightbox({ doc, onClose }) {
 //   return (
-//     <div
-//       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-//       onClick={onClose}
-//     >
-//       <div
-//         className="bg-background rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
-//         onClick={(e) => e.stopPropagation()}
-//       >
+//     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+//       <div className="bg-background rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
 //         <div className="flex items-center justify-between px-4 py-3 border-b">
 //           <div className="flex items-center gap-2 min-w-0">
 //             <FileCheck2 className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1832,8 +1456,7 @@
 //   );
 // }
 
-// /* ── Shared helpers ── */
-
+// /* ── HELPERS ── */
 // function formatBytes(bytes) {
 //   if (bytes < 1024) return `${bytes} B`;
 //   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -1859,7 +1482,6 @@
 //     </div>
 //   );
 // }
-
 
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer, PageHeader } from "../../../components/page-shell";
@@ -1890,6 +1512,14 @@ import {
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Avatar, AvatarFallback } from "../../../components/ui/avatar";
 import { Progress } from "../../../components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "../../../components/ui/dialog";
 import {
   ChevronLeft,
   ArrowRight,
@@ -1956,6 +1586,7 @@ export default function AdmissionsDetails() {
   const [fu, setFu] = useState({ due: "", note: "" });
   const [followups, setFollowups] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [showRejectionReason, setShowRejectionReason] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -2151,7 +1782,13 @@ export default function AdmissionsDetails() {
                 )}
               </Avatar>
               <div className="flex-1">
-                <Badge className={stageColor[inq.stage?.stage_name]}>
+                <Badge
+                  className={`${stageColor[inq.stage?.stage_name]} ${
+                    isRejected ? "cursor-pointer hover:opacity-80" : ""
+                  }`}
+                  onClick={() => isRejected && setShowRejectionReason(true)}
+                  title={isRejected ? "Click to view rejection reason" : undefined}
+                >
                   {inq.stage?.stage_name}
                 </Badge>
                 <div className="text-xs text-muted-foreground mt-1">
@@ -2489,6 +2126,26 @@ export default function AdmissionsDetails() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* View rejection reason (read-only) */}
+      <Dialog open={showRejectionReason} onOpenChange={setShowRejectionReason}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reason for Rejection</DialogTitle>
+            <DialogDescription>
+              {inq.full_name} · {inq.admission_no || "-"}
+              {inq.rejected_at &&
+                ` — rejected ${new Date(inq.rejected_at).toLocaleDateString()}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap min-h-[80px]">
+            {inq.rejection_reason || "No reason recorded."}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowRejectionReason(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }

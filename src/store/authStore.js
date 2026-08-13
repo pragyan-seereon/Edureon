@@ -7,13 +7,15 @@ const useAuthStore = create(
       instituteUUID: null,
 
       setInstituteUUID: (uuid) =>
-        set({
-          instituteUUID: uuid,
+        set(() => {
+          console.log("Active Institute:", uuid);
+          return { instituteUUID: uuid };
         }),
 
       clearInstituteUUID: () =>
-        set({
-          instituteUUID: null,
+        set(() => {
+          console.log("Active Institute: cleared");
+          return { instituteUUID: null };
         }),
     }),
     {

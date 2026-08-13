@@ -4,12 +4,19 @@ export const getRoles = async ({
   active_only = false,
   page = 1,
   limit = 20,
+  institute_uuid,
+  include_global_roles = true,
 } = {}) => {
-  const { data } = await api.get("/super/roles", {
+  const endpoint = institute_uuid
+    ? `/super/roles/institute/${institute_uuid}`
+    : "/super/roles";
+
+  const { data } = await api.get(endpoint, {
     params: {
       active_only,
       page,
       limit,
+      ...(institute_uuid ? { include_global_roles } : {}),
     },
   });
 
@@ -45,16 +52,10 @@ export const getUsers = async ({
   return data;
 };
 export const updateUser = async (uuid, payload) => {
-  const formData = new FormData();
-
-  Object.entries(payload).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
-    formData.append(key, value);
-  });
-
-  const { data } = await api.put(`/users/${uuid}`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  // This endpoint expects a JSON object. FormData stringifies nested values
+  // such as institute_assignments to "[object Object]", which FastAPI cannot
+  // validate against its request model.
+  const { data } = await api.put(`/users/${uuid}`, payload);
 
   return data;
 };
