@@ -8,7 +8,7 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Plus, Trash2 } from "lucide-react";
 
-import { getClasses } from "../api/class";
+import { getClasses } from "../api/Class";
 import useAuthStore from "../store/authStore";
 import { toast } from "sonner";
 
