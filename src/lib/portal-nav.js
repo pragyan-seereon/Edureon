@@ -136,9 +136,9 @@ const superGroups = [
       { title: "Studentarchive", url: "/sudents/archive", icon: Megaphone },
       { title: "Teachers", url: "/teachers", icon: UserCog },
       { title: "Classes & Sections", url: "/classes", icon: School },
-      { title: "Attendance", url: "/attendance", icon: CalendarCheck },
+      // { title: "Attendance", url: "/attendance", icon: CalendarCheck },
       { title: "Assignments", url: "assignments", icon: ClipboardList },
-      { title: "Examinations", url: "/exams", icon: BookOpen },
+      // { title: "Examinations", url: "/exams", icon: BookOpen },
       { title: "Timetable", url: "/timetable", icon: CalendarDays },
       
     ],
@@ -151,30 +151,30 @@ const superGroups = [
     ],
   },
 
-   {
-    label: "Student",
-    items: [
-      { title: "Examinations", url: "/student/exams", icon: BookOpen },
-      { title: "My Timetable", url: "/student/timetable", icon: CalendarDays },
+  //  {
+  //   label: "Student",
+  //   items: [
+  //     { title: "Examinations", url: "/student/exams", icon: BookOpen },
+  //     { title: "My Timetable", url: "/student/timetable", icon: CalendarDays },
 
       
 
 
 
-    ],
-  },
+  //   ],
+  // },
   {
     label: "Operations",
     items: [
       { title: "Fees & Finance", url: "/fees", icon: IndianRupee },
       { title: "Fee Collection", url: "/fee-collection", icon: IndianRupee },
-      { title: "Expenses", url: "/expenses", icon: Receipt },
-      { title: "Assets", url: "/assets", icon: Boxes },
-      { title: "Infrastructure", url: "/infrastructure", icon: Network },
-      { title: "Transport", url: "/transport", icon: Bus },
-      { title: "Hostel", url: "/hostel", icon: Building2 },
-      { title: "Library", url: "/library", icon: Library },
-      { title: "Documents", url: "/dms", icon: FolderArchive },
+      // { title: "Expenses", url: "/expenses", icon: Receipt },
+      // { title: "Assets", url: "/assets", icon: Boxes },
+      // { title: "Infrastructure", url: "/infrastructure", icon: Network },
+      // { title: "Transport", url: "/transport", icon: Bus },
+      // { title: "Hostel", url: "/hostel", icon: Building2 },
+      // { title: "Library", url: "/library", icon: Library },
+      // { title: "Documents", url: "/dms", icon: FolderArchive },
     ],
   },
 
@@ -182,8 +182,8 @@ const superGroups = [
     label: "Communication",
     items: [
       { title: "Notices", url: "/notices", icon: Megaphone },
-      { title: "Communication", url: "/communication", icon: MessageSquare },
-      { title: "Class maintenance", url: "/classroom-maintenance", icon: GraduationCap },
+      // { title: "Communication", url: "/communication", icon: MessageSquare },
+      // { title: "Class maintenance", url: "/classroom-maintenance", icon: GraduationCap },
       { title: "Id Cards", url: "/id-cards", icon: IdCard },
       { title: "Get Pass", url: "/gate-pass", icon: ShieldCheck },
 

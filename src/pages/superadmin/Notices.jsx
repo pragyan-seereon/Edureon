@@ -1,3 +1,4 @@
+/* eslint-disable no-constant-condition */
 /* eslint-disable no-unused-vars */
 /* eslint-disable react-hooks/set-state-in-effect */
 import { PageContainer, PageHeader } from "../../components/page-shell";
@@ -53,12 +54,11 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { getClasses } from "../../api/class";
 import { getSections } from "../../api/section";
-import { getAcademicCalendar, createAcademicCalendar, updateAcademicCalendar, deleteAcademicCalendar,} from "../../api/academicCalendar";
+import { getAcademicCalendar,saveAcademicCalendarDraft,publishAcademicCalendar,getAcademicCalendarById,updateAcademicCalendar,deleteAcademicCalendar,publishAcademicCalendarById,unpublishAcademicCalendarById,} from "../../api/academicCalendar";
 import { getNotices, saveNoticeDraft, publishNotice, updateNotice, deleteNotice ,getNoticeById,publishNoticeById, unpublishNoticeById } from "../../api/notice";
 import {getEvents,saveEventDraft,publishEvent,getEventById,updateEvent,deleteEvent,publishEventById,unpublishEventById,} from "../../api/event";
 import { getHolidays, saveHolidayDraft, publishHoliday, getHolidayById, updateHoliday, deleteHoliday, publishHolidayById, unpublishHolidayById,} from "../../api/holidayCalendar";
 import {validateCalendarForm,isCalendarFormValid,validateNoticeForm,isNoticeFormValid,} from "../../lib/subjectValidation";
-
 
 const cats = ["Academic", "Events", "Fees", "Holiday", "Exam", "General"];
 const auds = ["All", "Teachers", "Students", "Parents", "Staff", "Class"];
@@ -95,12 +95,32 @@ const CATEGORY_REVERSE_MAP = Object.fromEntries(
 const AUDIENCE_REVERSE_MAP = Object.fromEntries(
   Object.entries(AUDIENCE_MAP).map(([label, value]) => [value, label])
 );
+
+// List endpoints in different deployments return either `data: []` or
+// `data: { data: [] }`. Keep the audience dropdowns resilient to both.
+const getResponseList = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.data?.data)) return response.data.data;
+  return [];
+};
+
+const getApiErrorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail;
+  const payload = detail && typeof detail === "object" ? detail : error?.response?.data;
+
+  if (typeof payload === "string") return payload;
+  if (typeof payload?.message === "string") return payload.message;
+  if (typeof error?.message === "string") return error.message;
+  return fallback;
+};
 const buildNoticeFormData = ({
   title,
   body,
   category,
   audience,
-  targetClass,
+  classUUID,
+  sectionUUID,
   startDate,
   endDate,
   attachments = [],
@@ -111,8 +131,20 @@ const buildNoticeFormData = ({
   formData.append("description", body);
   formData.append("category", CATEGORY_MAP[category] ?? category);
   formData.append("audience_type", AUDIENCE_MAP[audience] ?? audience);
-  if (audience === "Class" && targetClass) {
-    formData.append("target_class", targetClass);
+  if (audience === "Class") {
+    if (classUUID) {
+      // The publish/save-draft API accepts one multipart `class_audiences`
+      // field containing a JSON array of class/section audience objects.
+      formData.append(
+        "class_audiences",
+        JSON.stringify([
+          {
+            class_uuid: classUUID,
+            ...(sectionUUID ? { section_uuids: [sectionUUID] } : {}),
+          },
+        ])
+      );
+    }
   }
   formData.append("start_date", startDate);
   formData.append("end_date", endDate);
@@ -141,8 +173,17 @@ const buildHolidayFormData = ({
   formData.append("category", CATEGORY_MAP[category] ?? category ?? "HOLIDAY");
   formData.append("audience_type", AUDIENCE_MAP[audience] ?? audience);
   if (audience === "Class") {
-    if (classUUID) formData.append("class_uuid", classUUID);
-    if (sectionUUID) formData.append("section_uuid", sectionUUID);
+    if (classUUID) {
+      formData.append(
+        "class_audiences",
+        JSON.stringify([
+          {
+            class_uuid: classUUID,
+            ...(sectionUUID ? { section_uuids: [sectionUUID] } : {}),
+          },
+        ])
+      );
+    }
   }
   formData.append("start_date", startDate);
   formData.append("end_date", endDate);
@@ -152,6 +193,49 @@ const buildHolidayFormData = ({
   });
   return formData;
 };
+
+const buildAcademicCalendarFormData = ({
+  title,
+  body,
+  category,
+  audience,
+  classUUID,
+  sectionUUID,
+  startDate,
+  endDate,
+  attachments = [],
+  existingAttachmentUUID,
+}) => {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("description", body);
+  formData.append("category", CATEGORY_MAP[category] ?? category ?? "ACADEMIC");
+  formData.append("audience_type", AUDIENCE_MAP[audience] ?? audience ?? "ALL");
+  if (audience === "Class" && classUUID) {
+    // The calendar API has used both the direct UUID fields and the audience
+    // collection across deployments. Send the direct values as well so they
+    // are persisted and returned when this entry is opened for editing.
+    formData.append("class_uuid", classUUID);
+    if (sectionUUID) formData.append("section_uuid", sectionUUID);
+    formData.append(
+      "class_audiences",
+      JSON.stringify([
+        {
+          class_uuid: classUUID,
+          ...(sectionUUID ? { section_uuids: [sectionUUID] } : {}),
+        },
+      ])
+    );
+  }
+  formData.append("start_date", startDate);
+  formData.append("end_date", endDate);
+  if (attachments[0]) formData.append("attachment", attachments[0]);
+  if (existingAttachmentUUID) {
+    formData.append("keep_attachment_uuid", existingAttachmentUUID);
+  }
+  return formData;
+};
+
 // Badge styling for the Academic Calendar list, matching the reference design
 // (solid, colored pill per category — Exam = red, Event = blue, etc.)
 // The API returns event_type/display_type as singular ("Exam", "Event"),
@@ -176,12 +260,73 @@ function CalendarCategoryBadge({ category }) {
 // start_date/end_date or a pre-built date_label, event_type/display_type,
 // audience_label, notes) rather than the uuid/title/category/startDate shape
 // used elsewhere in this file. These helpers normalize that.
-const getCalendarUUID = (item) => item.calendar_uuid ?? item.uuid ?? item.id;
-const getCalendarTitle = (item) => item.event_name ?? item.title ?? "";
+const getCalendarUUID = (item) =>
+
+  item.calendar_uuid ?? item.draft_uuid ?? item.uuid ?? item.id;
+
+const getCalendarTitle = (item) => item.title ?? item.event_name ?? "";
+
 const getCalendarCategory = (item) =>
-  item.display_type ?? item.event_type ?? item.category ?? "General";
+
+  CATEGORY_REVERSE_MAP[item.category] ??
+
+  item.display_type ??
+
+  item.event_type ??
+
+  item.category ??
+
+  "Academic";
+
 const getCalendarDescription = (item) =>
-  item.notes ?? item.description ?? item.body ?? "";
+
+  item.description ?? item.notes ?? item.body ?? "";
+
+const getCalendarStatus = (item) => {
+
+  const status = String(item.status ?? "DRAFT").toLowerCase();
+
+  return status.charAt(0).toUpperCase() + status.slice(1);
+
+};
+
+const getCalendarAudience = (item) =>
+
+  AUDIENCE_REVERSE_MAP[item.audience_type] ?? item.audience_type ?? item.audience ?? "";
+
+const getCalendarAttachments = (item) => {
+
+  const att = item.attachment;
+
+  if (!att) return [];
+
+  return [
+
+    {
+
+      uuid: att.attachment_uuid ?? att.uuid,
+
+      name: att.original_file_name ?? att.name,
+
+      type: att.mime_type ?? att.type,
+
+      url: att.file_url ?? att.url,
+
+    },
+
+  ];
+
+};
+
+const getCalendarTargetClass = (item) => {
+  if (Array.isArray(item.class_audiences) && item.class_audiences.length > 0) {
+    return item.class_audiences
+      .map((a) => a.section_name ?? a.class_name)
+      .filter(Boolean)
+      .join(", ");
+  }
+  return item.target_class ?? item.targetClass ?? "";
+};
 
 const getNoticeUUID = (item) => item.notice_uuid ?? item.uuid ?? item.id;
 const getNoticeBody = (item) => item.description ?? item.body ?? "";
@@ -196,7 +341,15 @@ const getNoticeAttachments = (item) =>
     url: attachment.file_url ?? attachment.url,
   }));
 const getNoticeAudience = (item) => item.audience_type ?? item.audience ?? "";
-const getNoticeTargetClass = (item) => item.target_class ?? item.targetClass;
+const getNoticeTargetClass = (item) => {
+  if (Array.isArray(item.audiences) && item.audiences.length > 0) {
+    return item.audiences
+      .map((a) => a.section_name ?? a.class_name)
+      .filter(Boolean)
+      .join(", ");
+  }
+  return item.target_class ?? item.targetClass;
+};
 const getEventUUID = (item) => item.event_uuid ?? item.uuid ?? item.id;
 const getEventBody = (item) => item.description ?? item.body ?? "";
 const getEventStatus = (item) => {
@@ -210,7 +363,15 @@ const getEventAttachments = (item) =>
     url: attachment.file_url ?? attachment.url,
   }));
 const getEventAudience = (item) => item.audience_type ?? item.audience ?? "";
-const getEventTargetClass = (item) => item.target_class ?? item.targetClass;
+const getEventTargetClass = (item) => {
+  if (Array.isArray(item.audiences) && item.audiences.length > 0) {
+    return item.audiences
+      .map((a) => a.section_name ?? a.class_name)
+      .filter(Boolean)
+      .join(", ");
+  }
+  return item.target_class ?? item.targetClass;
+};
 const getHolidayUUID = (item) => item.holiday_uuid ?? item.draft_uuid ?? item.uuid ?? item.id;
 const getHolidayBody = (item) => item.description ?? item.body ?? "";
 const getHolidayStatus = (item) => {
@@ -242,6 +403,7 @@ export default function Notices() {
   audience: "All",
   targetClass: "",
   selectedClassUUID: "",
+  selectedSectionUUID: "",
   attachments: [],
   dateRange: EMPTY_RANGE,
 });
@@ -254,7 +416,8 @@ export default function Notices() {
   const [loadingNotices, setLoadingNotices] = useState(false);
   const [deletingUUID, setDeletingUUID] = useState(null);
   const [editingCalendarUUID, setEditingCalendarUUID] = useState(null);
-  const [openMenuUUID, setOpenMenuUUID] = useState(null);
+const [loadingCalendarDetail, setLoadingCalendarDetail] = useState(false);
+const [openMenuUUID, setOpenMenuUUID] = useState(null);
   const [editingNoticeUUID, setEditingNoticeUUID] = useState(null);
   const [deletingNoticeUUID, setDeletingNoticeUUID] = useState(null);
   const [loadingNoticeDetail, setLoadingNoticeDetail] = useState(false);
@@ -266,31 +429,32 @@ export default function Notices() {
   const [deletingEventUUID, setDeletingEventUUID] = useState(null);
   const [loadingEventDetail, setLoadingEventDetail] = useState(false);
   const [togglingEventUUID, setTogglingEventUUID] = useState(null);
-const [holidays, setHolidays] = useState([]);
-const [loadingHolidays, setLoadingHolidays] = useState(false);
-const [savingHoliday, setSavingHoliday] = useState(false);
-const [editingHolidayUUID, setEditingHolidayUUID] = useState(null);
-const [deletingHolidayUUID, setDeletingHolidayUUID] = useState(null);
-const [loadingHolidayDetail, setLoadingHolidayDetail] = useState(false);
-const [togglingHolidayUUID, setTogglingHolidayUUID] = useState(null);
+  const [holidays, setHolidays] = useState([]);
+  const [loadingHolidays, setLoadingHolidays] = useState(false);
+  const [savingHoliday, setSavingHoliday] = useState(false);
+  const [editingHolidayUUID, setEditingHolidayUUID] = useState(null);
+  const [deletingHolidayUUID, setDeletingHolidayUUID] = useState(null);
+  const [loadingHolidayDetail, setLoadingHolidayDetail] = useState(false);
+  const [togglingHolidayUUID, setTogglingHolidayUUID] = useState(null);
+  const [togglingCalendarUUID, setTogglingCalendarUUID] = useState(null);
   const fetchAcademicCalendar = useCallback(async () => {
-    setLoadingCalendar(true);
-    try {
-      const res = await getAcademicCalendar();
-      const list = Array.isArray(res) ? res : res?.data ?? [];
-      setAcademicItems(list);
-    } catch (err) {
-      toast.error("Failed to load academic calendar");
-    } finally {
-      setLoadingCalendar(false);
-    }
-  }, []);
+  setLoadingCalendar(true);
+  try {
+    const res = await getAcademicCalendar(1, 100);
+    const list = Array.isArray(res) ? res : res?.data ?? [];
+    setAcademicItems(list);
+  } catch (err) {
+    toast.error("Failed to load academic calendar");
+  } finally {
+    setLoadingCalendar(false);
+  }
+}, []);
 
   useEffect(() => {
   if (form.audience === "Class" && classesList.length === 0 && !loadingClasses) {
     setLoadingClasses(true);
     getClasses()
-      .then((res) => setClassesList(Array.isArray(res) ? res : res?.data ?? []))
+      .then((res) => setClassesList(getResponseList(res)))
       .catch(() => toast.error("Failed to load classes"))
       .finally(() => setLoadingClasses(false));
   }
@@ -300,28 +464,14 @@ useEffect(() => {
   if (form.audience === "Class" && sectionsList.length === 0 && !loadingSections) {
     setLoadingSections(true);
     getSections()
-      .then((res) => setSectionsList(Array.isArray(res) ? res : res?.data ?? []))
+      .then((res) => setSectionsList(getResponseList(res)))
       .catch(() => toast.error("Failed to load sections"))
       .finally(() => setLoadingSections(false));
   }
 }, [form.audience, sectionsList.length, loadingSections]);
 
-useEffect(() => {
-  if (form.targetClass && !form.selectedClassUUID && sectionsList.length > 0) {
-    const match = sectionsList.find(
-      (s) => (s.section_name ?? s.name) === form.targetClass
-    );
-    if (match) {
-      setForm((f) => ({
-        ...f,
-        selectedClassUUID: match.class_uuid ?? match.classUUID ?? "",
-      }));
-    }
-  }
-}, [sectionsList, form.targetClass, form.selectedClassUUID]);
-
 const filteredSections = sectionsList.filter(
-  (s) => (s.class_uuid ?? s.classUUID) === form.selectedClassUUID
+  (s) => String(s.class_uuid ?? s.classUUID) === String(form.selectedClassUUID)
 );
   useEffect(() => {
     if (activeTab === "academic") {
@@ -386,6 +536,7 @@ useEffect(() => {
     dateRange: EMPTY_RANGE,
     targetClass: "",
     selectedClassUUID: "",
+    selectedSectionUUID: "",
   }));
   setFormErrors({});
 };
@@ -433,47 +584,103 @@ const closeDialog = () => {
     // The backend expects snake_case fields (event_name, start_date, end_date,
     // event_type, notes) — not the title/startDate/endDate/category/description
     // shape used by the local notices store.
-    if (activeTab === "academic") {
-      const payload = {
-        event_name: form.title,
-        notes: form.body,
-        event_type: form.category,
-        audience: form.audience,
-        targetClass: form.audience === "Class" ? form.targetClass : undefined,
-        start_date: format(form.dateRange.from, "yyyy-MM-dd"),
-        end_date: format(form.dateRange.to ?? form.dateRange.from, "yyyy-MM-dd"),
-      };
+   if (activeTab === "academic") {
 
-      setSavingCalendar(true);
-      try {
-        if (editingCalendarUUID) {
-          await updateAcademicCalendar(editingCalendarUUID, payload);
-          toast.success("Academic calendar entry updated");
-        } else {
-          await createAcademicCalendar(payload);
-          toast.success("Academic calendar entry created");
-        }
-        await fetchAcademicCalendar();
-        closeDialog();
-      } catch (err) {
-        toast.error(
-          editingCalendarUUID
-            ? "Failed to update calendar entry"
-            : "Failed to create calendar entry"
-        );
-      } finally {
-        setSavingCalendar(false);
-      }
-      return;
-    }
+  const formData = buildAcademicCalendarFormData({
 
+    title: form.title,
+
+    body: form.body,
+
+    category: form.category,
+
+    audience: form.audience,
+
+    classUUID: form.audience === "Class" ? form.selectedClassUUID : undefined,
+
+    sectionUUID: form.audience === "Class" ? form.selectedSectionUUID : undefined,
+
+    startDate: format(form.dateRange.from, "yyyy-MM-dd"),
+
+    endDate: format(form.dateRange.to ?? form.dateRange.from, "yyyy-MM-dd"),
+
+    attachments: form.attachments,
+
+    existingAttachmentUUID: form.existingAttachments?.[0]?.uuid,
+
+  });
+
+  setSavingCalendar(true);
+
+  try {
+
+    const response = editingCalendarUUID
+
+      ? await updateAcademicCalendar(editingCalendarUUID, formData)
+
+      : publish
+
+      ? await publishAcademicCalendar(formData)
+
+      : await saveAcademicCalendarDraft(formData);
+
+    const savedItem = response?.data ?? response;
+
+    setAcademicItems((current) =>
+
+      editingCalendarUUID
+
+        ? current.map((it) =>
+
+            getCalendarUUID(it) === editingCalendarUUID ? savedItem : it
+
+          )
+
+        : [savedItem, ...current]
+
+    );
+
+    toast.success(
+
+      response?.message ??
+
+        (editingCalendarUUID ? "Updated" : publish ? "Published" : "Saved as draft")
+
+    );
+
+    closeDialog();
+
+  } catch (err) {
+
+    toast.error(
+
+      getApiErrorMessage(
+
+        err,
+
+        publish ? "Failed to publish calendar entry" : "Failed to save calendar draft"
+
+      )
+
+    );
+
+  } finally {
+
+    setSavingCalendar(false);
+
+  }
+
+  return;
+
+}
     if (activeTab === "events") {
       const formData = buildNoticeFormData({
         title: form.title,
         body: form.body,
         category: form.category,
         audience: form.audience,
-        targetClass: form.audience === "Class" ? form.targetClass : undefined,
+        classUUID: form.audience === "Class" ? form.selectedClassUUID : undefined,
+        sectionUUID: form.audience === "Class" ? form.selectedSectionUUID : undefined,
         startDate: format(form.dateRange.from, "yyyy-MM-dd"),
         endDate: format(form.dateRange.to ?? form.dateRange.from, "yyyy-MM-dd"),
         attachments: form.attachments,
@@ -508,16 +715,13 @@ const closeDialog = () => {
     }
 
     if (activeTab === "holidays") {
-  const matchedSection = filteredSections.find(
-    (s) => (s.section_name ?? s.name) === form.targetClass
-  );
   const formData = buildHolidayFormData({
     title: form.title,
     body: form.body,
     category: form.category,
     audience: form.audience,
     classUUID: form.audience === "Class" ? form.selectedClassUUID : undefined,
-    sectionUUID: form.audience === "Class" ? matchedSection?.section_uuid ?? matchedSection?.uuid : undefined,
+    sectionUUID: form.audience === "Class" ? form.selectedSectionUUID : undefined,
     startDate: format(form.dateRange.from, "yyyy-MM-dd"),
     endDate: format(form.dateRange.to ?? form.dateRange.from, "yyyy-MM-dd"),
     attachments: form.attachments,
@@ -556,7 +760,8 @@ const closeDialog = () => {
       body: form.body,
       category: form.category,
       audience: form.audience,
-      targetClass: form.audience === "Class" ? form.targetClass : undefined,
+      classUUID: form.audience === "Class" ? form.selectedClassUUID : undefined,
+      sectionUUID: form.audience === "Class" ? form.selectedSectionUUID : undefined,
       startDate: format(form.dateRange.from, "yyyy-MM-dd"),
       endDate: format(form.dateRange.to ?? form.dateRange.from, "yyyy-MM-dd"),
       attachments: form.attachments,
@@ -579,42 +784,94 @@ setSavingNotice(true);
           : [savedNotice, ...current]
       );
       toast.success(
-        editingNoticeUUID ? "Updated" : publish ? "Published" : "Saved as draft"
+        response?.message ??
+          (editingNoticeUUID ? "Updated" : publish ? "Published" : "Saved as draft")
       );
       closeDialog();
     } catch (err) {
       toast.error(
-        err.response?.data?.message ??
-          err.response?.data?.detail ??
-          (publish ? "Failed to publish notice" : "Failed to save notice draft")
+        getApiErrorMessage(
+          err,
+          publish ? "Failed to publish notice" : "Failed to save notice draft"
+        )
       );
     } finally {
       setSavingNotice(false);
     }
   };
 
-  const openEditCalendar = (item) => {
+ const openEditCalendar = async (item) => {
+
+  const uuid = getCalendarUUID(item);
+
+  setOpenMenuUUID(null);
+
+  setEditingCalendarUUID(uuid);
+
+  setFormErrors({});
+
+  setOpen(true);
+
+  setLoadingCalendarDetail(true);
+
+  try {
+
+    const response = await getAcademicCalendarById(uuid);
+
+    const detail = response?.data ?? response;
+
+    const firstAudience = Array.isArray(detail.class_audiences)
+
+      ? detail.class_audiences[0]
+
+      : null;
+
     setForm({
-      title: getCalendarTitle(item),
-      body: getCalendarDescription(item),
-      category: getCalendarCategory(item),
-      audience: item.audience ?? "All",
-      targetClass: item.targetClass ?? "",
+
+      title: getCalendarTitle(detail),
+
+      body: getCalendarDescription(detail),
+
+      category: CATEGORY_REVERSE_MAP[detail.category] ?? detail.category ?? "Academic",
+
+      audience: AUDIENCE_REVERSE_MAP[detail.audience_type] ?? detail.audience_type ?? "All",
+
+      targetClass: "",
+
+      selectedClassUUID: firstAudience?.class_uuid ?? detail.class_uuid ?? "",
+
+      selectedSectionUUID:
+        firstAudience?.section_uuids?.[0] ?? firstAudience?.section_uuid ?? detail.section_uuid ?? "",
+
       attachments: [],
+
+      existingAttachments: getCalendarAttachments(detail),
+
       dateRange: {
-        from: (item.start_date ?? item.startDate)
-          ? new Date(item.start_date ?? item.startDate)
-          : undefined,
-        to: (item.end_date ?? item.endDate)
-          ? new Date(item.end_date ?? item.endDate)
-          : undefined,
+
+        from: detail.start_date ? new Date(detail.start_date) : undefined,
+
+        to: detail.end_date ? new Date(detail.end_date) : undefined,
+
       },
+
     });
-   setEditingCalendarUUID(getCalendarUUID(item));
-    setOpenMenuUUID(null);
-    setFormErrors({});
-    setOpen(true);
-  };
+
+  } catch (err) {
+
+    toast.error("Failed to load calendar entry details");
+
+    setOpen(false);
+
+    setEditingCalendarUUID(null);
+
+  } finally {
+
+    setLoadingCalendarDetail(false);
+
+  }
+
+};
 
   const handleDeleteCalendar = async (item) => {
     const uuid = getCalendarUUID(item);
@@ -636,6 +893,28 @@ setSavingNotice(true);
       setDeletingUUID(null);
     }
   };
+
+  const handleToggleCalendarPublish = async (item) => {
+    const uuid = getCalendarUUID(item);
+    if (!uuid) return;
+    setOpenMenuUUID(null);
+    const isPublished = getCalendarStatus(item) === "Published";
+    setTogglingCalendarUUID(uuid);
+    try {
+      const response = isPublished
+        ? await unpublishAcademicCalendarById(uuid)
+        : await publishAcademicCalendarById(uuid);
+      const updated = response?.data ?? response;
+      setAcademicItems((prev) =>
+        prev.map((entry) => (getCalendarUUID(entry) === uuid ? updated : entry))
+      );
+      toast.success(isPublished ? "Unpublished" : "Published");
+    } catch (err) {
+      toast.error(isPublished ? "Failed to unpublish" : "Failed to publish");
+    } finally {
+      setTogglingCalendarUUID(null);
+    }
+  };
 const openEditNotice = async (item) => {
     const uuid = getNoticeUUID(item);
     setOpenMenuUUID(null);
@@ -646,6 +925,7 @@ const openEditNotice = async (item) => {
     try {
       const response = await getNoticeById(uuid);
       const detail = response?.data ?? response;
+      const firstAudience = Array.isArray(detail.audiences) ? detail.audiences[0] : null;
       setForm({
         title: detail.title ?? "",
         body: getNoticeBody(detail),
@@ -654,7 +934,9 @@ const openEditNotice = async (item) => {
           AUDIENCE_REVERSE_MAP[getNoticeAudience(detail)] ??
           getNoticeAudience(detail) ??
           "All",
-        targetClass: getNoticeTargetClass(detail) ?? "",
+        targetClass: firstAudience?.section_name ?? "",
+        selectedClassUUID: firstAudience?.class_uuid ?? "",
+        selectedSectionUUID: firstAudience?.section_uuid ?? "",
         attachments: [],
         existingAttachments: getNoticeAttachments(detail),
         dateRange: {
@@ -750,13 +1032,16 @@ const openEditEvent = async (item) => {
     try {
       const response = await getEventById(uuid);
       const detail = response?.data ?? response;
+      const firstAudience = Array.isArray(detail.audiences) ? detail.audiences[0] : null;
       setForm({
         title: detail.title ?? "",
         body: getEventBody(detail),
         category: CATEGORY_REVERSE_MAP[detail.category] ?? detail.category ?? "Events",
         audience:
           AUDIENCE_REVERSE_MAP[getEventAudience(detail)] ?? getEventAudience(detail) ?? "All",
-        targetClass: getEventTargetClass(detail) ?? "",
+        targetClass: firstAudience?.section_name ?? "",
+        selectedClassUUID: firstAudience?.class_uuid ?? "",
+        selectedSectionUUID: firstAudience?.section_uuid ?? "",
         attachments: [],
         existingAttachments: getEventAttachments(detail),
         dateRange: {
@@ -831,6 +1116,7 @@ const openEditEvent = async (item) => {
       audience: AUDIENCE_REVERSE_MAP[getHolidayAudience(detail)] ?? getHolidayAudience(detail) ?? "All",
       targetClass: getHolidayTargetClass(detail) ?? "",
       selectedClassUUID: detail.class_uuid ?? "",
+      selectedSectionUUID: detail.section_uuid ?? "",
       attachments: [],
       existingAttachments: getHolidayAttachments(detail),
       dateRange: {
@@ -965,19 +1251,21 @@ const isEventsTab = activeTab === "events";
 const isHolidaysTab = activeTab === "holidays";
 const displayList = isAcademicTab ? academicItems : isEventsTab ? events : isHolidaysTab ? holidays : visibleNotices;
 
-const listLoading = isEventsTab ? loadingEvents : isHolidaysTab ? loadingHolidays : loadingNotices;
-const getItemUUID = isEventsTab ? getEventUUID : isHolidaysTab ? getHolidayUUID : getNoticeUUID;
-const getItemBody = isEventsTab ? getEventBody : isHolidaysTab ? getHolidayBody : getNoticeBody;
-const getItemStatus = isEventsTab ? getEventStatus : isHolidaysTab ? getHolidayStatus : getNoticeStatus;
-const getItemAttachments = isEventsTab ? getEventAttachments : isHolidaysTab ? getHolidayAttachments : getNoticeAttachments;
-const getItemAudience = isEventsTab ? getEventAudience : isHolidaysTab ? getHolidayAudience : getNoticeAudience;
-const openEditItem = isEventsTab ? openEditEvent : isHolidaysTab ? openEditHoliday : openEditNotice;
-const handleDeleteItem = isEventsTab ? handleDeleteEvent : isHolidaysTab ? handleDeleteHoliday : handleDeleteNotice;
-const handleToggleItemPublish = isEventsTab ? handleToggleEventPublish : isHolidaysTab ? handleToggleHolidayPublish : handleToggleNoticePublish;
-const deletingItemUUID = isEventsTab ? deletingEventUUID : isHolidaysTab ? deletingHolidayUUID : deletingNoticeUUID;
-const togglingItemUUID = isEventsTab ? togglingEventUUID : isHolidaysTab ? togglingHolidayUUID : togglingNoticeUUID;
-const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday : savingNotice;
-
+const listLoading = isAcademicTab ? loadingCalendar : isEventsTab ? loadingEvents : isHolidaysTab ? loadingHolidays : loadingNotices;
+const getItemUUID = isAcademicTab ? getCalendarUUID : isEventsTab ? getEventUUID : isHolidaysTab ? getHolidayUUID : getNoticeUUID;
+const getItemTitle = isAcademicTab ? getCalendarTitle : (item) => item.title;
+const getItemCategory = isAcademicTab ? getCalendarCategory : (item) => item.category;
+const getItemBody = isAcademicTab ? getCalendarDescription : isEventsTab ? getEventBody : isHolidaysTab ? getHolidayBody : getNoticeBody;
+const getItemStatus = isAcademicTab ? getCalendarStatus : isEventsTab ? getEventStatus : isHolidaysTab ? getHolidayStatus : getNoticeStatus;
+const getItemAttachments = isAcademicTab ? getCalendarAttachments : isEventsTab ? getEventAttachments : isHolidaysTab ? getHolidayAttachments : getNoticeAttachments;
+const getItemAudience = isAcademicTab ? getCalendarAudience : isEventsTab ? getEventAudience : isHolidaysTab ? getHolidayAudience : getNoticeAudience;
+const getItemTargetClass = isAcademicTab ? getCalendarTargetClass : isEventsTab ? getEventTargetClass : isHolidaysTab ? getHolidayTargetClass : getNoticeTargetClass;
+const openEditItem = isAcademicTab ? openEditCalendar : isEventsTab ? openEditEvent : isHolidaysTab ? openEditHoliday : openEditNotice;
+const handleDeleteItem = isAcademicTab ? handleDeleteCalendar : isEventsTab ? handleDeleteEvent : isHolidaysTab ? handleDeleteHoliday : handleDeleteNotice;
+const handleToggleItemPublish = isAcademicTab ? handleToggleCalendarPublish : isEventsTab ? handleToggleEventPublish : isHolidaysTab ? handleToggleHolidayPublish : handleToggleNoticePublish;
+const deletingItemUUID = isAcademicTab ? deletingUUID : isEventsTab ? deletingEventUUID : isHolidaysTab ? deletingHolidayUUID : deletingNoticeUUID;
+const togglingItemUUID = isAcademicTab ? togglingCalendarUUID : isEventsTab ? togglingEventUUID : isHolidaysTab ? togglingHolidayUUID : togglingNoticeUUID;
+const savingCurrent = isAcademicTab? savingCalendar: isEventsTab? savingEvent: isHolidaysTab? savingHoliday: savingNotice;
   return (
     <PageContainer>
       <PageHeader
@@ -1020,8 +1308,8 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
                   {sectionLabel.toLowerCase()}
                 </DialogTitle>
               </DialogHeader>
-            {loadingNoticeDetail || loadingEventDetail || loadingHolidayDetail ? (
-                    <div className="p-8 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+{loadingNoticeDetail || loadingEventDetail || loadingHolidayDetail || loadingCalendarDetail ? (
+                      <div className="p-8 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading notice…
                 </div>
@@ -1154,7 +1442,12 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
       <Select
         value={form.selectedClassUUID}
         onValueChange={(v) =>
-          setForm((f) => ({ ...f, selectedClassUUID: v, targetClass: "" }))
+          setForm((f) => ({
+            ...f,
+            selectedClassUUID: v,
+            selectedSectionUUID: "",
+            targetClass: "",
+          }))
         }
       >
         <SelectTrigger>
@@ -1176,8 +1469,17 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
     <div className="space-y-1.5">
       <Label>Section</Label>
       <Select
-        value={form.targetClass}
-        onValueChange={(v) => setForm((f) => ({ ...f, targetClass: v }))}
+        value={form.selectedSectionUUID}
+        onValueChange={(v) => {
+          const section = filteredSections.find(
+            (s) => String(s.section_uuid ?? s.uuid ?? s.id) === String(v)
+          );
+          setForm((f) => ({
+            ...f,
+            selectedSectionUUID: v,
+            targetClass: section?.section_name ?? section?.name ?? "",
+          }));
+        }}
         disabled={!form.selectedClassUUID}
       >
         <SelectTrigger>
@@ -1195,7 +1497,7 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
           {filteredSections.map((s) => (
             <SelectItem
               key={s.section_uuid ?? s.uuid ?? s.id}
-              value={s.section_name ?? s.name}
+              value={s.section_uuid ?? s.uuid ?? s.id}
             >
               {s.section_name ?? s.name}
             </SelectItem>
@@ -1230,6 +1532,38 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
                     />
                   </label>
 
+                  {form.existingAttachments?.length > 0 && (
+                    <div className="flex flex-col gap-1.5 mt-1">
+                      {form.existingAttachments.map((attachment) => (
+                        <div
+                          key={attachment.uuid ?? attachment.name}
+                          className="flex items-center justify-between rounded-md border px-2 py-1 text-xs bg-muted/20"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {attachmentIcon(attachment)}
+                            <span className="truncate max-w-[220px]">{attachment.name}</span>
+                            <span className="text-muted-foreground shrink-0">Current file</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm((current) => ({
+                                ...current,
+                                existingAttachments: current.existingAttachments.filter(
+                                  (item) => item.uuid !== attachment.uuid
+                                ),
+                              }))
+                            }
+                            className="text-muted-foreground hover:text-foreground shrink-0"
+                            aria-label={`Remove ${attachment.name}`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {form.attachments.length > 0 && (
                     <div className="flex flex-col gap-1.5 mt-1">
                       {form.attachments.map((file, idx) => (
@@ -1261,46 +1595,52 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
               </div>
               )}
               <DialogFooter>
-                {isAcademicTab ? (
-                  <Button
-                    className="gradient-primary border-0"
-                    onClick={() => submit(true)}
-                    disabled={savingCalendar}
-                  >
-                    {savingCalendar ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                    {editingCalendarUUID ? "Save Changes" : "Create"}
-                  </Button>
-                ) : (
-                  <>
-                   <Button
-                      variant="outline"
-                      onClick={() => submit(false)}
-                      disabled={savingCurrent}
-                    >
-                      {savingCurrent ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : null}
-                      Save Draft
-                    </Button>
-                    <Button
-                      className="gradient-primary border-0"
-                      onClick={() => submit(true)}
-                      disabled={savingCurrent}
-                    >
-                      {savingCurrent ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4" />
-                      )}
-                      Publish
-                    </Button>
-                  </>
-                )}
-              </DialogFooter>
+
+  <Button
+
+    variant="outline"
+
+    onClick={() => submit(false)}
+
+    disabled={savingCurrent}
+
+  >
+
+    {savingCurrent ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+
+    Save Draft
+
+  </Button>
+
+  <Button
+
+    className="gradient-primary border-0"
+
+    onClick={() => submit(true)}
+
+    disabled={savingCurrent}
+
+  >
+
+    {savingCurrent ? (
+
+      <Loader2 className="h-4 w-4 animate-spin" />
+
+    ) : (
+
+      <Send className="h-4 w-4" />
+
+    )}
+
+    {editingCalendarUUID || editingNoticeUUID || editingEventUUID || editingHolidayUUID
+
+      ? "Save Changes"
+
+      : "Publish"}
+
+  </Button>
+
+</DialogFooter>
             </DialogContent>
           </Dialog>
         }
@@ -1322,7 +1662,7 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
         </TabsList>
       </Tabs>
 
-      {isAcademicTab ? (
+      {false ? (
         // ---------------- Academic Calendar: reference-style list ----------------
         <Card>
           <CardContent className="p-0">
@@ -1367,9 +1707,14 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <CalendarCategoryBadge category={getCalendarCategory(item)} />
+  <CalendarCategoryBadge category={getCalendarCategory(item)} />
+  {getCalendarStatus(item) === "Draft" && (
+    <Badge variant="outline" className="text-[10px]">
+      Draft
+    </Badge>
+  )}
 
-                        <Popover
+  <Popover
                           open={openMenuUUID === uuid}
                           onOpenChange={(o) => setOpenMenuUUID(o ? uuid : null)}
                         >
@@ -1437,13 +1782,13 @@ const savingCurrent = isEventsTab ? savingEvent : isHolidaysTab ? savingHoliday 
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{n.title}</span>
+                      <span className="text-sm font-medium">{getItemTitle(n)}</span>
                       <Badge variant="outline" className="text-[10px]">
-                        {n.category}
+                        {getItemCategory(n)}
                       </Badge>
                       <Badge variant="secondary" className="text-[10px]">
                         {getItemAudience(n)}
-                        {n.targetClass ? ` · ${n.targetClass}` : ""}
+                        {getItemTargetClass(n) ? ` · ${getItemTargetClass(n)}` : ""}
                       </Badge>
                       <Badge
                         variant={getItemStatus(n) === "Published" ? "default" : "outline"}
