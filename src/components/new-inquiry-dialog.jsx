@@ -6,7 +6,7 @@ import {
   getSections,
 } from "../api/admissions";
 
-import { getClasses } from "../api/class";
+import { getClasses } from "../api/Class";
 import useAuthStore from "../store/authStore";
 
 import {

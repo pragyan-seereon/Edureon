@@ -1558,7 +1558,7 @@ import {
   getSections,
   reinstateAdmission,
 } from "../../../api/admissions";
-import { getClasses } from "../../../api/class";
+import { getClasses } from "../../../api/Class";
 
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";

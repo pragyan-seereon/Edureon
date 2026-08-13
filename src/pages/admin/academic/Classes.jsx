@@ -104,7 +104,7 @@ import {
   updateClass,
   deleteClass,
   getClassByUUID,
-} from "../../../api/class";
+} from "../../../api/Class";
 import {
   getDepartments,
   getDepartmentByUUID,

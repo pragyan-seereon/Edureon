@@ -1780,7 +1780,7 @@ import {
   // the backend supports it.
   deleteStudentDraft,
 } from "../api/students";
-import { getClasses } from "../api/class";
+import { getClasses } from "../api/Class";
 import useAuthStore from "../store/authStore";
 
 import { getSections } from "../api/admissions";

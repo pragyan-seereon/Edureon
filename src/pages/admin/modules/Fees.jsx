@@ -131,7 +131,7 @@ import {
 } from "../../../api/feeDiscount";
 
 import { getAllStudents } from "../../../api/students";
-import { getClasses } from "../../../api/class";
+import { getClasses } from "../../../api/Class";
 import { getSections } from "../../../api/section";
 
 import {
