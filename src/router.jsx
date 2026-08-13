@@ -122,7 +122,7 @@ const router = createBrowserRouter([
       { path: "/settings", element: <Settings />},
       //student routes
       { path: "/dashboard", element: <Dashboard /> },
-      { path: "/student/timetable", element: <Timetable /> },
+      { path: "/timetable", element: <Timetable /> },
       { path: "/student/attendance", element: <Attendance /> },
       { path: "/student/assignments", element: <Assignments /> },
       { path: "/student/results", element: <Results /> },
@@ -151,7 +151,7 @@ const router = createBrowserRouter([
       
       { path: "/admin/audit", element: <AdminAudit /> },
       { path: "/security-log", element: <SecurityLog /> },
-      { path: "/notifications", element: <Notifications /> },
+      { path: "/admin/notifications", element: <Notifications /> },
       //admin academic routes
       { path: "/admissions", element: <Admissions /> },
       { path: "/admin/admissions/:id", element: <AdmissionsDetails /> },
@@ -169,7 +169,7 @@ const router = createBrowserRouter([
       { path: "/timetable", element: <TimeTable /> },
       { path: "/subjects/:id", element: <SubjectDetail /> },
       { path: "/classes/:sectionUUID", element: <SectionDetail /> },
-      { path: "/sudents/archive", element: <StudentArchive /> },
+      { path: "/students/archive", element: <StudentArchive /> },
 
       
 
