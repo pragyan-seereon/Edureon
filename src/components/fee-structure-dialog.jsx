@@ -7,16 +7,15 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Plus, Trash2 } from "lucide-react";
-import {
-  createFeeStructure,
-  updateFeeStructure,
-} from "../api/feeStructure";
+
 import { getClasses } from "../api/class";
 import useAuthStore from "../store/authStore";
 import { toast } from "sonner";
 
 
-const COURSES = ["CBSE", "ICSE", "State Board", "IB", "Cambridge"];
+const COURSES = ["CBSE", "ICSE", "STATE", "IB", "IGCSE"];
+
+const CATEGORIES = ["GENERAL", "SC", "ST", "OBC", "EWS", "CUSTOM"];
 
 const FREQ = [
   "MONTHLY",
@@ -26,33 +25,63 @@ const FREQ = [
   "ONE_TIME",
 ];
 
-const presetLabels = [
-  "Base Fee","Tuition Fee","Hostel Fee","Transport Fee","Fooding Fee",
-  "Picnic Fee","Lab Fee","Library Fee","Exam Fee","Annual Charges"
-];
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
-let _cid = 0;
-const newComp = (name = "", freq = "MONTHLY") => ({
-  id: "c" + ++_cid + "_" + Date.now(),
-  component_name: name,
-  amount: 0,
-  frequency: freq,
-  is_optional: false,
-});
+// FastAPI can send `detail` as: a plain string, a single validation-error
+// object ({type, loc, msg, input}), an array of those objects, or (rarely)
+// something else entirely. Never hand a raw object/array to toast.error —
+// Sonner will try to render it as a React child and crash.
+const getErrorMessage = (err) => {
+  const detail = err?.response?.data?.detail;
 
-export function FeeStructureDialog({ open, onOpenChange, structure }) {
-const instituteUUID = useAuthStore((state) => state.instituteUUID);
-const [classes, setClasses] = useState([]);
-const [f, setF] = useState({
+  if (!detail) return err?.message || "Something went wrong";
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : item?.msg || JSON.stringify(item)
+      )
+      .join(", ");
+  }
+
+  if (typeof detail === "object") {
+    return detail.msg || JSON.stringify(detail);
+  }
+
+  return "Something went wrong";
+};
+
+const emptyForm = () => ({
   academic_year: "2025-26",
   class_uuid: "",
-  course_name: "CBSE",
+  course_board: "CBSE",
+  category: "GENERAL",
   structure_name: "",
-  due_day: 10,
-  late_fee_amount: 500,
-  grace_days: 0,
-  components: [newComp("Base Fee")],
+  description: "",
+  effective_from: todayISO(),
+  effective_to: "",
+  due_day_of_month: 10,
+  late_fee_per_month: 500,
+  grace_days_after_due: 0,
+  is_default: false,
+  is_active: true,
+  components: [],
 });
+
+export function FeeStructureDialog({
+  open,
+  onOpenChange,
+  structure,
+  components = [],
+  onSave,
+}) {
+const instituteUUID = useAuthStore((state) => state.instituteUUID);
+const [classes, setClasses] = useState([]);
+const [f, setF] = useState(emptyForm());
 
 useEffect(() => {
 
@@ -61,37 +90,35 @@ useEffect(() => {
     setF({
       academic_year: structure.academic_year,
       class_uuid: structure.class_uuid,
-      course_name: structure.course_name,
+      course_board: structure.course_board || "CBSE",
+      category: structure.category || "GENERAL",
       structure_name: structure.structure_name,
-      due_day: structure.due_day,
-      late_fee_amount: structure.late_fee_amount,
-      grace_days: structure.grace_days,
+      description: structure.description || "",
+      effective_from: structure.effective_from
+        ? String(structure.effective_from).slice(0, 10)
+        : todayISO(),
+      effective_to: structure.effective_to
+        ? String(structure.effective_to).slice(0, 10)
+        : "",
+      due_day_of_month: structure.due_day_of_month,
+      late_fee_per_month: structure.late_fee_per_month,
+      grace_days_after_due: structure.grace_days_after_due,
+      is_default: !!structure.is_default,
+      is_active: structure.is_active !== false,
 
       components: structure.components.map(c => ({
-        id: c.component_uuid,
+        id: c.fee_structure_component_uuid || c.component_uuid,
         component_uuid: c.component_uuid,
         component_name: c.component_name,
         amount: c.amount,
-        frequency: c.frequency,
+        collection_type: c.collection_type,
         is_optional: c.is_optional,
       })),
     });
 
   } else if (open) {
 
-    setF({
-      academic_year: "2025-26",
-      class_uuid:"",
-      course_name: "CBSE",
-      structure_name: "",
-      due_day: 10,
-      late_fee_amount: 500,
-      grace_days: 0,
-      components: [
-        newComp("Base Fee"),
-        newComp("Tuition Fee"),
-      ],
-    });
+    setF(emptyForm());
 
   }
 
@@ -111,9 +138,41 @@ useEffect(() => {
     fetchClasses();
 }, []);
 
-  const addComp = (label = "") =>
-    setF((p) => ({ ...p, components: [...p.components, newComp(label)] }));
+ const addComp = (componentUUID) => {
 
+  const component = components.find(
+    (c) => c.component_uuid === componentUUID
+  );
+
+  if (!component) return;
+
+  const exists = f.components.some(
+    (c) => c.component_uuid === component.component_uuid
+  );
+
+  if (exists) {
+    toast.error("Component already added.");
+    return;
+  }
+
+  setF((prev) => ({
+    ...prev,
+    components: [
+      ...prev.components,
+      {
+        id: Date.now().toString(),
+        component_uuid: component.component_uuid,
+        component_name: component.name,
+        amount: Number(component.default_amount),
+        collection_type:
+          component.type === "RECURRING"
+            ? "MONTHLY"
+            : "ONE_TIME",
+        is_optional: false,
+      },
+    ],
+  }));
+};
   const updComp = (id, patch) =>
     setF((p) => ({
       ...p,
@@ -129,8 +188,25 @@ useEffect(() => {
     return toast.error("Structure name required");
   }
 
+  if (!f.academic_year.trim()) {
+    return toast.error("Academic year required");
+  }
+
+  if (!f.class_uuid) {
+    return toast.error("Please select a class");
+  }
+
+  if (!f.effective_from) {
+    return toast.error("Effective from date is required");
+  }
+
   if (!f.components.length) {
     return toast.error("Add at least one fee component");
+  }
+
+  const missingComponent = f.components.some((c) => !c.component_uuid);
+  if (missingComponent) {
+    return toast.error("Every component must be linked to a component_uuid (custom rows aren't supported by the backend yet)");
   }
 
   try {
@@ -140,81 +216,73 @@ useEffect(() => {
       return;
     }
 
+    // Body matches FeeStructureCreate / FeeStructureUpdate exactly.
+    // institute_uuid is NOT a body field — the backend reads it from the
+    // X-Institute-UUID header (see FeeStructureService.create signature).
+    // Pass instituteUUID to onSave separately so the API layer can set the header.
     const payload = {
 
-          institute_uuid: instituteUUID,
+          structure_name: f.structure_name,
 
-          academic_year:f.academic_year,
+          academic_year: f.academic_year,
 
-          class_uuid:f.class_uuid,
+          class_uuid: f.class_uuid,
 
-          course_name:f.course_name,
+          category: f.category,
 
-          structure_name:f.structure_name,
+          collection_type: "MONTHLY",
 
-          collection_type:"MONTHLY",
+          effective_from: f.effective_from,
 
-          due_day:Number(f.due_day),
+          effective_to: f.effective_to || null,
 
-          late_fee_amount:Number(f.late_fee_amount),
+          is_default: f.is_default,
 
-          grace_days:Number(f.grace_days),
+          is_active: f.is_active,
+
+          description: f.description || null,
+
+          due_day_of_month: Number(f.due_day_of_month),
+
+          course_board: f.course_board || "CBSE",
+
+          late_fee_per_month: Number(f.late_fee_per_month),
+
+          grace_days_after_due: Number(f.grace_days_after_due),
 
           components: f.components.map((item, index) => ({
+              component_uuid: item.component_uuid,
+              amount: Number(item.amount),
+              collection_type: item.collection_type,
+              display_order: index + 1,
+              is_mandatory: !item.is_optional,
+              is_optional: item.is_optional,
+          }))
 
-          component_name: item.component_name,
-
-          amount: Number(item.amount),
-
-          frequency: item.frequency,
-
-          display_order: index + 1,
-
-          is_optional: item.is_optional,
-
-      })),
+  
     };
 
-    if (structure) {
+   await onSave(payload, structure, instituteUUID);
 
-      await updateFeeStructure(
-        structure.fee_structure_uuid,
-        payload
-      );
+toast.success(
+  structure
+    ? "Fee Structure Updated"
+    : "Fee Structure Created"
+);
 
-      toast.success("Fee Structure Updated");
-
-    } else {
-
-      await createFeeStructure(payload);
-
-      toast.success("Fee Structure Created");
-
-    }
-
-    onOpenChange(false);
+onOpenChange(false); 
 
   } catch (err) {
 
     console.log(err.response?.data);
 
-    const detail = err?.response?.data?.detail;
-
-    if (Array.isArray(detail)) {
-
-        toast.error(detail.map(item => item.msg).join(", "));
-
-    } else {
-
-        toast.error(detail || "Something went wrong");
-
-    }
+    toast.error(getErrorMessage(err));
 
 }
 };
 
   const monthly = f.components
-    .filter((c) => c.frequency === "MONTHLY")
+    .filter((c) => c.collection_type === "MONTHLY")
     .reduce((a, c) => a + c.amount, 0);
 
   return (
@@ -240,6 +308,14 @@ useEffect(() => {
                 })
               }
               placeholder="Class 6 — Standard 2025-26"
+            />
+          </Field>
+
+          <Field label="Academic year">
+            <Input
+              value={f.academic_year}
+              onChange={(e) => setF({ ...f, academic_year: e.target.value })}
+              placeholder="2025-26"
             />
           </Field>
 
@@ -269,23 +345,59 @@ useEffect(() => {
             </Select>
           </Field>
 
-          <Field label="Course / Board">
-            <Select value={f.course_name} onValueChange={(v) => setF({ ...f, course_name: v })}>
+          {/* <Field label="Course / Board">
+            <Select value={f.course_board} onValueChange={(v) => setF({ ...f, course_board: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {COURSES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
+          </Field> */}
+
+          <Field label="Effective from">
+            <Input
+              type="date"
+              value={f.effective_from}
+              onChange={(e) => setF({ ...f, effective_from: e.target.value })}
+            />
           </Field>
+
           <Field label="Due day of month">
             <Input
               type="number"
               min={1}
               max={28}
-              value={f.due_day}
-              onChange={(e) => setF({ ...f, due_day: parseInt(e.target.value) || 1 })}
+              value={f.due_day_of_month}
+              onChange={(e) => setF({ ...f, due_day_of_month: parseInt(e.target.value) || 1 })}
             />
           </Field>
+
+          <Field label="Category">
+            <Select value={f.category} onValueChange={(v) => setF({ ...f, category: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field label="Effective to (optional)">
+            <Input
+              type="date"
+              value={f.effective_to}
+              onChange={(e) => setF({ ...f, effective_to: e.target.value })}
+            />
+          </Field>
+
+          <Field label="Description (optional)" className="sm:col-span-3">
+            <Input
+              value={f.description}
+              onChange={(e) => setF({ ...f, description: e.target.value })}
+              placeholder="Internal notes about this structure"
+            />
+          </Field>
+
+
         </div>
 
         {/* Fee Components */}
@@ -298,26 +410,25 @@ useEffect(() => {
                   <SelectValue placeholder="Quick add..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {presetLabels.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  {components.map((item) => (
+                    <SelectItem
+                      key={item.component_uuid}
+                      value={item.component_uuid}
+                    >
+                      {item.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <Button size="sm" variant="outline" onClick={() => addComp("")}>
-                <Plus className="h-4 w-4" />Custom
-              </Button>
             </div>
           </div>
 
           <div className="space-y-2">
             {f.components.map((c) => (
               <div key={c.id} className="grid grid-cols-12 gap-2 items-center">
-                <Input
-                  className="col-span-5"
-                  placeholder="Label (e.g. Base Fee)"
-                  value={c.component_name}
-                  onChange={(e) => updComp(c.id, {
-  component_name: e.target.value,
-})}
-                />
+                <div className="col-span-5 text-sm px-2 py-2 rounded border border-border/40 bg-muted/30 truncate">
+                  {c.component_name || "—"}
+                </div>
                 <Input
                   className="col-span-3"
                   type="number"
@@ -327,8 +438,10 @@ useEffect(() => {
                   onChange={(e) => updComp(c.id, { amount: parseInt(e.target.value) || 0 })}
                 />
                 <Select
-                  value={c.frequency}
-                  onValueChange={(v) => updComp(c.id, { frequency: v })}
+                    value={c.collection_type}
+                    onValueChange={(v) =>
+                        updComp(c.id, { collection_type: v })
+                    }
                 >
                   <SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -358,16 +471,16 @@ useEffect(() => {
             <Input
               type="number"
               min={0}
-              value={f.late_fee_amount}
-              onChange={(e) => setF({ ...f, late_fee_amount: parseInt(e.target.value) || 0 })}
+              value={f.late_fee_per_month}
+              onChange={(e) => setF({ ...f, late_fee_per_month: parseInt(e.target.value) || 0 })}
             />
           </Field>
           <Field label="Grace days after due">
             <Input
               type="number"
               min={0}
-              value={f.grace_days}
-              onChange={(e) => setF({ ...f, grace_days: parseInt(e.target.value) || 0 })}
+              value={f.grace_days_after_due}
+              onChange={(e) => setF({ ...f, grace_days_after_due: parseInt(e.target.value) || 0 })}
             />
           </Field>
           <div className="text-xs text-muted-foreground self-end">

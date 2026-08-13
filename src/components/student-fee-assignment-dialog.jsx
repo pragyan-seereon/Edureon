@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,11 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-
+import { Checkbox } from "./ui/checkbox";
+import { Badge } from "./ui/badge";
+import { Switch } from "./ui/switch";
 import {
   Select,
   SelectContent,
@@ -19,540 +20,867 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-
-import { Textarea } from "./ui/textarea";
-
-import { toast } from "sonner";
-
 import {
-  createStudentFeeAssignment,
-  updateStudentFeeAssignment,
-} from "../api/studentFeeAssignment";
-
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "./ui/radio-group";
+import {
+  Search,
+  X,
+  Plus,
+  Trash2,
+  Users,
+  Layers,
+  Percent,
+  Calendar,
+} from "lucide-react";
+import { toast } from "sonner";
 import { getAllStudents } from "../api/students";
+import { getClasses } from "../api/class";
+import { getSections } from "../api/section";
 
-import { getFeeStructures } from "../api/feeStructure";
+const ACADEMIC_YEAR = "2026-27";
 
-import { generateStudentFeeDues } from "../api/studentFeeDue";
-
-import useAuthStore from "../store/authStore";
-
-export function StudentFeeAssignmentDialog({
+function StudentFeeAssignmentDialog({
   open,
   onOpenChange,
-  assignment,
+  onSave,
+  editing = null,
+  structures = [],
+  components = [],
+  discounts = [],
+  students = [],
 }) {
-  // ⚠️ CHECK: confirm these key names match your authStore.js
-  // (e.g. it might be `institute_id` instead of `instituteId`)
-  const instituteId = useAuthStore((s) => s.instituteId);
-  const instituteUUID = useAuthStore((s) => s.instituteUUID);
-
-  const [students, setStudents] = useState([]);
-  const [feeStructures, setFeeStructures] = useState([]);
+  const [mode, setMode] = useState("Structure");
+  const [structureId, setStructureId] = useState("");
+  const [target, setTarget] = useState("Class");
+  const [selectedClass, setSelectedClass] = useState("");
+  const [selectedSection, setSelectedSection] = useState("");
+  const [selectedStudents, setSelectedStudents] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [customComponents, setCustomComponents] = useState([]);
+  const [selectedDiscounts, setSelectedDiscounts] = useState([]);
+  const [academicYear, setAcademicYear] = useState(ACADEMIC_YEAR);
+  const [isActive, setIsActive] = useState(true);
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [studentsList, setStudentsList] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [f, setF] = useState({
-    student_id: "",
-    student_uuid: "",
-    fee_structure_id: "",
-    fee_structure_uuid: "",
-    class_name: "",
-    academic_year: "2025-26",
-    assigned_date: new Date().toISOString().slice(0, 10),
-    effective_from: new Date().toISOString().slice(0, 10),
-    effective_to: "",
-    remarks: "",
-  });
+  const [loadingStudents, setLoadingStudents] = useState(false);
 
-  // Filter students based on selected class
-  const filteredStudents = f.class_name
-    ? students.filter(
-        (student) =>
-          student.class_name?.trim() === f.class_name?.trim()
-      )
-    : students;
-
-  // ==========================
-  // Load Students
-  // Returns the fetched list so callers can use it immediately,
-  // instead of relying on state (which only updates on next render).
-  // ==========================
-
-  const loadStudents = async () => {
-    try {
-      const res = await getAllStudents();
-      const list = res.data.data || [];
-      setStudents(list);
-      return list;
-    } catch (err) {
-      toast.error("Failed to load students");
-      console.error("Error loading students:", err);
-      return [];
-    }
-  };
-
-  // ==========================
-  // Load Fee Structures
-  // Returns the fetched list for the same reason as above.
-  // ==========================
-
-  const loadFeeStructures = async () => {
-    try {
-      const res = await getFeeStructures();
-      const list = res.data.data || [];
-      setFeeStructures(list);
-      return list;
-    } catch (err) {
-      toast.error("Failed to load fee structures");
-      console.error("Error loading fee structures:", err);
-      return [];
-    }
-  };
-
-  // ==========================
-  // Initial Load
-  // ==========================
-
+  // Fetch classes and sections on mount
   useEffect(() => {
-    if (!open) return;
-
-    let cancelled = false;
-
-    (async () => {
-      const [studentList, feeStructureList] = await Promise.all([
-        loadStudents(),
-        loadFeeStructures(),
-      ]);
-
-      if (cancelled) return;
-
-      if (assignment) {
-        // The assignment record's own student_id / fee_structure_id may not
-        // line up with the id fields used by the students / feeStructures
-        // lists (only the *_uuid fields are guaranteed to match). Resolve
-        // the real list entries by uuid so the Select components can find
-        // a matching SelectItem and actually display the name.
-        const matchedStudent = studentList.find(
-          (s) => s.student_uuid === assignment.student_uuid
-        );
-        const matchedFeeStructure = feeStructureList.find(
-          (fsItem) => fsItem.fee_structure_uuid === assignment.fee_structure_uuid
-        );
-
-        if (!matchedStudent) {
-          console.warn(
-            "Could not find matching student for student_uuid:",
-            assignment.student_uuid
-          );
-        }
-        if (!matchedFeeStructure) {
-          console.warn(
-            "Could not find matching fee structure for fee_structure_uuid:",
-            assignment.fee_structure_uuid
-          );
-        }
-
-        setF({
-          student_id: matchedStudent?.id ?? assignment.student_id ?? "",
-          student_uuid: assignment.student_uuid,
-          fee_structure_id:
-            matchedFeeStructure?.id ?? assignment.fee_structure_id ?? "",
-          fee_structure_uuid: assignment.fee_structure_uuid,
-          class_name:
-            matchedFeeStructure?.class_name ||
-            assignment.fee_structure?.class_name ||
-            "",
-          academic_year: assignment.academic_year,
-          assigned_date: assignment.assigned_date,
-          effective_from: assignment.effective_from,
-          effective_to: assignment.effective_to || "",
-          remarks: assignment.remarks || "",
-        });
-      } else {
-        resetForm();
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, assignment]);
-
-  // ==========================
-  // Student Change
-  // ==========================
-
-  const handleStudent = (value) => {
-    if (!value || value === "undefined" || value === "null" || value === "") {
-      setF((prev) => ({
-        ...prev,
-        student_id: "",
-        student_uuid: "",
-      }));
-      return;
+    if (open) {
+      fetchClasses();
+      fetchSections();
+      fetchStudentsList();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-    const student = filteredStudents.find(
-      (s) => String(s.id) === String(value)
-    );
-
-    if (!student) {
-      toast.error("Selected student not found");
-      return;
-    }
-
-    setF((prev) => ({
-      ...prev,
-      student_id: student.id,
-      student_uuid: student.student_uuid,
-    }));
-  };
-
-  // ==========================
-  // Fee Structure Change
-  // ==========================
-
-  const handleFeeStructure = (value) => {
-    if (!value || value === "undefined" || value === "null" || value === "") {
-      setF((prev) => ({
-        ...prev,
-        fee_structure_id: "",
-        fee_structure_uuid: "",
-        class_name: "",
-      }));
-      return;
-    }
-
-    const fs = feeStructures.find(
-      (item) => String(item.id) === String(value)
-    );
-
-    if (fs) {
-      setF((prev) => ({
-        ...prev,
-        fee_structure_id: fs.id,
-        fee_structure_uuid: fs.fee_structure_uuid,
-        class_name: fs.class_name,
-        // Reset student selection when fee structure changes
-        student_id: "",
-        student_uuid: "",
-      }));
-    } else {
-      toast.error("Fee structure not found");
-    }
-  };
-
-  // ======================================
-  // Generate fee dues for a freshly-created
-  // assignment, up through today.
-  // ======================================
-
-  const generateDuesForAssignment = async (studentUuid, academicYear) => {
-    try {
-      await generateStudentFeeDues({
-        institute_uuid: instituteUUID,
-        student_uuid: studentUuid,
-        academic_year: academicYear,
-        generate_until: new Date().toISOString().slice(0, 10),
-      });
-
-      toast.success("Fee dues generated successfully.");
-    } catch (err) {
-      console.error("Error generating fee dues:", err);
-
-      const detail = err?.response?.data?.detail;
-
-      toast.error(
-        typeof detail === "string"
-          ? `Fee assigned, but dues generation failed: ${detail}`
-          : "Fee assigned, but dues generation failed. Generate dues manually."
+  // Populate form when editing
+  useEffect(() => {
+    if (open && editing) {
+      setMode(
+        editing.assignment_mode === "COMPONENTS"
+          ? "Components"
+          : "Structure"
       );
-    }
-  };
 
-  // ======================================
-  // Reset form to defaults
-  // ======================================
+      setStructureId(
+        editing.fee_structure_uuid || ""
+      );
 
-  const resetForm = () => {
-    setF({
-      student_id: "",
-      student_uuid: "",
-      fee_structure_id: "",
-      fee_structure_uuid: "",
-      class_name: "",
-      academic_year: "2025-26",
-      assigned_date: new Date().toISOString().slice(0, 10),
-      effective_from: new Date().toISOString().slice(0, 10),
-      effective_to: "",
-      remarks: "",
-    });
-  };
+      setTarget(
+        editing.target_type === "CLASS"
+          ? "Class"
+          : editing.target_type === "SECTION"
+          ? "Section"
+          : "Students"
+      );
 
-  // ======================================
-  // Save Assignment
-  // ======================================
+      setSelectedClass(
+        editing.class_uuid || ""
+      );
 
-  const save = async () => {
-    // Validate required fields
-    if (!instituteUUID) {
-      toast.error("No institute selected. Please log in again.");
-      return;
-    }
+      setSelectedSection(
+        editing.section_uuid || ""
+      );
 
-    if (!f.student_id) {
-      toast.error("Please select a Student");
-      return;
-    }
+      setSelectedStudents(
+        (editing.students || []).map(
+          (s) => s.student_uuid
+        )
+      );
 
-    if (!f.fee_structure_id) {
-      toast.error("Please select a Fee Structure");
-      return;
-    }
+      setCustomComponents(
+        editing.components || []
+      );
 
-    if (!f.academic_year?.trim()) {
-      toast.error("Academic Year is required");
-      return;
-    }
-
-    if (!f.effective_from) {
-      toast.error("Effective From date is required");
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // Payload built dynamically from auth store + form state —
-      // no hardcoded institute values.
-      const payload = {
-        institute_id: instituteId,
-        institute_uuid: instituteUUID,
-        student_uuid: f.student_uuid,
-        fee_structure_uuid: f.fee_structure_uuid,
-        academic_year: f.academic_year.trim(),
-        assigned_date: f.assigned_date,
-        effective_from: f.effective_from,
-        effective_to: f.effective_to || null,
-        remarks: f.remarks || "",
-      };
-
-      console.log("Sending payload:", payload);
-
-      let response;
-      const isNewAssignment = !assignment;
-
-      if (assignment) {
-        response = await updateStudentFeeAssignment(
-          assignment.assignment_uuid,
-          payload
-        );
-        toast.success("Student Fee Assignment Updated Successfully");
-      } else {
-        response = await createStudentFeeAssignment(payload);
-        toast.success("Student Fee Assigned Successfully");
-      }
-
-      console.log("Response:", response);
-
-      // Generate the fee dues right away so they show up on the
-      // student's statement without a separate manual step.
-      // Only done for brand-new assignments — edits to an existing
-      // assignment don't need dues regenerated.
-      if (isNewAssignment) {
-        await generateDuesForAssignment(f.student_uuid, payload.academic_year);
-      }
-
-      // Close dialog on success
-      onOpenChange(false);
-
+      setSelectedDiscounts(
+        (editing.discounts || []).map(
+          (d) => d.discount_uuid
+        )
+      );
+      setAcademicYear(editing.academic_year || ACADEMIC_YEAR);
+      setIsActive(editing.is_active !== false);
+    } else if (open) {
       // Reset form
       resetForm();
-    } catch (err) {
-      console.error("Error saving assignment:", err);
-      console.error("Error response:", err.response?.data);
-
-      const detail = err?.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        toast.error(detail.map((e) => e.msg).join(", "));
-      } else if (typeof detail === "string") {
-        toast.error(detail);
-      } else if (err?.response?.data?.message) {
-        toast.error(err.response.data.message);
-      } else {
-        toast.error("Something went wrong. Please try again.");
-      }
-    } finally {
-      setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editing]);
+
+  const resetForm = () => {
+    setMode("Structure");
+    setStructureId("");
+    setTarget("Class");
+    setSelectedClass("");
+    setSelectedSection("");
+    setSelectedStudents([]);
+    setSearchQuery("");
+    setCustomComponents([]);
+    setSelectedDiscounts([]);
+    setAcademicYear(ACADEMIC_YEAR);
+    setIsActive(true);
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const response = await getClasses();
+      const data = response?.data?.data || response?.data || response || [];
+      setClasses(data);
+    } catch (error) {
+      console.error("Failed to fetch classes:", error);
+      toast.error("Failed to load classes");
+    }
+  };
+
+  const fetchSections = async () => {
+    try {
+      const response = await getSections();
+      const data = response?.data?.data || response?.data || response || [];
+      setSections(data);
+    } catch (error) {
+      console.error("Failed to fetch sections:", error);
+      toast.error("Failed to load sections");
+    }
+  };
+
+  const fetchStudentsList = async () => {
+    setLoadingStudents(true);
+    try {
+      const response = await getAllStudents();
+      const data = response?.data?.data || response?.data || response || [];
+      setStudentsList(data);
+    } catch (error) {
+      console.error("Failed to fetch students:", error);
+      toast.error("Failed to load students");
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  // Filter students based on class, section, and search
+  const filteredStudents = useMemo(() => {
+    let filtered = studentsList;
+
+    if (selectedClass) {
+      filtered = filtered.filter((s) => s.class_uuid === selectedClass);
+    }
+    if (selectedSection) {
+      filtered = filtered.filter((s) => s.section_uuid === selectedSection);
+    }
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (s) =>
+          s.full_name?.toLowerCase().includes(query) ||
+          s.student_no?.toLowerCase().includes(query) ||
+          s.admission_no?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [studentsList, selectedClass, selectedSection, searchQuery]);
+
+  const toggleStudent = (studentUuid) => {
+    setSelectedStudents((prev) =>
+      prev.includes(studentUuid)
+        ? prev.filter((id) => id !== studentUuid)
+        : [...prev, studentUuid]
+    );
+  };
+
+  const toggleAllStudents = () => {
+    if (selectedStudents.length === filteredStudents.length) {
+      setSelectedStudents([]);
+    } else {
+      setSelectedStudents(filteredStudents.map((s) => s.student_uuid));
+    }
+  };
+
+  const addCustomComponent = (componentUuid = null) => {
+    if (componentUuid) {
+      const template = components.find((c) => c.component_uuid === componentUuid);
+      if (template) {
+        setCustomComponents((prev) => [
+          ...prev,
+          {
+            component_uuid: template.component_uuid,
+            name: template.name,
+            amount: template.default_amount || 0,
+            frequency: template.recurring ? "MONTHLY" : "ONE_TIME",
+            discount_value: 0,
+          },
+        ]);
+        return;
+      }
+    }
+
+    // Add empty custom component
+    setCustomComponents((prev) => [
+      ...prev,
+      {
+        component_uuid: null,
+        name: "",
+        amount: 0,
+        frequency: "MONTHLY",
+        discount_value: 0,
+      },
+    ]);
+  };
+
+  const updateCustomComponent = (index, field, value) => {
+    setCustomComponents((prev) =>
+      prev.map((c, i) => (i === index ? { ...c, [field]: value } : c))
+    );
+  };
+
+  const removeCustomComponent = (index) => {
+    setCustomComponents((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleDiscount = (discountUuid) => {
+    setSelectedDiscounts((prev) =>
+      prev.includes(discountUuid)
+        ? prev.filter((id) => id !== discountUuid)
+        : [...prev, discountUuid]
+    );
+  };
+
+  const selectedStructure = structures.find((s) => s.fee_structure_uuid === structureId);
+
+  // Calculate preview totals
+  const previewData = useMemo(() => {
+    let gross = 0;
+    let discountAmount = 0;
+
+    if (mode === "Structure" && selectedStructure) {
+      gross = selectedStructure.total_amount || 0;
+      // Apply selected discounts
+      selectedDiscounts.forEach((uuid) => {
+        const discount = discounts.find((d) => d.discount_uuid === uuid);
+        if (discount) {
+          if (discount.type === "Percent") {
+            discountAmount += (gross * discount.value) / 100;
+          } else {
+            discountAmount += discount.value;
+          }
+        }
+      });
+    } else if (mode === "Components") {
+      customComponents.forEach((c) => {
+        const amount = Number(c.amount) || 0;
+        const multiplier =
+          c.frequency === "MONTHLY"
+            ? 12
+            : c.frequency === "QUARTERLY"
+            ? 4
+            : c.frequency === "HALF_YEARLY"
+            ? 2
+            : 1;
+        const componentGross = amount * multiplier;
+        gross += componentGross;
+        // Apply per-component discount
+        if (c.discount_value) {
+          discountAmount += Number(c.discount_value);
+        }
+      });
+
+      // Apply assignment-level discounts
+      selectedDiscounts.forEach((uuid) => {
+        const discount = discounts.find((d) => d.discount_uuid === uuid);
+        if (discount) {
+          if (discount.type === "Percent") {
+            discountAmount += (gross * discount.value) / 100;
+          } else {
+            discountAmount += discount.value;
+          }
+        }
+      });
+    }
+
+    // Cap discount at gross amount
+    discountAmount = Math.min(discountAmount, gross);
+    const payable = Math.max(gross - discountAmount, 0);
+
+    return { gross, discountAmount, payable };
+  }, [
+    mode,
+    selectedStructure,
+    selectedDiscounts,
+    customComponents,
+    discounts,
+  ]);
+
+  const targetCount = useMemo(() => {
+    if (target === "Class") {
+      return studentsList.filter((s) => s.class_uuid === selectedClass).length;
+    } else if (target === "Section") {
+      return studentsList.filter((s) => s.section_uuid === selectedSection).length;
+    } else {
+      return selectedStudents.length;
+    }
+  }, [target, selectedClass, selectedSection, selectedStudents, studentsList]);
+
+  const handleSave = () => {
+    // Validation
+    if (mode === "Structure" && !structureId) {
+      toast.error("Please select a fee structure");
+      return;
+    }
+    if (mode === "Components" && customComponents.length === 0) {
+      toast.error("Please add at least one component");
+      return;
+    }
+    if (mode === "Components") {
+      const hasEmptyName = customComponents.some((c) => !c.name.trim());
+      if (hasEmptyName) {
+        toast.error("Please provide a name for all components");
+        return;
+      }
+      const hasInvalidAmount = customComponents.some((c) => Number(c.amount) <= 0);
+      if (hasInvalidAmount) {
+        toast.error("All components must have a positive amount");
+        return;
+      }
+    }
+    if (target === "Class" && !selectedClass) {
+      toast.error("Please select a class");
+      return;
+    }
+    if (target === "Section" && !selectedSection) {
+      toast.error("Please select a section");
+      return;
+    }
+    if (target === "Students" && selectedStudents.length === 0) {
+      toast.error("Please select at least one student");
+      return;
+    }
+
+    const formData = {
+      assignment_mode: mode === "Structure" ? "STRUCTURE" : "COMPONENTS",
+      fee_structure_uuid: mode === "Structure" ? structureId : null,
+      target_type: target === "Class" ? "CLASS" : target === "Section" ? "SECTION" : "STUDENT",
+      academic_year: academicYear,
+      class_uuid: selectedClass || null,
+      section_uuid: selectedSection || null,
+      remarks: "",
+      effective_from: new Date().toISOString().split("T")[0],
+      effective_to: null,
+      is_active: isActive,
+      students: target === "Students"
+        ? selectedStudents.map((uuid) => ({
+            student_uuid: uuid,
+          }))
+        : [],
+      discounts: selectedDiscounts.map((uuid) => ({
+        discount_uuid: uuid,
+      })),
+      components: mode === "Components"
+        ? customComponents.map((c, index) => ({
+            component_uuid: c.component_uuid,
+            amount: Number(c.amount),
+            collection_type: c.frequency,
+            discount_uuid: null,
+            display_order: index + 1,
+          }))
+        : [],
+    };
+
+    onSave(formData);
+  };
+
+  // Determine if a class has sections
+  const getClassSections = (classUuid) => {
+    return sections.filter(s => s.class_uuid === classUuid);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {assignment
-              ? "Edit Student Fee Assignment"
-              : "Assign Fee Structure"}
+          <DialogTitle className="font-display flex items-center gap-2">
+            <Layers className="h-5 w-5" />
+            {editing ? "Edit Fee Assignment" : "New Fee Assignment"}
           </DialogTitle>
           <DialogDescription>
-            Assign a Fee Structure to a Student.
+            Assign fee structures or custom components to students, classes, or sections.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4">
-          {/* Student */}
-          <div className="space-y-2">
-            <Label>Student</Label>
-            <Select
-              value={f.student_id ? String(f.student_id) : undefined}
-              onValueChange={handleStudent}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select Student" />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredStudents.length > 0 ? (
-                  filteredStudents.map((student) => (
-                    <SelectItem
-                      key={student.id || student.student_uuid}
-                      value={String(student.id)}
-                    >
-                      {student.full_name} (
-                      {student.student_no || student.admission_no})
-                    </SelectItem>
-                  ))
-                ) : (
-                  <div className="px-2 py-1 text-sm text-muted-foreground">
-                    {f.class_name
-                      ? "No students in this class"
-                      : "Select a fee structure first"}
+        <div className="space-y-4">
+          {/* Assignment Mode */}
+          <div className="rounded-lg border border-border/60 p-4">
+            <Label className="text-xs text-muted-foreground mb-2 block">
+              Assignment Mode
+            </Label>
+            <RadioGroup value={mode} onValueChange={setMode} className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <RadioGroupItem value="Structure" />
+                <span className="text-sm">Use Fee Structure</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <RadioGroupItem value="Components" />
+                <span className="text-sm">Custom Components</span>
+              </label>
+            </RadioGroup>
+          </div>
+
+          {/* Structure Selection */}
+          {mode === "Structure" && (
+            <div className="rounded-lg border border-border/60 p-4">
+              <Label className="text-xs text-muted-foreground mb-2 block">
+                Select Fee Structure
+              </Label>
+              <Select value={structureId} onValueChange={setStructureId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a fee structure..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {structures.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">
+                      No fee structures available
+                    </div>
+                  ) : (
+                    structures.map((s) => (
+                      <SelectItem key={s.fee_structure_uuid} value={s.fee_structure_uuid}>
+                        {s.structure_name} - {s.class_name} (₹{s.total_amount} total)
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedStructure && (
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Class:</span>{" "}
+                    {selectedStructure.class_name}
                   </div>
-                )}
-              </SelectContent>
-            </Select>
-            {f.class_name && (
-              <p className="text-xs text-muted-foreground">
-                Class: {f.class_name} ({filteredStudents.length} students)
-              </p>
+                  <div>
+                    <span className="text-muted-foreground">Components:</span>{" "}
+                    {selectedStructure.components?.length || 0}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Amount:</span>{" "}
+                    ₹{selectedStructure.total_amount}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Status:</span>{" "}
+                    <Badge variant={selectedStructure.is_active ? "default" : "secondary"}>
+                      {selectedStructure.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Custom Components */}
+          {mode === "Components" && (
+            <div className="rounded-lg border border-border/60 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-xs text-muted-foreground">Components</Label>
+                <div className="flex gap-2">
+                  <Select onValueChange={(v) => addCustomComponent(v)}>
+                    <SelectTrigger className="h-8 w-48 text-xs">
+                      <SelectValue placeholder="Quick add from library..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {components.map((c) => (
+                        <SelectItem key={c.component_uuid} value={c.component_uuid}>
+                          {c.name} - ₹{c.default_amount}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={() => addCustomComponent()}>
+                    <Plus className="h-4 w-4" /> Custom
+                  </Button>
+                </div>
+              </div>
+
+              {customComponents.length === 0 ? (
+                <div className="text-center text-sm text-muted-foreground py-4">
+                  No components added. Add from library or create custom.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {customComponents.map((c, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-12 gap-2 items-center bg-muted/20 rounded-lg p-2"
+                    >
+                      <Input
+                        className="col-span-4 h-9"
+                        placeholder="Component name"
+                        value={c.name}
+                        onChange={(e) =>
+                          updateCustomComponent(index, "name", e.target.value)
+                        }
+                      />
+                      <Input
+                        className="col-span-2 h-9"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        placeholder="Amount"
+                        value={c.amount}
+                        onChange={(e) =>
+                          updateCustomComponent(
+                            index,
+                            "amount",
+                            parseFloat(e.target.value) || 0
+                          )
+                        }
+                      />
+                      <Select
+                        value={c.frequency}
+                        onValueChange={(v) =>
+                          updateCustomComponent(index, "frequency", v)
+                        }
+                      >
+                        <SelectTrigger className="col-span-2 h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MONTHLY">Monthly</SelectItem>
+                          <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+                          <SelectItem value="HALF_YEARLY">Half-yearly</SelectItem>
+                          <SelectItem value="ANNUAL">Annual</SelectItem>
+                          <SelectItem value="ONE_TIME">One-time</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        className="col-span-2 h-9"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        placeholder="Discount"
+                        value={c.discount_value || 0}
+                        onChange={(e) =>
+                          updateCustomComponent(
+                            index,
+                            "discount_value",
+                            parseFloat(e.target.value) || 0
+                          )
+                        }
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="col-span-1 h-9 w-9 text-destructive"
+                        onClick={() => removeCustomComponent(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Target Selection */}
+          <div className="rounded-lg border border-border/60 p-4">
+            <Label className="text-xs text-muted-foreground mb-2 block">Target</Label>
+            <RadioGroup
+              value={target}
+              onValueChange={setTarget}
+              className="flex gap-4 mb-3"
+            >
+              <label className="flex items-center gap-2 cursor-pointer">
+                <RadioGroupItem value="Class" />
+                <span className="text-sm">Entire Class</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <RadioGroupItem value="Section" />
+                <span className="text-sm">Section</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <RadioGroupItem value="Students" />
+                <span className="text-sm">Individual Students</span>
+              </label>
+            </RadioGroup>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Class</Label>
+                <Select value={selectedClass} onValueChange={setSelectedClass}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select class..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground">
+                        No classes available
+                      </div>
+                    ) : (
+                      classes.map((c) => (
+                        <SelectItem key={c.class_uuid || c.uuid} value={c.class_uuid || c.uuid}>
+                          {c.class_name || c.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(target === "Section" || target === "Students") && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Section</Label>
+                  <Select value={selectedSection} onValueChange={setSelectedSection}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select section..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getClassSections(selectedClass).length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">
+                          No sections available for this class
+                        </div>
+                      ) : (
+                        getClassSections(selectedClass).map((s) => (
+                          <SelectItem
+                            key={s.section_uuid || s.uuid}
+                            value={s.section_uuid || s.uuid}
+                          >
+                            {s.section_name || s.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {target === "Students" && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search students by name or admission number..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">
+                    {selectedStudents.length} selected
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={toggleAllStudents}
+                    className="shrink-0"
+                  >
+                    {selectedStudents.length === filteredStudents.length && filteredStudents.length > 0
+                      ? "Deselect All"
+                      : "Select All"}
+                  </Button>
+                </div>
+
+                <div className="border rounded-md max-h-48 overflow-y-auto">
+                  <Table>
+                    <TableBody>
+                      {loadingStudents ? (
+                        <TableRow>
+                          <TableCell className="text-center py-4 text-muted-foreground">
+                            Loading students...
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredStudents.length === 0 ? (
+                        <TableRow>
+                          <TableCell className="text-center py-4 text-muted-foreground">
+                            {searchQuery ? "No students match your search" : "No students found"}
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredStudents.map((s) => (
+                          <TableRow
+                            key={s.student_uuid}
+                            className="cursor-pointer hover:bg-muted/40"
+                            onClick={() => toggleStudent(s.student_uuid)}
+                          >
+                            <TableCell className="w-8">
+                              <Checkbox
+                                checked={selectedStudents.includes(s.student_uuid)}
+                                onCheckedChange={() => toggleStudent(s.student_uuid)}
+                              />
+                            </TableCell>
+                            <TableCell className="text-sm">{s.full_name}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {s.student_no || s.admission_no}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {s.class_name} {s.section_name ? `- ${s.section_name}` : ''}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            {target !== "Students" && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                <Users className="h-4 w-4 inline mr-1" />
+                {targetCount} student{targetCount !== 1 ? "s" : ""} will be assigned
+              </div>
             )}
           </div>
 
-          {/* Fee Structure */}
-          <div className="space-y-2">
-            <Label>Fee Structure</Label>
-            <Select
-              value={f.fee_structure_id ? String(f.fee_structure_id) : undefined}
-              onValueChange={handleFeeStructure}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select Fee Structure" />
-              </SelectTrigger>
-              <SelectContent>
-                {feeStructures.length > 0 &&
-                  feeStructures.map((item) => (
-                    <SelectItem key={item.id} value={String(item.id)}>
-                      {item.structure_name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+          {/* Discounts */}
+          <div className="rounded-lg border border-border/60 p-4">
+            <Label className="text-xs text-muted-foreground mb-2 block">
+              <Percent className="h-4 w-4 inline mr-1" />
+              Assignment-level Discounts
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {discounts.filter((d) => d.status === "Active").length === 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  No active discounts available
+                </span>
+              ) : (
+                discounts
+                  .filter((d) => d.status === "Active")
+                  .map((d) => (
+                    <Badge
+                      key={d.discount_uuid}
+                      variant={selectedDiscounts.includes(d.discount_uuid) ? "default" : "outline"}
+                      className="cursor-pointer"
+                      onClick={() => toggleDiscount(d.discount_uuid)}
+                    >
+                      {d.name} · {d.type === "Percent" ? `${d.value}%` : `₹${d.value}`}
+                      {selectedDiscounts.includes(d.discount_uuid) && (
+                        <X className="h-3 w-3 ml-1" />
+                      )}
+                    </Badge>
+                  ))
+              )}
+            </div>
           </div>
 
-          {/* Academic Year */}
-          <div className="space-y-2">
-            <Label>Academic Year</Label>
-            <Input
-              value={f.academic_year}
-              onChange={(e) =>
-                setF({
-                  ...f,
-                  academic_year: e.target.value,
-                })
-              }
-              placeholder="e.g., 2025-26"
-            />
+          {/* Academic Year & Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-border/60 p-4">
+              <Label className="text-xs text-muted-foreground mb-2 block">
+                <Calendar className="h-4 w-4 inline mr-1" />
+                Academic Year
+              </Label>
+              <Input
+                value={academicYear}
+                onChange={(e) => setAcademicYear(e.target.value)}
+                placeholder="e.g., 2026-27"
+              />
+            </div>
+            <div className="rounded-lg border border-border/60 p-4">
+              <Label className="text-xs text-muted-foreground mb-2 block">
+                Status
+              </Label>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={isActive}
+                  onCheckedChange={setIsActive}
+                />
+                <span className="text-sm">
+                  {isActive ? "Active" : "Inactive"}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* Assigned Date */}
-          <div className="space-y-2">
-            <Label>Assigned Date</Label>
-            <Input
-              type="date"
-              value={f.assigned_date}
-              onChange={(e) =>
-                setF({
-                  ...f,
-                  assigned_date: e.target.value,
-                })
-              }
-            />
-          </div>
-
-          {/* Effective From */}
-          <div className="space-y-2">
-            <Label>Effective From</Label>
-            <Input
-              type="date"
-              value={f.effective_from}
-              onChange={(e) =>
-                setF({
-                  ...f,
-                  effective_from: e.target.value,
-                })
-              }
-            />
-          </div>
-
-          {/* Effective To */}
-          <div className="space-y-2">
-            <Label>Effective To</Label>
-            <Input
-              type="date"
-              value={f.effective_to}
-              onChange={(e) =>
-                setF({
-                  ...f,
-                  effective_to: e.target.value,
-                })
-              }
-            />
-          </div>
-        </div>
-
-        {/* Remarks */}
-        <div className="mt-4 space-y-2">
-          <Label>Remarks</Label>
-          <Textarea
-            rows={4}
-            value={f.remarks}
-            onChange={(e) =>
-              setF({
-                ...f,
-                remarks: e.target.value,
-              })
-            }
-            placeholder="Add any remarks here..."
-          />
+          {/* Preview */}
+          <Card className="border-border/60 bg-muted/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="font-display text-sm">Preview</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Mode</span>
+                <span className="font-medium">{mode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Target</span>
+                <span className="font-medium">{target} ({targetCount} students)</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Gross Amount</span>
+                <span className="font-semibold">₹{previewData.gross.toLocaleString()}</span>
+              </div>
+              {previewData.discountAmount > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Discounts</span>
+                  <span>- ₹{previewData.discountAmount.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="border-t pt-2 flex justify-between">
+                <span className="font-semibold">Payable Amount</span>
+                <span className="font-display font-bold text-lg">
+                  ₹{previewData.payable.toLocaleString()}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={loading}>
+          <Button
+            onClick={handleSave}
+            className="gradient-primary border-0"
+            disabled={loading}
+          >
             {loading
               ? "Saving..."
-              : assignment
+              : editing
               ? "Update Assignment"
-              : "Assign Fee"}
+              : "Create Assignment"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
+export default StudentFeeAssignmentDialog;
