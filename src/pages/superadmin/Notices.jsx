@@ -52,7 +52,7 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { getClasses } from "../../api/class";
+import { getClasses } from "../../api/Class";
 import { getSections } from "../../api/section";
 import { getAcademicCalendar,saveAcademicCalendarDraft,publishAcademicCalendar,getAcademicCalendarById,updateAcademicCalendar,deleteAcademicCalendar,publishAcademicCalendarById,unpublishAcademicCalendarById,} from "../../api/academicCalendar";
 import { getNotices, saveNoticeDraft, publishNotice, updateNotice, deleteNotice ,getNoticeById,publishNoticeById, unpublishNoticeById } from "../../api/notice";
