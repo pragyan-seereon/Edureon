@@ -37,7 +37,7 @@ const prioTone = {
   Critical: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
-export default function AdminMaintenanceTest() { 
+export default function AdminMaintenance() { 
   const all = useMaintenance();
   const [status, setStatus] = useState("all");
   const [prio, setPrio] = useState("all");
