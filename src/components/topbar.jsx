@@ -152,10 +152,26 @@ export function Topbar() {
             ))}
           </SelectContent>
         </Select>}
-        <Select value={sessionYear} onValueChange={(year) => { setSessionYear(year); window.location.reload(); }}>
-          <SelectTrigger className="hidden h-9 w-[170px] md:flex"><SelectValue /></SelectTrigger>
-          <SelectContent>{academicYears.map((year) => <SelectItem key={year.value} value={year.value}>{year.label}</SelectItem>)}</SelectContent>
-        </Select>
+       <Select
+        value={sessionYear}
+        onValueChange={(year) => {
+          console.log("Selected Session:", year);
+          setSessionYear(year);
+          window.location.reload();
+        }}
+      >
+      <SelectTrigger className="hidden h-9 w-[170px] md:flex">
+      <SelectValue />
+      </SelectTrigger>
+      
+        <SelectContent>
+          {academicYears.map((year) => (
+      <SelectItem key={year.value} value={year.value}>
+              {year.label}
+      </SelectItem>
+          ))}
+      </SelectContent>
+      </Select>
         <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setDark((value) => !value)} aria-label="Toggle theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
         <Button variant="ghost" size="icon" className="relative h-9 w-9" aria-label="Notifications"><Bell className="h-4 w-4" /><span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-destructive" /></Button>
         <UserMenu />

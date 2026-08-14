@@ -1712,7 +1712,7 @@ export default function AdmissionsDetails() {
                 try {
                   await deleteAdmission(id);
                   toast.success("Admission deleted successfully");
-                  navigate("/admin/admissions");
+                  navigate("/admissions");
                 } catch (err) {
                   toast.error(err.response?.data?.detail || "Delete failed");
                 }
