@@ -94,6 +94,12 @@
 //   Rejected: "border-l-destructive",
 // };
 
+// // Stages that are dead-ends in the pipeline — no "advance to next stage"
+// // button should ever be shown on cards sitting in these columns, and
+// // "Rejected" specifically must never be computed as anyone's "next" stage
+// // (rejection has its own dedicated flow via the reject dialog / drag-to-Rejected).
+// const TERMINAL_STAGES = ["Enrolled", "Rejected"];
+
 // const CLASS_OPTIONS = [
 //   "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII",
 // ];
@@ -130,6 +136,9 @@
 //   // ---- reject dialog ----
 //   const [rejectFor, setRejectFor] = useState(null);
 //   const [rejectReason, setRejectReason] = useState("");
+
+//   // ---- view rejection reason dialog (read-only) ----
+//   const [viewReasonFor, setViewReasonFor] = useState(null);
 
 //   // ---- public form dialog ----
 //   const [formOpen, setFormOpen] = useState(false);
@@ -743,7 +752,16 @@
 //                       const stageIdx = stages.findIndex(
 //                         (s) => s.stage_name === stage.stage_name,
 //                       );
-//                       const next = stages[stageIdx + 1]?.stage_name;
+//                       const rawNext = stages[stageIdx + 1]?.stage_name;
+//                       // Never surface a "next stage" button on terminal
+//                       // stages (Enrolled has nowhere to go), and never let
+//                       // "next" resolve to Rejected — rejection only ever
+//                       // happens through the explicit reject flow.
+//                       const next = TERMINAL_STAGES.includes(stage.stage_name)
+//                         ? undefined
+//                         : rawNext === "Rejected"
+//                         ? undefined
+//                         : rawNext;
 //                       return (
 //                         <div
 //                           key={c.id}
@@ -795,9 +813,16 @@
 //                           <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
 //                             {stage.stage_name === "Rejected" && (
 //                               <>
-//                                 <div className="text-xs text-destructive">
-//                                   Reason :
-//                                   {c.rejection_reason || "-"}
+//                                 <div
+//                                   data-stop
+//                                   className="text-xs text-destructive cursor-pointer hover:underline truncate"
+//                                   onClick={(e) => {
+//                                     e.stopPropagation();
+//                                     setViewReasonFor(c);
+//                                   }}
+//                                   title="Click to view full rejection reason"
+//                                 >
+//                                   Reason : {c.rejection_reason || "-"}
 //                                 </div>
 
 //                                 <div className="text-xs text-muted-foreground">
@@ -1049,8 +1074,14 @@
 //                         </div>
 //                       </TableCell>
 //                       <TableCell>{i.class_name}</TableCell>
-//                       <TableCell className="text-xs max-w-md">
-//                         {i.rejection_reason || "—"}
+//                       <TableCell
+//                         className="text-xs max-w-md cursor-pointer hover:underline"
+//                         onClick={() => setViewReasonFor(i)}
+//                         title="Click to view full rejection reason"
+//                       >
+//                         <span className="line-clamp-2">
+//                           {i.rejection_reason || "—"}
+//                         </span>
 //                       </TableCell>
 //                       <TableCell className="text-xs text-muted-foreground">
 //                         {i.rejected_at
@@ -1471,9 +1502,35 @@
 //           </DialogFooter>
 //         </DialogContent>
 //       </Dialog>
+
+//       {/* View rejection reason (read-only) — opened from Kanban card / Rejected table */}
+//       <Dialog
+//         open={!!viewReasonFor}
+//         onOpenChange={(o) => !o && setViewReasonFor(null)}
+//       >
+//         <DialogContent className="max-w-md">
+//           <DialogHeader>
+//             <DialogTitle>Reason for Rejection</DialogTitle>
+//             <DialogDescription>
+//               {viewReasonFor?.full_name} · {viewReasonFor?.id}
+//               {viewReasonFor?.rejected_at &&
+//                 ` — rejected ${new Date(viewReasonFor.rejected_at).toLocaleDateString()}`}
+//             </DialogDescription>
+//           </DialogHeader>
+//           <div className="rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap min-h-[80px]">
+//             {viewReasonFor?.rejection_reason || "No reason recorded."}
+//           </div>
+//           <DialogFooter>
+//             <Button variant="outline" onClick={() => setViewReasonFor(null)}>
+//               Close
+//             </Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
 //     </PageContainer>
 //   );
 // }
+
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -1490,6 +1547,8 @@ import {
   rejectAdmission,
   reinstateAdmission
 } from "../../../api/admissions";
+import { getClasses } from "../../../api/class";
+import useAuthStore from "../../../store/authStore";
 
 import { PageContainer, PageHeader } from "../../../components/page-shell";
 import {
@@ -1560,6 +1619,39 @@ import { NewInquiryDialog } from "../../../components/new-inquiry-dialog";
 import { ExcelUpload } from "../../../components/excel-upload";
 import { ExcelExport } from "../../../components/excel-export";
 
+const getApiErrorMessage = (err, fallback = "Something went wrong") => {
+  const detail = err?.response?.data?.detail;
+  const message = err?.response?.data?.message || err?.response?.data?.error;
+
+  const stringify = (value) => {
+    if (value == null) return "";
+    if (typeof value === "string" || typeof value === "number") return String(value);
+
+    if (Array.isArray(value)) {
+      return value.map(stringify).filter(Boolean).join("\n");
+    }
+
+    if (typeof value === "object") {
+      if (value.msg) {
+        const loc = Array.isArray(value.loc)
+          ? value.loc.filter((x) => x !== "body").join(" → ")
+          : "";
+        return loc ? `${loc}: ${String(value.msg)}` : String(value.msg);
+      }
+      if (value.message) return String(value.message);
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return fallback;
+      }
+    }
+
+    return String(value);
+  };
+
+  return stringify(detail) || stringify(message) || err?.message || fallback;
+};
+
 const stageColor = {
   Inquiry: "border-l-muted-foreground",
   Lead: "border-l-info",
@@ -1571,12 +1663,17 @@ const stageColor = {
   Rejected: "border-l-destructive",
 };
 
-const CLASS_OPTIONS = [
-  "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII",
-];
+// Stages that are dead-ends in the pipeline — no "advance to next stage"
+// button should ever be shown on cards sitting in these columns, and
+// "Rejected" specifically must never be computed as anyone's "next" stage
+// (rejection has its own dedicated flow via the reject dialog / drag-to-Rejected).
+const TERMINAL_STAGES = ["Enrolled", "Rejected"];
+
+
 
 export default function Admissions() {
   const navigate = useNavigate();
+  const instituteUUID = useAuthStore((state) => state.instituteUUID);
 
   // ---- server data ----
   const [pipelineData, setPipelineData] = useState([]);
@@ -1610,7 +1707,8 @@ export default function Admissions() {
 
   // ---- view rejection reason dialog (read-only) ----
   const [viewReasonFor, setViewReasonFor] = useState(null);
-
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(false);
   // ---- public form dialog ----
   const [formOpen, setFormOpen] = useState(false);
   const [publicForm, setPublicForm] = useState({
@@ -1621,14 +1719,33 @@ export default function Admissions() {
     school: "",
     parent: "",
     occupation: "",
-    class: "VI",
+     class_uuid: "",
     notes: "",
     consent: false,
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
+const loadClasses = async () => {
+  try {
+    setClassesLoading(true);
+
+    const res = await getClasses();
+
+    const list = res.data?.data || res.data || res || [];
+
+    setClasses(Array.isArray(list) ? list : []);
+  } catch (err) {
+    console.error("Failed to load classes:", err);
+    setClasses([]);
+    toast.error("Failed to load classes");
+  } finally {
+    setClassesLoading(false);
+  }
+};
+
+useEffect(() => {
+  loadData();
+  loadClasses();
+}, []);
 
   const loadData = async () => {
     try {
@@ -1655,8 +1772,8 @@ export default function Admissions() {
       setStages(stageRes.data.data);
       setAllAdmissions(allRes.data);
     } catch (err) {
-      console.log(err);
-      toast.error("Failed to load admissions data");
+      console.error("Failed to load admissions data:", err);
+      toast.error(getApiErrorMessage(err, "Failed to load admissions data"));
     }
   };
 
@@ -1684,34 +1801,60 @@ export default function Admissions() {
       sensitivity: "base",
     });
 
-  // active (not rejected) pipeline cards, filtered by search / source /
-  // counselor, sorted alphabetically by name
+  // ONLY ACTIVE admissions are shown in the UI.
+  // DELETED / TRANSFERRED / other non-active records are hidden.
   const cards = useMemo(() => {
     return allAdmissions
       .filter((c) => {
-        if (c.stage_id === 8 || c.status === "REJECTED") return false;
+        if (c.status !== "ACTIVE") return false;
+        if (c.stage_id === 8) return false;
         return matchesFilters(c);
       })
       .sort(byNameAsc);
   }, [allAdmissions, q, src, counselor]);
 
-  // rejected pipeline cards — now built from allAdmissions (same source as
-  // `cards`) and passed through the exact same filter predicate + sort, so
-  // the Rejected column and the Rejected tab always match the active filters.
+  // Rejected list — ACTIVE records only.
+  // If the backend stores rejected records as DELETED, they will not appear
+  // because the requirement is to show ONLY ACTIVE records.
   const rejectedList = useMemo(() => {
     return allAdmissions
-      .filter((c) => c.stage_id === 8 || c.status === "REJECTED")
+      .filter((c) => {
+        if (c.status !== "ACTIVE") return false;
+        return c.stage_id === 8 || c.status === "REJECTED";
+      })
       .filter(matchesFilters)
       .sort(byNameAsc);
   }, [allAdmissions, q, src, counselor]);
 
-  // Unfiltered rejected count, used for the tab badge so it always reflects
-  // the true total regardless of active search/source/counselor filters.
+  // Rejected count — ACTIVE records only.
   const rejectedTotal = useMemo(() => {
     return allAdmissions.filter(
-      (c) => c.stage_id === 8 || c.status === "REJECTED"
+      (c) =>
+        c.status === "ACTIVE" &&
+        (c.stage_id === 8 || c.status === "REJECTED")
     ).length;
   }, [allAdmissions]);
+
+  // Stage counts — ACTIVE records only.
+  // This prevents DELETED / TRANSFERRED records from increasing the
+  // numbers displayed in the pipeline cards.
+  const activeStageCounts = useMemo(() => {
+    const counts = {};
+
+    allAdmissions.forEach((admission) => {
+      if (admission.status !== "ACTIVE") return;
+
+      const stageName =
+        admission.stage_name ||
+        stages.find((s) => s.id === admission.stage_id)?.stage_name;
+
+      if (!stageName) return;
+
+      counts[stageName] = (counts[stageName] || 0) + 1;
+    });
+
+    return counts;
+  }, [allAdmissions, stages]);
 
   // Unique applicant names for the search autosuggest dropdown, filtered
   // against the current query (Google-style — only relevant matches show,
@@ -1812,7 +1955,7 @@ export default function Admissions() {
       setDragItem(null);
       loadData();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to move stage");
+      toast.error(getApiErrorMessage(err, "Failed to move stage"));
     }
   };
 
@@ -1858,11 +2001,7 @@ export default function Admissions() {
       await loadData();
 
     } catch (err) {
-      toast.error(
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
-        "Failed to reject admission."
-      );
+      toast.error(getApiErrorMessage(err, "Failed to reject admission."));
     }
   };
 
@@ -1880,36 +2019,86 @@ export default function Admissions() {
       await loadData();
 
     } catch (err) {
-      toast.error(
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
-        "Failed to reinstate admission."
-      );
+      toast.error(getApiErrorMessage(err, "Failed to reinstate admission."));
     }
   };
 
   const submitPublicForm = async () => {
     try {
-      await createAdmission({
-        full_name: publicForm.name,
-        email: publicForm.email || "—",
-        primary_phone: publicForm.phone,
-        address: publicForm.location,
-        prev_school: publicForm.school,
-        parent_name: publicForm.parent,
-        class_name: publicForm.class,
+      const fullName = publicForm.name.trim();
+      const phone = publicForm.phone.trim();
+
+      if (!fullName) {
+        toast.error("Full Name is required");
+        return;
+      }
+
+      if (!phone) {
+        toast.error("Phone is required");
+        return;
+      }
+
+      if (!publicForm.class_uuid) {
+        toast.error("Please select a class");
+        return;
+      }
+
+      if (!publicForm.consent) {
+        toast.error("Please accept the consent");
+        return;
+      }
+
+      if (!instituteUUID) {
+        toast.error("Institute context missing. Please re-login and try again.");
+        return;
+      }
+
+      const payload = {
+        institute_uuid: instituteUUID,
+        full_name: fullName,
+        email: publicForm.email.trim() || null,
+        primary_phone: phone,
+        address: publicForm.location.trim() || null,
+        prev_school: publicForm.school.trim() || null,
+        parent_name: publicForm.parent.trim() || null,
+        class_uuid: publicForm.class_uuid,
         source_name: "Website",
-        notes: `Parent occupation: ${publicForm.occupation}\n${publicForm.notes}`,
-      });
-      toast.success("Form submitted");
+        notes: [
+          publicForm.occupation.trim()
+            ? `Parent occupation: ${publicForm.occupation.trim()}`
+            : "",
+          publicForm.notes.trim() ? publicForm.notes.trim() : "",
+        ]
+          .filter(Boolean)
+          .join("\n") || null,
+      };
+
+      console.log("Creating public admission:", payload);
+
+      const response = await createAdmission(payload);
+
+      toast.success(
+        response?.data?.message || "Admission enquiry submitted successfully"
+      );
+
       setFormOpen(false);
       setPublicForm({
-        name: "", email: "", phone: "", location: "", school: "",
-        parent: "", occupation: "", class: "VI", notes: "", consent: false,
+        name: "",
+        email: "",
+        phone: "",
+        location: "",
+        school: "",
+        parent: "",
+        occupation: "",
+        class_uuid: "",
+        notes: "",
+        consent: false,
       });
-      loadData();
+
+      await loadData();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to submit form");
+      console.error("Public admission error:", err);
+      toast.error(getApiErrorMessage(err, "Failed to submit admission form"));
     }
   };
 
@@ -1923,11 +2112,16 @@ export default function Admissions() {
       const name = r["Name"]?.trim();
       if (!name) continue;
       try {
+        if (!instituteUUID) {
+          throw new Error("Institute context missing");
+        }
+
         await createAdmission({
+          institute_uuid: instituteUUID,
           full_name: name,
-          class_name: r["Class"] || "VI",
-          primary_phone: r["Phone"] || "—",
-          email: r["Email"] || "—",
+          class_name: r["Class"] || undefined,
+          primary_phone: r["Phone"] || null,
+          email: r["Email"] || null,
           source_name: r["Source"] || "Walk-in",
           counselor_name: r["Counselor"] || undefined,
         });
@@ -1942,14 +2136,50 @@ export default function Admissions() {
   };
 
   // ---- analytics ----
-  const counts = pipelineData.map((stage) => ({
-    stage: stage.stage_name,
-    n: stage.count,
-  }));
-  const total = analytics.total || 0;
-  const enrolled = analytics.enrolled || 0;
-  const convRate = analytics.conversion_rate || 0;
-  const bySource = analytics.by_source || [];
+  // Calculate analytics from ACTIVE admissions only.
+  const activeAdmissions = useMemo(
+    () => allAdmissions.filter((a) => a.status === "ACTIVE"),
+    [allAdmissions]
+  );
+
+  const counts = useMemo(
+    () =>
+      pipelineData.map((stage) => ({
+        stage: stage.stage_name,
+        n: activeStageCounts[stage.stage_name] || 0,
+      })),
+    [pipelineData, activeStageCounts]
+  );
+
+  const total = activeAdmissions.length;
+
+  const enrolledStageId = stages.find(
+    (s) => s.stage_name === "Enrolled"
+  )?.id;
+
+  const enrolled = activeAdmissions.filter(
+    (a) =>
+      a.stage_name === "Enrolled" ||
+      a.stage_id === enrolledStageId
+  ).length;
+
+  const convRate = total
+    ? Number(((enrolled / total) * 100).toFixed(2))
+    : 0;
+
+  const bySource = useMemo(() => {
+    const sourceMap = {};
+
+    activeAdmissions.forEach((admission) => {
+      const source = admission.source_name || "Unknown";
+      sourceMap[source] = (sourceMap[source] || 0) + 1;
+    });
+
+    return Object.entries(sourceMap).map(([source, count]) => ({
+      source,
+      count,
+    }));
+  }, [activeAdmissions]);
 
   return (
     <PageContainer>
@@ -2164,9 +2394,7 @@ export default function Admissions() {
                         : ""
                     }`}
                   >
-                    {stage.stage_name === "Rejected"
-                      ? rejectedList.length
-                      : stage.count}
+                    {activeStageCounts[stage.stage_name] || 0}
                   </div>
                 </CardContent>
               </Card>
@@ -2223,7 +2451,16 @@ export default function Admissions() {
                       const stageIdx = stages.findIndex(
                         (s) => s.stage_name === stage.stage_name,
                       );
-                      const next = stages[stageIdx + 1]?.stage_name;
+                      const rawNext = stages[stageIdx + 1]?.stage_name;
+                      // Never surface a "next stage" button on terminal
+                      // stages (Enrolled has nowhere to go), and never let
+                      // "next" resolve to Rejected — rejection only ever
+                      // happens through the explicit reject flow.
+                      const next = TERMINAL_STAGES.includes(stage.stage_name)
+                        ? undefined
+                        : rawNext === "Rejected"
+                        ? undefined
+                        : rawNext;
                       return (
                         <div
                           key={c.id}
@@ -2364,8 +2601,7 @@ export default function Admissions() {
                                       loadData();
                                     } catch (err) {
                                       toast.error(
-                                        err.response?.data?.detail ||
-                                          "Failed to move stage",
+                                        getApiErrorMessage(err, "Failed to move stage"),
                                       );
                                     }
                                   }}
@@ -2426,8 +2662,8 @@ export default function Admissions() {
                   {allAdmissions
                     .filter(
                       (i) =>
+                        i.status === "ACTIVE" &&
                         i.stage_id !== 8 &&
-                        i.status !== "REJECTED" &&
                         (stageFilter === "all" ||
                           i.stage_name === stageFilter)
                     )
@@ -2605,6 +2841,9 @@ export default function Admissions() {
                 <TableBody>
                   {allAdmissions
                     .filter((i) => {
+                      // Only ACTIVE admissions are shown.
+                      if (i.status !== "ACTIVE") return false;
+
                       // `test_score` is not part of the current admissions
                       // API response — add it server-side to populate this tab.
                       const s = i.test_score;
@@ -2803,24 +3042,46 @@ export default function Admissions() {
                 }
               />
             </div>
-            <div className="col-span-2">
-              <Label>Class Applying For</Label>
-              <Select
-                value={publicForm.class}
-                onValueChange={(v) => setPublicForm({ ...publicForm, class: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLASS_OPTIONS.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      Class {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+<div className="col-span-2">
+  <Label>Class Applying For</Label>
+
+  <Select
+    value={publicForm.class_uuid}
+    onValueChange={(value) =>
+      setPublicForm((prev) => ({
+        ...prev,
+        class_uuid: value,
+      }))
+    }
+  >
+    <SelectTrigger disabled={classesLoading}>
+      <SelectValue
+        placeholder={
+          classesLoading
+            ? "Loading classes..."
+            : "Select class"
+        }
+      />
+    </SelectTrigger>
+
+    <SelectContent>
+      {classes.length === 0 ? (
+        <SelectItem value="no-class" disabled>
+          No classes available
+        </SelectItem>
+      ) : (
+        classes.map((c) => (
+          <SelectItem
+            key={c.class_uuid || c.id}
+            value={String(c.class_uuid || c.id)}
+          >
+            {c.class_name || c.name}
+          </SelectItem>
+        ))
+      )}
+    </SelectContent>
+  </Select>
+</div>
             <div className="col-span-2">
               <Label>Notes</Label>
               <Textarea
