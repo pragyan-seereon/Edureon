@@ -148,6 +148,8 @@ const superGroups = [
     items: [
       { title: "Employees", url: "/employees", icon: UserCog },
       { title: "Payroll", url: "/payroll", icon: Briefcase },
+      { title: "Shift", url: "/shift", icon: Clock3 },
+
     ],
   },
 
@@ -170,7 +172,7 @@ const superGroups = [
       { title: "Fee Collection", url: "/fee-collection", icon: IndianRupee },
       // { title: "Expenses", url: "/expenses", icon: Receipt },
       // { title: "Assets", url: "/assets", icon: Boxes },
-      // { title: "Infrastructure", url: "/infrastructure", icon: Network },
+      { title: "Infrastructure", url: "/infrastructure", icon: Network },
       // { title: "Transport", url: "/transport", icon: Bus },
       // { title: "Hostel", url: "/hostel", icon: Building2 },
       // { title: "Library", url: "/library", icon: Library },

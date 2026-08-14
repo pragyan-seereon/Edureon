@@ -78,14 +78,14 @@ export const deleteAcademicCalendar = async (uuid) => {
 };
 
 export const publishAcademicCalendarById = async (uuid) => {
-  const { data } = await api.post(`/academic-calendar/${uuid}/publish`, null, {
+  const { data } = await api.patch(`/academic-calendar/${uuid}/publish`, null, {
     headers: getHeaders(),
   });
   return data;
 };
 
 export const unpublishAcademicCalendarById = async (uuid) => {
-  const { data } = await api.post(`/academic-calendar/${uuid}/unpublish`, null, {
+  const { data } = await api.patch(`/academic-calendar/${uuid}/unpublish`, null, {
     headers: getHeaders(),
   });
   return data;
