@@ -1801,56 +1801,96 @@ useEffect(() => {
       sensitivity: "base",
     });
 
-  // ONLY ACTIVE admissions are shown in the UI.
-  // DELETED / TRANSFERRED / other non-active records are hidden.
+  // ============================================================
+  // STATUS VISIBILITY RULES
+  //
+  // Status        Normal Pipeline   Rejected   Pipeline Count
+  // ACTIVE              ✅              —             ✅
+  // TRANSFERRED         ✅              —             ✅
+  // REJECTED            —              ✅             ✅
+  // DELETED             ❌              ❌             ❌
+  //
+  // i.e. DELETED is hidden everywhere and never counted.
+  // Everything else (ACTIVE / TRANSFERRED / REJECTED) is counted in the
+  // Pipeline Count. REJECTED is only ever *displayed* in the Rejected
+  // column/tab; ACTIVE + TRANSFERRED are only ever displayed in the
+  // Normal Pipeline columns.
+  // ============================================================
+
+  const isDeleted = (admission) =>
+    String(admission?.status || "").toUpperCase() === "DELETED";
+
+  const isRejected = (admission) => {
+    const status = String(admission?.status || "").toUpperCase();
+
+    return (
+      status === "REJECTED" ||
+      Number(admission?.stage_id) === 8 ||
+      admission?.stage_name === "Rejected"
+    );
+  };
+
+  // Normal pipeline cards:
+  // ACTIVE + TRANSFERRED are shown here.
+  // REJECTED is shown in the Rejected column.
+  // DELETED is hidden everywhere.
   const cards = useMemo(() => {
     return allAdmissions
       .filter((c) => {
-        if (c.status !== "ACTIVE") return false;
-        if (c.stage_id === 8) return false;
+        if (isDeleted(c)) return false;
+        if (isRejected(c)) return false;
+
         return matchesFilters(c);
       })
       .sort(byNameAsc);
   }, [allAdmissions, q, src, counselor]);
 
-  // Rejected list — ACTIVE records only.
-  // If the backend stores rejected records as DELETED, they will not appear
-  // because the requirement is to show ONLY ACTIVE records.
+  // Rejected column:
+  // REJECTED / stage 8 are shown.
+  // DELETED is always hidden.
   const rejectedList = useMemo(() => {
     return allAdmissions
       .filter((c) => {
-        if (c.status !== "ACTIVE") return false;
-        return c.stage_id === 8 || c.status === "REJECTED";
+        if (isDeleted(c)) return false;
+        return isRejected(c);
       })
       .filter(matchesFilters)
       .sort(byNameAsc);
   }, [allAdmissions, q, src, counselor]);
 
-  // Rejected count — ACTIVE records only.
+  // Rejected badge/count:
+  // Count rejected records except DELETED.
   const rejectedTotal = useMemo(() => {
-    return allAdmissions.filter(
-      (c) =>
-        c.status === "ACTIVE" &&
-        (c.stage_id === 8 || c.status === "REJECTED")
-    ).length;
+    return allAdmissions.filter((c) => {
+      if (isDeleted(c)) return false;
+      return isRejected(c);
+    }).length;
   }, [allAdmissions]);
 
-  // Stage counts — ACTIVE records only.
-  // This prevents DELETED / TRANSFERRED records from increasing the
-  // numbers displayed in the pipeline cards.
-  const activeStageCounts = useMemo(() => {
+  // Pipeline counts (Kanban column badges):
+  // Count ALL statuses except DELETED — i.e. ACTIVE + TRANSFERRED + REJECTED.
+  //
+  // ACTIVE       -> COUNT
+  // TRANSFERRED  -> COUNT
+  // REJECTED     -> COUNT
+  // DELETED      -> NOT COUNTED
+  const pipelineStageCounts = useMemo(() => {
     const counts = {};
 
     allAdmissions.forEach((admission) => {
-      if (admission.status !== "ACTIVE") return;
+      if (isDeleted(admission)) return;
 
       const stageName =
         admission.stage_name ||
-        stages.find((s) => s.id === admission.stage_id)?.stage_name;
+        stages.find(
+          (s) =>
+            String(s.id) === String(admission.stage_id)
+        )?.stage_name;
 
       if (!stageName) return;
 
-      counts[stageName] = (counts[stageName] || 0) + 1;
+      counts[stageName] =
+        (counts[stageName] || 0) + 1;
     });
 
     return counts;
@@ -2138,9 +2178,33 @@ useEffect(() => {
   // ---- analytics ----
   // Calculate analytics from ACTIVE admissions only.
   const activeAdmissions = useMemo(
-    () => allAdmissions.filter((a) => a.status === "ACTIVE"),
+    () => allAdmissions.filter(
+      (a) => String(a.status || "").toUpperCase() === "ACTIVE"
+    ),
     [allAdmissions]
   );
+
+  // Stage counts scoped to ACTIVE-only admissions — used by the analytics
+  // "Stage Funnel" chart below. (Distinct from pipelineStageCounts, which
+  // intentionally also includes TRANSFERRED + REJECTED for the Kanban
+  // column badges — see STATUS VISIBILITY RULES above.)
+  const activeStageCounts = useMemo(() => {
+    const counts = {};
+
+    activeAdmissions.forEach((admission) => {
+      const stageName =
+        admission.stage_name ||
+        stages.find(
+          (s) => String(s.id) === String(admission.stage_id)
+        )?.stage_name;
+
+      if (!stageName) return;
+
+      counts[stageName] = (counts[stageName] || 0) + 1;
+    });
+
+    return counts;
+  }, [activeAdmissions, stages]);
 
   const counts = useMemo(
     () =>
@@ -2394,7 +2458,7 @@ useEffect(() => {
                         : ""
                     }`}
                   >
-                    {activeStageCounts[stage.stage_name] || 0}
+                    {pipelineStageCounts[stage.stage_name] || 0}
                   </div>
                 </CardContent>
               </Card>
@@ -2662,8 +2726,8 @@ useEffect(() => {
                   {allAdmissions
                     .filter(
                       (i) =>
-                        i.status === "ACTIVE" &&
-                        i.stage_id !== 8 &&
+                        String(i.status || "").toUpperCase() === "ACTIVE" &&
+                        Number(i.stage_id) !== 8 &&
                         (stageFilter === "all" ||
                           i.stage_name === stageFilter)
                     )
@@ -2842,7 +2906,7 @@ useEffect(() => {
                   {allAdmissions
                     .filter((i) => {
                       // Only ACTIVE admissions are shown.
-                      if (i.status !== "ACTIVE") return false;
+                      if (String(i.status || "").toUpperCase() !== "ACTIVE") return false;
 
                       // `test_score` is not part of the current admissions
                       // API response — add it server-side to populate this tab.
@@ -3253,7 +3317,3 @@ useEffect(() => {
     </PageContainer>
   );
 }
-
-
-
-// 
