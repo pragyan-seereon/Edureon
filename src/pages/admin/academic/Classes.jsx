@@ -157,10 +157,13 @@ import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
 import { format } from "date-fns";
 import useSessionStore from "../../../store/sessionStore";
+import useAuthStore from "../../../store/authStore"; 
 
 export default function Classes() {
   const navigate = useNavigate();
-   const [searchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const sessionYear = useSessionStore((state) => state.sessionYear);
+  const instituteUUID = useAuthStore((state) => state.instituteUUID);
   const [sections, setSections] = useState([]);
   const [sectionLoading, setSectionLoading] = useState(false);
   const [subjects, setSubjects] = useState([]);
@@ -200,12 +203,6 @@ export default function Classes() {
  const fetchStudents = async () => {
   try {
     setStudentLoading(true);
-
-    const sessionYear =
-      String(new Date().getFullYear()) +
-      "-" +
-      String(new Date().getFullYear() + 1).slice(-2);
-
     const res = await getUnassignedStudents(sessionYear);
 
     const mapped = (res.data || []).map((student) => ({
@@ -335,10 +332,11 @@ export default function Classes() {
 
 
 useEffect(() => {
+  if (!instituteUUID) return;   // don't fetch until auth store is ready
   const tabFromUrl = searchParams.get("tab");
   handleTabChange(tabFromUrl || "subjects");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+}, [instituteUUID]);
 // useEffect(() => {
 //   handleTabChange("subjects");
 //   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -366,10 +364,8 @@ useEffect(() => {
   const [assignTo, setAssignTo] = useState({
     class: "",
     section: "",
-    session:
-      String(new Date().getFullYear()) +
-      "-" +
-      String(new Date().getFullYear() + 1).slice(-2),
+    session: sessionYear,
+
   });
 
   // const classOptions = useMemo(
@@ -554,11 +550,11 @@ const performAssign = async () => {
           <TabsTrigger value="sections">Sections</TabsTrigger>
           <TabsTrigger value="departments">Departments</TabsTrigger>
           {/* <TabsTrigger value="mapping">Subject Mapping</TabsTrigger> */}
-          <TabsTrigger value="calendar">Academic Calendar</TabsTrigger>
+          {/* <TabsTrigger value="calendar">Academic Calendar</TabsTrigger> */}
           <TabsTrigger value="students">Students</TabsTrigger>
           <TabsTrigger value="promote">Promotions</TabsTrigger>
           <TabsTrigger value="transfers">Transfers</TabsTrigger>
-          <TabsTrigger value="health">Data Health</TabsTrigger>   
+          {/* <TabsTrigger value="health">Data Health</TabsTrigger>    */}
         </TabsList>
 
         <TabsContent value="classes" className="mt-4">
